@@ -62,5 +62,13 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Build frontend assets (Vite)
+        run: npm run build
+        env:
+          NODE_ENV: production
+
       - name: Run frontend test suite
         run: npm test
+        env:
+          CI: true
+          NODE_ENV: test
