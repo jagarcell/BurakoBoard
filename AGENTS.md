@@ -14,6 +14,7 @@
 ## Architecture
 
 - Avoid fat controllers: keep controllers thin, move business logic to services, database queries to repositories, validation to FormRequest classes, and API JSON responses to API Resource classes.
+- Do not use inline database queries inside service classes; all database queries must be handled through repository classes.
 
 ## Models
 
