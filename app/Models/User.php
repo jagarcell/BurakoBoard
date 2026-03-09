@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -59,5 +60,17 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Get the player profile associated with the user.
+     *
+     * @param  none
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne<\App\Models\Player, $this> Player identity for the registered user.
+     * Logic: expose the one-to-one link used by team membership so a user can resolve their reusable player record.
+     */
+    public function player(): HasOne
+    {
+        return $this->hasOne(Player::class, 'user_id');
     }
 }
