@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreGameRequest;
+use App\Http\Resources\Api\V1\GameListItemResource;
 use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Services\BurakoGameService;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +20,21 @@ class GameController extends Controller
      */
     public function __construct(private readonly BurakoGameService $service)
     {
+    }
+
+    /**
+     * Return the existing games available on the dashboard.
+     *
+     * @return \Illuminate\Http\JsonResponse Game list response.
+     * Logic: delegate list retrieval to the service and serialize each game through a dedicated API resource for selector consumption.
+     */
+    public function index(): JsonResponse
+    {
+        $games = $this->service->listGames();
+
+        return response()->json([
+            'games' => GameListItemResource::collection($games),
+        ]);
     }
 
     /**
