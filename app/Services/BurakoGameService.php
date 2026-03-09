@@ -24,6 +24,17 @@ class BurakoGameService
     }
 
     /**
+     * Return the existing games for dashboard selection.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Existing games ordered for selector display.
+     * Logic: delegate the lightweight game listing query to the repository so the dashboard can populate its selector without loading full summaries.
+     */
+    public function listGames(): Collection
+    {
+        return $this->repository->getGameList();
+    }
+
+    /**
      * Create a new game in progress.
      *
      * @param  array<string, mixed>  $payload  Validated game data with name and target points.

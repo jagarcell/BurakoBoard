@@ -13,6 +13,7 @@ Route::prefix('v1')->group(function () {
         'health' => 'ok',
     ]);
 
+    Route::get('/games', [GameController::class, 'index']);
     Route::post('/games', [GameController::class, 'store']);
     Route::get('/games/{gameId}', [GameController::class, 'show']);
     Route::post('/games/{gameId}/teams', [TeamController::class, 'store']);

@@ -37,6 +37,27 @@ class BurakoGameRepository
     }
 
     /**
+     * Return the existing games for dashboard selection.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Existing games ordered from newest to oldest.
+     * Logic: fetch a lightweight ordered game list so the dashboard selector can render choices without assembling full score history payloads.
+     */
+    public function getGameList(): Collection
+    {
+        return Game::query()
+            ->select([
+                'id',
+                'name',
+                'target_points',
+                'status',
+                'winning_team_id',
+                'current_round_number',
+            ])
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    /**
      * Create a team under a given game.
      *
      * @param  int  $gameId  Identifier of the parent game.
