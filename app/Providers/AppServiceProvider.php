@@ -17,6 +17,9 @@ class AppServiceProvider extends ServiceProvider
 
     /**
      * Bootstrap any application services.
+     *
+     * @return void
+     * Logic: enable Vite prefetching to improve asset loading on first page interaction.
      */
     public function boot(): void
     {
