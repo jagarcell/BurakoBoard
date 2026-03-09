@@ -2,12 +2,13 @@
 
 ## Workflow
 
-- On a prompt "commits preview" show a preview of meaningful commits and wait for approval to commit; the approval prompt will be "approved".
+- On a prompt "create commits" show a preview of meaningful commits and wait for approval to commit; the approval prompt will be "approved".
 - On a prompt "create PR" show a preview of the PR and wait for approval to create the PR; the approval prompt will be "approved".
 
 ## Code Quality
 
-- Create a doc block for all PHP functions showing the parameters, return value, and an explanation of the logic involved in the function.
+- Create a doc block for all newly created or modified PHP functions showing all parameters, return value, and an explanation of the logic involved in the function.
+- Each doc block must include `@param` tags for all function parameters, an `@return` tag, and a `Logic:` line that explains what the function does.
 - Create tests for every newly created function.
 - Create tests for all newly created frontend components and keep those tests up to date whenever component code changes.
 
