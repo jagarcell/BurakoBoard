@@ -285,6 +285,35 @@ class BurakoGameRepository
     }
 
     /**
+     * Return all teams across all games with their players eager-loaded.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Team> All teams ordered from newest to oldest with players loaded.
+     * Logic: fetch every team with players pre-loaded to avoid N+1 queries when rendering the team selector.
+     */
+    public function getAllTeams(): Collection
+    {
+        return Team::query()
+            ->with('players')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    /**
+     * Update a team's name in place.
+     *
+     * @param  \App\Models\Team  $team  Team model to update.
+     * @param  array<string, mixed>  $attributes  Attributes to persist; expects a 'name' key.
+     * @return \App\Models\Team The refreshed team after the update.
+     * Logic: apply the attribute change and reload the record so callers receive the latest persisted state.
+     */
+    public function updateTeam(Team $team, array $attributes): Team
+    {
+        $team->update(['name' => $attributes['name']]);
+
+        return $team->fresh();
+    }
+
+    /**
      * Build a full game summary including teams, players, and round history.
      *
      * @param  int  $gameId  Identifier of the game.
