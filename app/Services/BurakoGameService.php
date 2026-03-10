@@ -71,6 +71,28 @@ class BurakoGameService
     }
 
     /**
+     * Return all registered users available for player assignment.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\User> Registered users ordered by name.
+     * Logic: delegate user list retrieval to the repository so the team creation dialog has a stable source of registered player candidates.
+     */
+    public function listUsers(): Collection
+    {
+        return $this->repository->getUserList();
+    }
+
+    /**
+     * Return all teams with their players for the team selector.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Team> All teams with players loaded.
+     * Logic: delegate the all-teams query to the repository so the frontend team selector can present previously used teams.
+     */
+    public function listTeams(): Collection
+    {
+        return $this->repository->getAllTeams();
+    }
+
+    /**
      * Add a new team to an existing game.
      *
      * @param  int  $gameId  Identifier of the game.
@@ -91,6 +113,31 @@ class BurakoGameService
         $this->repository->createTeam($gameId, [
             'name' => $payload['name'],
         ]);
+
+        return $this->repository->getGameSummary($gameId);
+    }
+
+    /**
+     * Update the name of an existing team within a game.
+     *
+     * @param  int  $gameId  Identifier of the game owning the team.
+     * @param  int  $teamId  Identifier of the team to update.
+     * @param  array<string, mixed>  $payload  Validated team data containing the new name.
+     * @return array<string, mixed> Game summary payload after the update.
+     * Logic: enforce game status, resolve the team within the game, update its name, then return the refreshed summary.
+     */
+    public function updateTeam(int $gameId, int $teamId, array $payload): array
+    {
+        $game = $this->repository->findGameOrFail($gameId);
+
+        if ($game->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'game' => 'Cannot update teams in a finished game.',
+            ]);
+        }
+
+        $team = $this->repository->findTeamInGameOrFail($gameId, $teamId);
+        $this->repository->updateTeam($team, $payload);
 
         return $this->repository->getGameSummary($gameId);
     }

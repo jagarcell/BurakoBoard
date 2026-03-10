@@ -2,6 +2,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import { useState } from 'react';
 import GameCard from '@/Components/GameCard';
+import TeamsCard from '@/Components/TeamsCard';
 
 export default function Dashboard() {
     const [selectedGame, setSelectedGame] = useState(null);
@@ -19,6 +20,8 @@ export default function Dashboard() {
             <div className="bg-slate-100 py-12">
                 <div className="mx-auto max-w-6xl space-y-6 px-4 sm:px-6 lg:px-8">
                     <GameCard onGameSelect={setSelectedGame} />
+
+                    <TeamsCard selectedGame={selectedGame} />
 
                     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                         <div className="border-b border-slate-100 px-6 py-4">
