@@ -45,4 +45,16 @@ class Game extends Model
     {
         return $this->hasMany(Team::class, 'game_id');
     }
+
+    /**
+     * Get the rounds that belong to the game.
+     *
+     * @param  none
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\Round, $this> Rounds played in this game.
+     * Logic: expose the one-to-many link from games.id to rounds.game_id so round history can be traversed from the game model.
+     */
+    public function rounds(): HasMany
+    {
+        return $this->hasMany(Round::class, 'game_id');
+    }
 }

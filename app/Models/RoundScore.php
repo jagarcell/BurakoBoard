@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RoundScore extends Model
 {
@@ -30,4 +31,28 @@ class RoundScore extends Model
         'team_id',
         'points',
     ];
+
+    /**
+     * Get the round this score entry belongs to.
+     *
+     * @param  none
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\App\Models\Round, $this> Parent round for this score entry.
+     * Logic: expose the inverse of the rounds.scores has-many so a score entry can resolve its parent round and from there its game.
+     */
+    public function round(): BelongsTo
+    {
+        return $this->belongsTo(Round::class, 'round_id');
+    }
+
+    /**
+     * Get the team this score entry belongs to.
+     *
+     * @param  none
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\App\Models\Team, $this> Team that scored in this round entry.
+     * Logic: expose the inverse of the teams.roundScores has-many so the owning team can be resolved from any score row.
+     */
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(Team::class, 'team_id');
+    }
 }
