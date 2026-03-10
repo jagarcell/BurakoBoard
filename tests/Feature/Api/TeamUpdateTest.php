@@ -106,4 +106,120 @@ class TeamUpdateTest extends TestCase
 
         $response->assertNotFound();
     }
+
+    /**
+     * Ensure renaming a team to a name already taken within the same game is rejected.
+     *
+     * @return void Verifies per-game name uniqueness on update.
+     * Logic: create two teams in the same game, attempt to rename Team B to Team A's name, and assert 422.
+     */
+    public function test_team_update_rejects_duplicate_name_within_same_game(): void
+    {
+        $game  = $this->makeGame();
+        $this->makeTeam($game, 'Team Alpha');
+        $teamB = $this->makeTeam($game, 'Team Beta');
+
+        $response = $this->putJson("/api/v1/games/{$game->id}/teams/{$teamB->id}", [
+            'name' => 'Team Alpha',
+        ]);
+
+        $response->assertUnprocessable();
+    }
+
+    /**
+     * Ensure a team can be renamed to its own current name without a uniqueness error.
+     *
+     * @return void Verifies that the current team is excluded from the uniqueness check.
+     * Logic: submit a PUT request with the same name the team already has and assert 200.
+     */
+    public function test_team_update_allows_same_name_as_current(): void
+    {
+        $game = $this->makeGame();
+        $team = $this->makeTeam($game, 'Team Alpha');
+
+        $response = $this->putJson("/api/v1/games/{$game->id}/teams/{$team->id}", [
+            'name' => 'Team Alpha',
+        ]);
+
+        $response->assertOk();
+    }
+
+    /**
+     * Ensure the team name is normalised before uniqueness is checked on update.
+     *
+     * @return void Verifies leading/trailing spaces and duplicate inner spaces are collapsed.
+     * Logic: create a team named 'Team Alpha', attempt to rename another team to '  Team  Alpha  ',
+     * and assert 422 because the normalised value matches the existing name.
+     */
+    public function test_team_update_normalises_name_before_uniqueness_check(): void
+    {
+        $game  = $this->makeGame();
+        $this->makeTeam($game, 'Team Alpha');
+        $teamB = $this->makeTeam($game, 'Team Beta');
+
+        $response = $this->putJson("/api/v1/games/{$game->id}/teams/{$teamB->id}", [
+            'name' => '  Team  Alpha  ',
+        ]);
+
+        $response->assertUnprocessable();
+    }
+
+    /**
+     * Ensure the stored name contains the normalised form of the submitted name on update.
+     *
+     * @return void Verifies that the persisted name has trimmed and collapsed whitespace.
+     * Logic: submit a PUT with extra spaces and assert the returned team name is normalised.
+     */
+    public function test_team_update_stores_normalised_name(): void
+    {
+        $game = $this->makeGame();
+        $team = $this->makeTeam($game, 'Team Alpha');
+
+        $response = $this->putJson("/api/v1/games/{$game->id}/teams/{$team->id}", [
+            'name' => '  Team   Bravo  ',
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.game.teams.0.name', 'Team Bravo');
+    }
+
+    /**
+     * Ensure renaming a team to a name that differs only in casing from an existing team is rejected.
+     *
+     * @return void Verifies that the uniqueness check on update is case-insensitive.
+     * Logic: create 'Team Alpha' and 'Team Beta', attempt to rename Beta to 'TEAM ALPHA', and assert 422.
+     */
+    public function test_team_update_rejects_duplicate_name_case_insensitively(): void
+    {
+        $game  = $this->makeGame();
+        $this->makeTeam($game, 'Team Alpha');
+        $teamB = $this->makeTeam($game, 'Team Beta');
+
+        $response = $this->putJson("/api/v1/games/{$game->id}/teams/{$teamB->id}", [
+            'name' => 'TEAM ALPHA',
+        ]);
+
+        $response->assertUnprocessable();
+    }
+
+    /**
+     * Ensure a team can be renamed using different casing from its current name.
+     *
+     * @return void Verifies that re-casing a team's own name (e.g. 'team alpha' → 'Team Alpha') is allowed.
+     * Logic: create 'team alpha', rename it to 'Team Alpha', and assert 200 with the new casing stored.
+     */
+    public function test_team_update_allows_recasing_own_name(): void
+    {
+        $game = $this->makeGame();
+        $team = $this->makeTeam($game, 'team alpha');
+
+        $response = $this->putJson("/api/v1/games/{$game->id}/teams/{$team->id}", [
+            'name' => 'Team Alpha',
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.game.teams.0.name', 'Team Alpha');
+    }
 }

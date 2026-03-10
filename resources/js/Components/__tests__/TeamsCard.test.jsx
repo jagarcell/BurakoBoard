@@ -391,6 +391,169 @@ describe('TeamsCard', () => {
         expect(screen.getByText('Team Alpha Updated')).toBeInTheDocument();
     });
 
+    it('shows a duplicate-name error and does not call the API when creating with a name that already exists', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Create team' }));
+
+        await userEvent.type(screen.getByLabelText('Team name'), 'Team Alpha');
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
+
+        expect(screen.getByText('A team with this name already exists in this game.')).toBeInTheDocument();
+        expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    it('normalises extra spaces when checking for duplicate names on create', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Create team' }));
+
+        await userEvent.type(screen.getByLabelText('Team name'), '  Team  Alpha  ');
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
+
+        expect(screen.getByText('A team with this name already exists in this game.')).toBeInTheDocument();
+        expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    it('rejects a duplicate name that differs only in casing when creating', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Create team' }));
+
+        await userEvent.type(screen.getByLabelText('Team name'), 'TEAM ALPHA');
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
+
+        expect(screen.getByText('A team with this name already exists in this game.')).toBeInTheDocument();
+        expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    it('shows a duplicate-player error and does not add when player name already exists in pending list', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+        await waitFor(() =>
+            expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+        );
+
+        await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+
+        // Add the first player successfully
+        await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+        expect(screen.queryByText('A player with this name already exists in this team.')).not.toBeInTheDocument();
+
+        // Attempt to add the same player again — error flashes
+        await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        expect(screen.getByText('A player with this name already exists in this team.')).toBeInTheDocument();
+    });
+
+    it('normalises extra spaces when checking for duplicate player names in pending list', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+        await waitFor(() =>
+            expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+        );
+
+        await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+
+        await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        // Type with extra spaces — should still be treated as a duplicate
+        await userEvent.type(screen.getByLabelText('Player name'), '  Carlos  ');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        expect(screen.getByText('A player with this name already exists in this team.')).toBeInTheDocument();
+    });
+
+    it('rejects a duplicate player name that differs only in casing in pending list', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+        await waitFor(() =>
+            expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+        );
+
+        await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+
+        await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        await userEvent.type(screen.getByLabelText('Player name'), 'CARLOS');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        expect(screen.getByText('A player with this name already exists in this team.')).toBeInTheDocument();
+    });
+
+    it('shows duplicate-player error when player name matches an existing player in edit mode', async () => {
+        setupGetMocks();
+
+        const team = makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos' }]);
+        render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+        await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        expect(screen.getByText('A player with this name already exists in this team.')).toBeInTheDocument();
+    });
+
+    it('rejects player duplicate in edit mode case-insensitively', async () => {
+        setupGetMocks();
+
+        const team = makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos' }]);
+        render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+        await userEvent.type(screen.getByLabelText('Player name'), 'CARLOS');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        expect(screen.getByText('A player with this name already exists in this team.')).toBeInTheDocument();
+    });
+
+    it('duplicate player error auto-dismisses after 3 seconds', async () => {
+        vi.spyOn(global, 'setTimeout');
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+        await waitFor(() =>
+            expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+        );
+
+        await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+        await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        // Trigger the duplicate error
+        await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+        await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+        expect(screen.getByText('A player with this name already exists in this team.')).toBeInTheDocument();
+        expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 3000);
+
+        vi.restoreAllMocks();
+    });
+
     it('shows a score badge with green bisque styling when team score is 0', async () => {
         const team = { ...makeTeam(10, 'Team Alpha'), current_score: 0 };
         setupGetMocks();
