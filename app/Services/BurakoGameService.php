@@ -71,6 +71,17 @@ class BurakoGameService
     }
 
     /**
+     * Return all registered users available for player assignment.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\User> Registered users ordered by name.
+     * Logic: delegate user list retrieval to the repository so the team creation dialog has a stable source of registered player candidates.
+     */
+    public function listUsers(): Collection
+    {
+        return $this->repository->getUserList();
+    }
+
+    /**
      * Add a new team to an existing game.
      *
      * @param  int  $gameId  Identifier of the game.

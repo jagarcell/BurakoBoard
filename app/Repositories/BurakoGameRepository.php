@@ -7,6 +7,7 @@ use App\Models\Player;
 use App\Models\Round;
 use App\Models\RoundScore;
 use App\Models\Team;
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -267,6 +268,20 @@ class BurakoGameRepository
         $game->save();
 
         return $game;
+    }
+
+    /**
+     * Return all registered users ordered by name for player selection.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\User> Users ordered alphabetically by name.
+     * Logic: fetch a minimal id-and-name user list so team creation dialogs can present registered player candidates without loading full profile data.
+     */
+    public function getUserList(): Collection
+    {
+        return User::query()
+            ->select(['id', 'name'])
+            ->orderBy('name')
+            ->get();
     }
 
     /**
