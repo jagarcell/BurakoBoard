@@ -7,6 +7,22 @@ use Illuminate\Foundation\Http\FormRequest;
 class AddTeamPlayerRequest extends FormRequest
 {
     /**
+     * Normalise the player name before validation runs.
+     *
+     * @return void
+     * Logic: trim leading/trailing whitespace and collapse any run of internal spaces to a
+     * single space so that 'Carlos  Garcia' and 'Carlos Garcia' are treated as the same value.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('name') && $this->input('name') !== null) {
+            $this->merge([
+                'name' => preg_replace('/\s+/', ' ', trim($this->input('name', ''))),
+            ]);
+        }
+    }
+
+    /**
      * Determine whether the user can perform this request.
      *
      * @return bool True to allow all callers for MVP player assignment.

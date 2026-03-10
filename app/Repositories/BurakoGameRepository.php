@@ -107,6 +107,23 @@ class BurakoGameRepository
     }
 
     /**
+     * Check whether a team already has a player whose display name matches the given name.
+     *
+     * @param  int     $teamId  Identifier of the team.
+     * @param  string  $name    Player name to look up, already normalised.
+     * @return bool True when a case-insensitive match exists in the team.
+     * Logic: join team_player with players and compare LOWER(display_name) so that 'Carlos' and 'CARLOS' are treated as duplicates.
+     */
+    public function teamHasPlayerWithName(int $teamId, string $name): bool
+    {
+        return DB::table('team_player')
+            ->join('players', 'players.id', '=', 'team_player.player_id')
+            ->where('team_player.team_id', $teamId)
+            ->whereRaw('LOWER(players.display_name) = ?', [strtolower($name)])
+            ->exists();
+    }
+
+    /**
      * Resolve or create a player mapped to a registered user.
      *
      * @param  int  $userId  Identifier of the user account.

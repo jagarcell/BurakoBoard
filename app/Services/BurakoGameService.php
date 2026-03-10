@@ -149,7 +149,8 @@ class BurakoGameService
      * @param  int  $teamId  Identifier of the team.
      * @param  array<string, mixed>  $payload  Validated player input.
      * @return array<string, mixed> Game summary payload after player assignment.
-     * Logic: block writes on finished games, resolve player source (name or user), attach once to the team, then reload summary.
+     * Logic: block writes on finished games, reject duplicate player names within the team using a
+     * case-insensitive normalised comparison, resolve player source (name or user), attach once to the team, then reload summary.
      */
     public function addPlayerToTeam(int $gameId, int $teamId, array $payload): array
     {
@@ -162,6 +163,15 @@ class BurakoGameService
         }
 
         $team = $this->repository->findTeamInGameOrFail($gameId, $teamId);
+
+        $incomingName = $payload['name'] ?? null;
+
+        if ($incomingName !== null && $this->repository->teamHasPlayerWithName($team->id, $incomingName)) {
+            throw ValidationException::withMessages([
+                'name' => 'A player with this name already exists in this team.',
+            ]);
+        }
+
         $player = $this->resolvePlayerForPayload($payload);
 
         $this->repository->attachPlayerToTeam($team->id, $player->id);
