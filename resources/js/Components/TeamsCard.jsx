@@ -5,6 +5,8 @@ import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import TeamActionButton from '@/Components/TeamActionButton';
+import TeamSlotSelector from '@/Components/TeamSlotSelector';
 import TextInput from '@/Components/TextInput';
 
 const defaultTeamForm = { name: '', players: [] };
@@ -15,11 +17,16 @@ export default function TeamsCard({ selectedGame }) {
     const [isLoading, setIsLoading] = useState(false);
     const [loadError, setLoadError] = useState('');
     const [users, setUsers] = useState([]);
+    const [allTeams, setAllTeams] = useState([]);
+    const [slotSelections, setSlotSelections] = useState({ 0: '', 1: '' });
+    const [slotAdding, setSlotAdding] = useState({ 0: false, 1: false });
+    const [slotAddErrors, setSlotAddErrors] = useState({ 0: '', 1: '' });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [teamForm, setTeamForm] = useState(defaultTeamForm);
     const [playerInput, setPlayerInput] = useState(defaultPlayerInput);
     const [errors, setErrors] = useState({});
+    const [editingTeam, setEditingTeam] = useState(null);
 
     useEffect(() => {
         let isActive = true;
@@ -27,6 +34,12 @@ export default function TeamsCard({ selectedGame }) {
         axios.get('/api/v1/users').then((response) => {
             if (isActive) {
                 setUsers(response.data?.data?.users ?? []);
+            }
+        });
+
+        axios.get('/api/v1/teams').then((response) => {
+            if (isActive) {
+                setAllTeams(response.data?.data?.teams ?? []);
             }
         });
 
@@ -77,10 +90,19 @@ export default function TeamsCard({ selectedGame }) {
         setTeamForm(defaultTeamForm);
         setPlayerInput(defaultPlayerInput);
         setErrors({});
+        setEditingTeam(null);
     };
 
     const openModal = () => {
         resetModal();
+        setIsModalOpen(true);
+    };
+
+    const openEditModal = (team) => {
+        setEditingTeam({ id: team.id, name: team.name, existingPlayers: team.players });
+        setTeamForm({ name: team.name, players: [] });
+        setPlayerInput(defaultPlayerInput);
+        setErrors({});
         setIsModalOpen(true);
     };
 
@@ -134,6 +156,56 @@ export default function TeamsCard({ selectedGame }) {
         }));
     };
 
+    const handleAddExistingTeam = async (slot) => {
+        const selectedTeamId = Number(slotSelections[slot]);
+        const selectedTeam = allTeams.find((t) => t.id === selectedTeamId);
+
+        if (! selectedTeam) return;
+
+        setSlotAdding((s) => ({ ...s, [slot]: true }));
+        setSlotAddErrors((s) => ({ ...s, [slot]: '' }));
+
+        try {
+            const teamResponse = await axios.post(
+                `/api/v1/games/${selectedGame.id}/teams`,
+                { name: selectedTeam.name },
+            );
+
+            const summaryTeams = teamResponse.data?.data?.game?.teams ?? [];
+            const createdTeam =
+                summaryTeams.find((t) => t.name === selectedTeam.name) ??
+                summaryTeams[summaryTeams.length - 1];
+
+            if (! createdTeam) throw new Error('Created team not found in response.');
+
+            let lastResponse = teamResponse;
+
+            for (const player of selectedTeam.players) {
+                const payload = player.user_id
+                    ? { user_id: player.user_id, name: player.display_name }
+                    : { name: player.display_name };
+
+                lastResponse = await axios.post(
+                    `/api/v1/games/${selectedGame.id}/teams/${createdTeam.id}/players`,
+                    payload,
+                );
+            }
+
+            startTransition(() => {
+                setTeams(lastResponse.data?.data?.game?.teams ?? summaryTeams);
+            });
+
+            setSlotSelections((s) => ({ ...s, [slot]: '' }));
+        } catch {
+            setSlotAddErrors((s) => ({
+                ...s,
+                [slot]: 'Unable to add the team right now.',
+            }));
+        } finally {
+            setSlotAdding((s) => ({ ...s, [slot]: false }));
+        }
+    };
+
     const handleSubmit = async (event) => {
         event.preventDefault();
         setErrors({});
@@ -149,38 +221,60 @@ export default function TeamsCard({ selectedGame }) {
         setIsSaving(true);
 
         try {
-            const teamResponse = await axios.post(
-                `/api/v1/games/${selectedGame.id}/teams`,
-                { name },
-            );
-
-            const summaryTeams = teamResponse.data?.data?.game?.teams ?? [];
-            const createdTeam =
-                summaryTeams.find((t) => t.name === name) ??
-                summaryTeams[summaryTeams.length - 1];
-
-            if (! createdTeam) {
-                throw new Error('Created team not found in response.');
-            }
-
-            let lastResponse = teamResponse;
-
-            for (const player of teamForm.players) {
-                const payload = player.userId
-                    ? { user_id: Number(player.userId), name: player.name }
-                    : { name: player.name };
-
-                lastResponse = await axios.post(
-                    `/api/v1/games/${selectedGame.id}/teams/${createdTeam.id}/players`,
-                    payload,
+            if (editingTeam) {
+                let lastResponse = await axios.put(
+                    `/api/v1/games/${selectedGame.id}/teams/${editingTeam.id}`,
+                    { name },
                 );
-            }
 
-            startTransition(() => {
-                setTeams(
-                    lastResponse.data?.data?.game?.teams ?? summaryTeams,
+                for (const player of teamForm.players) {
+                    const payload = player.userId
+                        ? { user_id: Number(player.userId), name: player.name }
+                        : { name: player.name };
+
+                    lastResponse = await axios.post(
+                        `/api/v1/games/${selectedGame.id}/teams/${editingTeam.id}/players`,
+                        payload,
+                    );
+                }
+
+                startTransition(() => {
+                    setTeams(lastResponse.data?.data?.game?.teams ?? []);
+                });
+            } else {
+                const teamResponse = await axios.post(
+                    `/api/v1/games/${selectedGame.id}/teams`,
+                    { name },
                 );
-            });
+
+                const summaryTeams = teamResponse.data?.data?.game?.teams ?? [];
+                const createdTeam =
+                    summaryTeams.find((t) => t.name === name) ??
+                    summaryTeams[summaryTeams.length - 1];
+
+                if (! createdTeam) {
+                    throw new Error('Created team not found in response.');
+                }
+
+                let lastResponse = teamResponse;
+
+                for (const player of teamForm.players) {
+                    const payload = player.userId
+                        ? { user_id: Number(player.userId), name: player.name }
+                        : { name: player.name };
+
+                    lastResponse = await axios.post(
+                        `/api/v1/games/${selectedGame.id}/teams/${createdTeam.id}/players`,
+                        payload,
+                    );
+                }
+
+                startTransition(() => {
+                    setTeams(
+                        lastResponse.data?.data?.game?.teams ?? summaryTeams,
+                    );
+                });
+            }
 
             setIsModalOpen(false);
             resetModal();
@@ -191,42 +285,30 @@ export default function TeamsCard({ selectedGame }) {
                 teamName: apiErrors.name?.[0],
                 general:
                     apiErrors.name?.[0] ||
-                    'Unable to create the team right now.',
+                    'Unable to save the team right now.',
             });
         } finally {
             setIsSaving(false);
         }
     };
 
-    const canAddTeam = selectedGame !== null && teams.length < 2;
     const teamSlots = [0, 1];
 
     return (
         <>
             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
                 <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.14),_transparent_38%),linear-gradient(135deg,_#f8fafc_0%,_#ffffff_56%,_#eef2ff_100%)] px-6 py-6">
-                    <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                        <div className="max-w-2xl space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
-                                Teams
-                            </p>
-                            <h3 className="text-2xl font-semibold text-slate-900">
-                                Build the two teams for this game.
-                            </h3>
-                            <p className="text-sm text-slate-600">
-                                Each game requires exactly two teams. Add registered
-                                players or enter a custom name for each participant.
-                            </p>
-                        </div>
-
-                        <PrimaryButton
-                            className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
-                            disabled={! canAddTeam}
-                            onClick={openModal}
-                            type="button"
-                        >
-                            Add team
-                        </PrimaryButton>
+                    <div className="max-w-2xl space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+                            Teams
+                        </p>
+                        <h3 className="text-2xl font-semibold text-slate-900">
+                            Build the two teams for this game.
+                        </h3>
+                        <p className="text-sm text-slate-600">
+                            Each game requires exactly two teams. Add registered
+                            players or enter a custom name for each participant.
+                        </p>
                     </div>
 
                     {loadError !== '' ? (
@@ -252,34 +334,63 @@ export default function TeamsCard({ selectedGame }) {
                             return (
                                 <div key={slot} className="px-6 py-5">
                                     {team ? (
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                                                    Team {slot + 1}
+                                                </p>
+                                                <h4 className="mt-1 text-base font-semibold text-slate-900">
+                                                    {team.name}
+                                                </h4>
+                                                {team.players.length > 0 ? (
+                                                    <ul className="mt-2 space-y-1">
+                                                        {team.players.map((player) => (
+                                                            <li
+                                                                key={player.id}
+                                                                className="text-sm text-slate-600"
+                                                            >
+                                                                {player.display_name}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <p className="mt-2 text-sm italic text-slate-400">
+                                                        No players yet.
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <TeamActionButton
+                                                onClick={() => openEditModal(team)}
+                                                type="button"
+                                            >
+                                                Edit team
+                                            </TeamActionButton>
+                                        </div>
+                                    ) : (
                                         <>
-                                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                                            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                                                 Team {slot + 1}
                                             </p>
-                                            <h4 className="mt-1 text-base font-semibold text-slate-900">
-                                                {team.name}
-                                            </h4>
-                                            {team.players.length > 0 ? (
-                                                <ul className="mt-2 space-y-1">
-                                                    {team.players.map((player) => (
-                                                        <li
-                                                            key={player.id}
-                                                            className="text-sm text-slate-600"
-                                                        >
-                                                            {player.display_name}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            ) : (
-                                                <p className="mt-2 text-sm italic text-slate-400">
-                                                    No players yet.
+                                            <TeamSlotSelector
+                                                allTeams={allTeams}
+                                                disabled={slotAdding[slot]}
+                                                excludedTeamIds={teams.map((t) => t.id)}
+                                                onAddTeam={() => handleAddExistingTeam(slot)}
+                                                onCreateTeam={openModal}
+                                                onSelect={(val) =>
+                                                    setSlotSelections((s) => ({
+                                                        ...s,
+                                                        [slot]: val,
+                                                    }))
+                                                }
+                                                selectedTeamId={slotSelections[slot]}
+                                            />
+                                            {slotAddErrors[slot] ? (
+                                                <p className="mt-2 text-sm text-red-600">
+                                                    {slotAddErrors[slot]}
                                                 </p>
-                                            )}
+                                            ) : null}
                                         </>
-                                    ) : (
-                                        <p className="text-sm italic text-slate-400">
-                                            Team {slot + 1} — not added yet.
-                                        </p>
                                     )}
                                 </div>
                             );
@@ -292,10 +403,12 @@ export default function TeamsCard({ selectedGame }) {
                 <form className="space-y-6 p-6" onSubmit={handleSubmit}>
                     <div className="space-y-2">
                         <h4 className="text-lg font-semibold text-slate-900">
-                            Create a team
+                            {editingTeam ? 'Edit team' : 'Create a team'}
                         </h4>
                         <p className="text-sm text-slate-600">
-                            Enter a team name and add the players who will compete.
+                            {editingTeam
+                                ? 'Update the team name or add more players.'
+                                : 'Enter a team name and add the players who will compete.'}
                         </p>
                     </div>
 
@@ -317,9 +430,27 @@ export default function TeamsCard({ selectedGame }) {
                         <InputError message={errors.teamName} />
                     </div>
 
+                    {editingTeam && editingTeam.existingPlayers.length > 0 ? (
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                                Current players
+                            </p>
+                            <ul className="space-y-1">
+                                {editingTeam.existingPlayers.map((player) => (
+                                    <li
+                                        key={player.id}
+                                        className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                                    >
+                                        {player.display_name}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ) : null}
+
                     <div className="space-y-3 rounded-xl border border-slate-200 p-4">
                         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
-                            Add players
+                            {editingTeam ? 'Add more players' : 'Add players'}
                         </p>
 
                         <div className="space-y-2">
@@ -404,7 +535,7 @@ export default function TeamsCard({ selectedGame }) {
                         </SecondaryButton>
 
                         <PrimaryButton disabled={isSaving} type="submit">
-                            Create team
+                            {editingTeam ? 'Update team' : 'Create team'}
                         </PrimaryButton>
                     </div>
                 </form>
