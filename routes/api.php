@@ -16,6 +16,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/games', [GameController::class, 'index']);
     Route::post('/games', [GameController::class, 'store']);
     Route::get('/games/{gameId}', [GameController::class, 'show']);
+    Route::put('/games/{gameId}', [GameController::class, 'update']);
     Route::post('/games/{gameId}/teams', [TeamController::class, 'store']);
     Route::post('/games/{gameId}/teams/{teamId}/players', [TeamPlayerController::class, 'store']);
     Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);

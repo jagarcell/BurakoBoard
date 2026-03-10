@@ -55,6 +55,22 @@ class BurakoGameService
     }
 
     /**
+     * Update an existing game's name and target points.
+     *
+     * @param  int  $gameId  Identifier of the game to update.
+     * @param  array<string, mixed>  $payload  Validated data with new name and target_points.
+     * @return \App\Models\Game The updated game model.
+     * Logic: forward the sanitized payload to the repository and return the refreshed model for caller serialization.
+     */
+    public function updateGame(int $gameId, array $payload): Game
+    {
+        return $this->repository->updateGame($gameId, [
+            'name' => $payload['name'],
+            'target_points' => (int) $payload['target_points'],
+        ]);
+    }
+
+    /**
      * Add a new team to an existing game.
      *
      * @param  int  $gameId  Identifier of the game.

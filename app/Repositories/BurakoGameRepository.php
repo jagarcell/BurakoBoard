@@ -238,6 +238,22 @@ class BurakoGameRepository
     }
 
     /**
+     * Update an existing game's name and target points.
+     *
+     * @param  int  $gameId  Identifier of the game to update.
+     * @param  array<string, mixed>  $attributes  Attributes to persist on the game record.
+     * @return \App\Models\Game The updated game model with refreshed attributes.
+     * Logic: resolve the game or throw 404, apply the attribute update, and return the freshly loaded record.
+     */
+    public function updateGame(int $gameId, array $attributes): Game
+    {
+        $game = $this->findGameOrFail($gameId);
+        $game->update($attributes);
+
+        return $game->fresh();
+    }
+
+    /**
      * Update only the game's current round counter.
      *
      * @param  \App\Models\Game  $game  Game to update.
