@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -26,6 +26,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     const [errors, setErrors] = useState({});
     const [editingTeam, setEditingTeam] = useState(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const duplicatePlayerErrorTimer = useRef(null);
 
     // Sync teams whenever the parent's initialTeams reference changes (data loaded or game changed)
     useEffect(() => {
@@ -61,6 +62,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     }, [scoreUpdate]);
 
     const resetModal = () => {
+        clearTimeout(duplicatePlayerErrorTimer.current);
         setTeamForm(defaultTeamForm);
         setPlayerInput(defaultPlayerInput);
         setErrors({});
@@ -102,10 +104,30 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     };
 
     const handleAddPlayer = () => {
-        const name = playerInput.name.trim();
+        const name = normalizeName(playerInput.name);
 
         if (name === '') {
             setErrors((current) => ({ ...current, playerName: 'Player name is required.' }));
+
+            return;
+        }
+
+        const allCurrentPlayers = [
+            ...(editingTeam?.existingPlayers ?? []),
+            ...teamForm.players,
+        ];
+
+        const duplicate = allCurrentPlayers.some(
+            (p) => normalizeName(p.display_name ?? p.name ?? '').toLowerCase() === name.toLowerCase(),
+        );
+
+        if (duplicate) {
+            clearTimeout(duplicatePlayerErrorTimer.current);
+            setErrors((current) => ({ ...current, playerName: 'A player with this name already exists in this team.' }));
+            duplicatePlayerErrorTimer.current = setTimeout(
+                () => setErrors((current) => ({ ...current, playerName: undefined })),
+                3000,
+            );
 
             return;
         }
@@ -135,6 +157,19 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
         const selectedTeam = allTeams.find((t) => t.id === selectedTeamId);
 
         if (! selectedTeam) return;
+
+        const duplicate = teams.some(
+            (t) => normalizeName(t.name).toLowerCase() === normalizeName(selectedTeam.name).toLowerCase(),
+        );
+
+        if (duplicate) {
+            setSlotAddErrors((s) => ({
+                ...s,
+                [slot]: 'A team with this name already exists in this game.',
+            }));
+
+            return;
+        }
 
         setSlotAdding((s) => ({ ...s, [slot]: true }));
         setSlotAddErrors((s) => ({ ...s, [slot]: '' }));
@@ -184,10 +219,20 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
         event.preventDefault();
         setErrors({});
 
-        const name = teamForm.name.trim();
+        const name = normalizeName(teamForm.name);
 
         if (name === '') {
             setErrors({ teamName: 'A team name is required.' });
+
+            return;
+        }
+
+        const duplicate = teams.some(
+            (t) => normalizeName(t.name).toLowerCase() === name.toLowerCase() && t.id !== editingTeam?.id,
+        );
+
+        if (duplicate) {
+            setErrors({ teamName: 'A team with this name already exists in this game.' });
 
             return;
         }
@@ -267,6 +312,9 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     };
 
     const teamSlots = [0, 1];
+
+    /** Trim and collapse inner whitespace so '  Team  Alpha  ' → 'Team Alpha'. */
+    const normalizeName = (str) => str.trim().replace(/\s+/g, ' ');
 
     return (
         <>
