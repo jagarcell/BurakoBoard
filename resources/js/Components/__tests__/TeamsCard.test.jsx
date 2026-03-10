@@ -37,7 +37,7 @@ const makeTeam = (id, name, players = []) => ({
     players,
 });
 
-const setupGetMocks = (teams = [], allTeams = mockAllTeams) => {
+const setupGetMocks = (allTeams = mockAllTeams) => {
     axios.get.mockImplementation((url) => {
         if (url === '/api/v1/users') {
             return Promise.resolve({ data: { data: { users: mockUsers } } });
@@ -45,10 +45,6 @@ const setupGetMocks = (teams = [], allTeams = mockAllTeams) => {
 
         if (url === '/api/v1/teams') {
             return Promise.resolve({ data: { data: { teams: allTeams } } });
-        }
-
-        if (/\/api\/v1\/games\/\d+$/.test(url)) {
-            return Promise.resolve(makeGameSummary(teams));
         }
 
         return Promise.reject(new Error(`Unexpected GET: ${url}`));
@@ -63,7 +59,7 @@ describe('TeamsCard', () => {
     it('shows a placeholder when no game is selected', async () => {
         setupGetMocks();
 
-        render(<TeamsCard selectedGame={null} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={null} />);
 
         expect(
             screen.getByText('Select a game above to manage its teams.'),
@@ -71,9 +67,9 @@ describe('TeamsCard', () => {
     });
 
     it('shows two Create team buttons when game has no teams', async () => {
-        setupGetMocks([]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         await waitFor(() =>
             expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
@@ -81,9 +77,9 @@ describe('TeamsCard', () => {
     });
 
     it('shows one Create team button when game has one team', async () => {
-        setupGetMocks([makeTeam(10, 'Team Alpha')]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
 
         await screen.findByText('Team Alpha');
 
@@ -91,9 +87,9 @@ describe('TeamsCard', () => {
     });
 
     it('shows no Create team button and two Edit team buttons when game has two teams', async () => {
-        setupGetMocks([makeTeam(10, 'Team Alpha'), makeTeam(11, 'Team Beta')]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha'), makeTeam(11, 'Team Beta')]} selectedGame={selectedGame} />);
 
         await waitFor(() =>
             expect(screen.getAllByRole('button', { name: 'Edit team' })).toHaveLength(2),
@@ -110,9 +106,9 @@ describe('TeamsCard', () => {
             makeTeam(11, 'Team Beta', []),
         ];
 
-        setupGetMocks(teams);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
 
         await screen.findByText('Team Alpha');
         expect(screen.getByText('Carlos')).toBeInTheDocument();
@@ -122,9 +118,9 @@ describe('TeamsCard', () => {
     });
 
     it('lists existing teams in the slot selector dropdown', async () => {
-        setupGetMocks([], mockAllTeams);
+        setupGetMocks(mockAllTeams);
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         const selectors = await screen.findAllByRole('combobox');
         await waitFor(() =>
@@ -134,9 +130,9 @@ describe('TeamsCard', () => {
     });
 
     it('shows Add team button when an existing team is selected in the dropdown', async () => {
-        setupGetMocks([], mockAllTeams);
+        setupGetMocks(mockAllTeams);
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         const selectors = await screen.findAllByRole('combobox');
         await waitFor(() =>
@@ -149,12 +145,12 @@ describe('TeamsCard', () => {
     });
 
     it('adds an existing team to the game when Add team is clicked', async () => {
-        setupGetMocks([], mockAllTeams);
+        setupGetMocks(mockAllTeams);
 
         const copiedTeam = makeTeam(20, 'Old Team A', []);
         axios.post.mockResolvedValueOnce(makeGameSummary([copiedTeam]));
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         const selectors = await screen.findAllByRole('combobox');
         await waitFor(() => within(selectors[0]).getByRole('option', { name: 'Old Team A' }));
@@ -172,14 +168,14 @@ describe('TeamsCard', () => {
     });
 
     it('copies player data when adding an existing team with players', async () => {
-        setupGetMocks([], mockAllTeams);
+        setupGetMocks(mockAllTeams);
 
         const copiedTeam = makeTeam(21, 'Old Team B', [{ id: 11, user_id: null, display_name: 'Carlos' }]);
         axios.post
             .mockResolvedValueOnce(makeGameSummary([copiedTeam]))
             .mockResolvedValueOnce(makeGameSummary([copiedTeam]));
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         const selectors = await screen.findAllByRole('combobox');
         await waitFor(() => within(selectors[0]).getByRole('option', { name: 'Old Team B' }));
@@ -195,9 +191,9 @@ describe('TeamsCard', () => {
     });
 
     it('shows registered users in the player dropdown after opening the create modal', async () => {
-        setupGetMocks([]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         await waitFor(() =>
             expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
@@ -215,7 +211,7 @@ describe('TeamsCard', () => {
     });
 
     it('creates a team with a registered user player', async () => {
-        setupGetMocks([]);
+        setupGetMocks();
 
         const createdTeam = makeTeam(20, 'Team Alpha', [
             { id: 5, user_id: 1, display_name: 'Alice' },
@@ -225,7 +221,7 @@ describe('TeamsCard', () => {
             .mockResolvedValueOnce(makeGameSummary([createdTeam]))
             .mockResolvedValueOnce(makeGameSummary([createdTeam]));
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         await waitFor(() =>
             expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
@@ -271,7 +267,7 @@ describe('TeamsCard', () => {
     });
 
     it('creates a team with a free-form player name', async () => {
-        setupGetMocks([]);
+        setupGetMocks();
 
         const createdTeam = makeTeam(21, 'Team Beta', [
             { id: 6, user_id: null, display_name: 'Roberto' },
@@ -281,7 +277,7 @@ describe('TeamsCard', () => {
             .mockResolvedValueOnce(makeGameSummary([createdTeam]))
             .mockResolvedValueOnce(makeGameSummary([createdTeam]));
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         await waitFor(() =>
             expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
@@ -308,9 +304,9 @@ describe('TeamsCard', () => {
     });
 
     it('shows a validation error when team name is empty in create mode', async () => {
-        setupGetMocks([]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         await waitFor(() =>
             expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
@@ -324,9 +320,9 @@ describe('TeamsCard', () => {
     });
 
     it('shows a validation error when adding a player with an empty name', async () => {
-        setupGetMocks([]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
         await waitFor(() =>
             expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
@@ -339,9 +335,9 @@ describe('TeamsCard', () => {
     });
 
     it('opens the edit modal with pre-filled name when Edit team is clicked', async () => {
-        setupGetMocks([makeTeam(10, 'Team Alpha')]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
 
         await screen.findByText('Team Alpha');
         await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
@@ -354,9 +350,9 @@ describe('TeamsCard', () => {
         const team = makeTeam(10, 'Team Alpha', [
             { id: 1, user_id: null, display_name: 'Carlos' },
         ]);
-        setupGetMocks([team]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
 
         await screen.findByText('Team Alpha');
         await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
@@ -365,12 +361,12 @@ describe('TeamsCard', () => {
     });
 
     it('updates team name via edit modal', async () => {
-        setupGetMocks([makeTeam(10, 'Team Alpha')]);
+        setupGetMocks();
 
         const updatedTeam = makeTeam(10, 'Team Alpha Updated');
         axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
 
         await screen.findByText('Team Alpha');
         await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
@@ -397,9 +393,9 @@ describe('TeamsCard', () => {
 
     it('shows a score badge with green bisque styling when team score is 0', async () => {
         const team = { ...makeTeam(10, 'Team Alpha'), current_score: 0 };
-        setupGetMocks([team]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
 
         await screen.findByText('Team Alpha');
 
@@ -410,9 +406,9 @@ describe('TeamsCard', () => {
 
     it('shows a score badge with green styling when team score is positive', async () => {
         const team = { ...makeTeam(10, 'Team Alpha'), current_score: 850 };
-        setupGetMocks([team]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
 
         await screen.findByText('Team Alpha');
 
@@ -423,14 +419,115 @@ describe('TeamsCard', () => {
 
     it('shows a score badge with red styling when team score is negative', async () => {
         const team = { ...makeTeam(10, 'Team Alpha'), current_score: -200 };
-        setupGetMocks([team]);
+        setupGetMocks();
 
-        render(<TeamsCard selectedGame={selectedGame} />);
+        render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
 
         await screen.findByText('Team Alpha');
 
         const badge = screen.getByRole('generic', { name: 'Team Alpha score' });
         expect(badge).toHaveTextContent('-200');
         expect(badge).toHaveClass('bg-red-100', 'text-red-800');
+    });
+
+    it('hides the header description when both teams are assigned', async () => {
+        const teams = [
+            makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos' }]),
+            makeTeam(11, 'Team Beta', []),
+        ];
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByText('Build the two teams for this game.')).not.toBeInTheDocument();
+        expect(screen.getByText('Teams')).toBeInTheDocument();
+        expect(screen.getByText('Team Alpha')).toBeInTheDocument();
+        expect(screen.getByText('Team Beta')).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Edit team' })).toHaveLength(2);
+    });
+
+    it('shows the header description when fewer than two teams are assigned', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.getByText('Build the two teams for this game.')).toBeInTheDocument();
+    });
+
+    it('collapses only the player lists when the collapse button is clicked', async () => {
+        const teams = [
+            makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos' }]),
+            makeTeam(11, 'Team Beta', []),
+        ];
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        expect(screen.getByText('Carlos')).toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Collapse teams section' }));
+
+        // player list hidden
+        expect(screen.queryByText('Carlos')).not.toBeInTheDocument();
+        // team names and edit buttons still visible
+        expect(screen.getByText('Team Alpha')).toBeInTheDocument();
+        expect(screen.getByText('Team Beta')).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Edit team' })).toHaveLength(2);
+        expect(screen.getByRole('generic', { name: 'Team Alpha score' })).toBeInTheDocument();
+        // header description still absent (two teams assigned)
+        expect(screen.queryByText('Build the two teams for this game.')).not.toBeInTheDocument();
+    });
+
+    it('expands the player lists back when the expand button is clicked', async () => {
+        const teams = [
+            makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos' }]),
+            makeTeam(11, 'Team Beta', []),
+        ];
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Collapse teams section' }));
+        expect(screen.queryByText('Carlos')).not.toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Expand teams section' }));
+        expect(screen.getByText('Carlos')).toBeInTheDocument();
+    });
+
+    it('does not show the collapse button when fewer than two teams are assigned', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByRole('button', { name: 'Collapse teams section' })).not.toBeInTheDocument();
+    });
+
+    it('reactively updates score badges when scoreUpdate prop changes', async () => {
+        const teamAtZero = { ...makeTeam(10, 'Team Alpha'), current_score: 0 };
+        setupGetMocks();
+
+        const { rerender } = render(<TeamsCard initialTeams={[teamAtZero]} scoreUpdate={null} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        expect(screen.getByRole('generic', { name: 'Team Alpha score' })).toHaveTextContent('0');
+
+        const updatedTeam = { ...teamAtZero, current_score: 800 };
+
+        rerender(<TeamsCard initialTeams={[teamAtZero]} scoreUpdate={[updatedTeam]} selectedGame={selectedGame} />);
+
+        await waitFor(() =>
+            expect(screen.getByRole('generic', { name: 'Team Alpha score' })).toHaveTextContent('800'),
+        );
+
+        expect(axios.get).toHaveBeenCalledTimes(2); // users + teams only — no GET for game summary or score update
     });
 });

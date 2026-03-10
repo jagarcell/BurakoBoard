@@ -12,10 +12,8 @@ import TextInput from '@/Components/TextInput';
 const defaultTeamForm = { name: '', players: [] };
 const defaultPlayerInput = { userId: '', name: '' };
 
-export default function TeamsCard({ selectedGame }) {
-    const [teams, setTeams] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [loadError, setLoadError] = useState('');
+export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate = null, isFetching = false }) {
+    const [teams, setTeams] = useState(initialTeams);
     const [users, setUsers] = useState([]);
     const [allTeams, setAllTeams] = useState([]);
     const [slotSelections, setSlotSelections] = useState({ 0: '', 1: '' });
@@ -27,64 +25,40 @@ export default function TeamsCard({ selectedGame }) {
     const [playerInput, setPlayerInput] = useState(defaultPlayerInput);
     const [errors, setErrors] = useState({});
     const [editingTeam, setEditingTeam] = useState(null);
+    const [isCollapsed, setIsCollapsed] = useState(false);
+
+    // Sync teams whenever the parent's initialTeams reference changes (data loaded or game changed)
+    useEffect(() => {
+        startTransition(() => setTeams(initialTeams));
+    }, [initialTeams]);
 
     useEffect(() => {
         let isActive = true;
 
         axios.get('/api/v1/users').then((response) => {
-            if (isActive) {
-                setUsers(response.data?.data?.users ?? []);
-            }
+            if (isActive) setUsers(response.data?.data?.users ?? []);
         });
 
         axios.get('/api/v1/teams').then((response) => {
-            if (isActive) {
-                setAllTeams(response.data?.data?.teams ?? []);
-            }
+            if (isActive) setAllTeams(response.data?.data?.teams ?? []);
         });
 
-        return () => {
-            isActive = false;
-        };
+        return () => { isActive = false; };
     }, []);
 
     useEffect(() => {
-        if (! selectedGame) {
-            setTeams([]);
-            setLoadError('');
+        if (! scoreUpdate?.length) return;
 
-            return;
-        }
+        startTransition(() =>
+            setTeams((prev) =>
+                prev.map((t) => {
+                    const updated = scoreUpdate.find((u) => u.id === t.id);
 
-        let isActive = true;
-
-        setIsLoading(true);
-        setLoadError('');
-
-        axios
-            .get(`/api/v1/games/${selectedGame.id}`)
-            .then((response) => {
-                if (isActive) {
-                    startTransition(() =>
-                        setTeams(response.data?.data?.game?.teams ?? []),
-                    );
-                }
-            })
-            .catch(() => {
-                if (isActive) {
-                    setLoadError('Unable to load teams right now.');
-                }
-            })
-            .finally(() => {
-                if (isActive) {
-                    setIsLoading(false);
-                }
-            });
-
-        return () => {
-            isActive = false;
-        };
-    }, [selectedGame?.id]);
+                    return updated ? { ...t, current_score: updated.current_score } : t;
+                }),
+            ),
+        );
+    }, [scoreUpdate]);
 
     const resetModal = () => {
         setTeamForm(defaultTeamForm);
@@ -298,24 +272,43 @@ export default function TeamsCard({ selectedGame }) {
         <>
             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
                 <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.14),_transparent_38%),linear-gradient(135deg,_#f8fafc_0%,_#ffffff_56%,_#eef2ff_100%)] px-6 py-6">
-                    <div className="max-w-2xl space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
-                            Teams
-                        </p>
-                        <h3 className="text-2xl font-semibold text-slate-900">
-                            Build the two teams for this game.
-                        </h3>
-                        <p className="text-sm text-slate-600">
-                            Each game requires exactly two teams. Add registered
-                            players or enter a custom name for each participant.
-                        </p>
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="max-w-2xl space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+                                Teams
+                            </p>
+                            {teams.length < 2 ? (
+                                <>
+                                    <h3 className="text-2xl font-semibold text-slate-900">
+                                        Build the two teams for this game.
+                                    </h3>
+                                    <p className="text-sm text-slate-600">
+                                        Each game requires exactly two teams. Add registered
+                                        players or enter a custom name for each participant.
+                                    </p>
+                                </>
+                            ) : null}
+                        </div>
+                        {teams.length === 2 ? (
+                            <button
+                                aria-label={isCollapsed ? 'Expand teams section' : 'Collapse teams section'}
+                                className="mt-0.5 flex-shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                                onClick={() => setIsCollapsed((c) => ! c)}
+                                type="button"
+                            >
+                                <svg
+                                    aria-hidden="true"
+                                    className={`h-4 w-4 transition-transform duration-200 ${isCollapsed ? 'rotate-180' : ''}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M5 15l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </button>
+                        ) : null}
                     </div>
-
-                    {loadError !== '' ? (
-                        <p className="mt-4 text-sm font-medium text-red-600">
-                            {loadError}
-                        </p>
-                    ) : null}
                 </div>
 
                 <div className="divide-y divide-slate-100">
@@ -323,7 +316,7 @@ export default function TeamsCard({ selectedGame }) {
                         <p className="px-6 py-5 text-sm text-slate-400">
                             Select a game above to manage its teams.
                         </p>
-                    ) : isLoading ? (
+                    ) : isFetching && ! teams.length ? (
                         <p className="px-6 py-5 text-sm text-slate-400">
                             Loading teams…
                         </p>
@@ -358,7 +351,7 @@ export default function TeamsCard({ selectedGame }) {
                                                         {team.name}
                                                     </h4>
                                                 </div>
-                                                {team.players.length > 0 ? (
+                                                {! isCollapsed && team.players.length > 0 ? (
                                                     <ul className="mt-2 space-y-1">
                                                         {team.players.map((player) => (
                                                             <li
@@ -369,11 +362,11 @@ export default function TeamsCard({ selectedGame }) {
                                                             </li>
                                                         ))}
                                                     </ul>
-                                                ) : (
+                                                ) : ! isCollapsed ? (
                                                     <p className="mt-2 text-sm italic text-slate-400">
                                                         No players yet.
                                                     </p>
-                                                )}
+                                                ) : null}
                                             </div>
                                             <TeamActionButton
                                                 onClick={() => openEditModal(team)}
@@ -388,23 +381,23 @@ export default function TeamsCard({ selectedGame }) {
                                                 Team {slot + 1}
                                             </p>
                                             <TeamSlotSelector
-                                                allTeams={allTeams}
-                                                disabled={slotAdding[slot]}
-                                                excludedTeamIds={teams.map((t) => t.id)}
-                                                onAddTeam={() => handleAddExistingTeam(slot)}
-                                                onCreateTeam={openModal}
-                                                onSelect={(val) =>
-                                                    setSlotSelections((s) => ({
-                                                        ...s,
-                                                        [slot]: val,
-                                                    }))
-                                                }
-                                                selectedTeamId={slotSelections[slot]}
-                                            />
-                                            {slotAddErrors[slot] ? (
-                                                <p className="mt-2 text-sm text-red-600">
-                                                    {slotAddErrors[slot]}
-                                                </p>
+                                        allTeams={allTeams}
+                                        disabled={slotAdding[slot]}
+                                        excludedTeamIds={teams.map((t) => t.id)}
+                                        onAddTeam={() => handleAddExistingTeam(slot)}
+                                        onCreateTeam={openModal}
+                                        onSelect={(val) =>
+                                            setSlotSelections((s) => ({
+                                                ...s,
+                                                [slot]: val,
+                                            }))
+                                        }
+                                        selectedTeamId={slotSelections[slot]}
+                                    />
+                                        {slotAddErrors[slot] ? (
+                                            <p className="mt-2 text-sm text-red-600">
+                                                {slotAddErrors[slot]}
+                                            </p>
                                             ) : null}
                                         </>
                                     )}
