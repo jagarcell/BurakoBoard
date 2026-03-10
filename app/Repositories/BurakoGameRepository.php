@@ -220,6 +220,46 @@ class BurakoGameRepository
     }
 
     /**
+     * Recompute a team's total score by summing all its round_scores rows scoped to the team's game.
+     *
+     * @param  int  $teamId  Identifier of the team.
+     * @return int The authoritative cumulative score derived from the round history.
+     * Logic: join round_scores through rounds and filter by the team's own game_id so only rounds that belong to this team's game contribute to the total, then persist the computed value back to teams.current_score.
+     */
+    public function recomputeTeamScoreFromHistory(int $teamId): int
+    {
+        $team = Team::query()->findOrFail($teamId);
+
+        $total = (int) DB::table('round_scores')
+            ->join('rounds', 'rounds.id', '=', 'round_scores.round_id')
+            ->where('round_scores.team_id', $teamId)
+            ->where('rounds.game_id', $team->game_id)
+            ->sum('round_scores.points');
+
+        Team::query()->where('id', $teamId)->update(['current_score' => $total]);
+
+        return $total;
+    }
+
+    /**
+     * Recompute and persist current_score for every team in a game from round history.
+     *
+     * @param  int  $gameId  Identifier of the game whose team scores should be synced.
+     * @return void Updates each team row in place so current_score matches the sum of round_scores.
+     * Logic: load all team ids for the game, then delegate each individual recompute to recomputeTeamScoreFromHistory for a single source of truth.
+     */
+    public function syncTeamScoresForGame(int $gameId): void
+    {
+        $teamIds = Team::query()
+            ->where('game_id', $gameId)
+            ->pluck('id');
+
+        foreach ($teamIds as $teamId) {
+            $this->recomputeTeamScoreFromHistory((int) $teamId);
+        }
+    }
+
+    /**
      * Mark a game as finished with a winner and round number.
      *
      * @param  \App\Models\Game  $game  Game to update.

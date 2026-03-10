@@ -246,6 +246,18 @@ class BurakoGameService
     }
 
     /**
+     * Recompute and persist current_score for every team in a game from its round history.
+     *
+     * @param  int  $gameId  Identifier of the game whose team scores need syncing.
+     * @return void Delegates recompute to the repository so each team's stored score matches the sum of its round_scores.
+     * Logic: act as an orchestration entry point for score repair, ensuring service callers never touch the repository directly.
+     */
+    public function syncGameScores(int $gameId): void
+    {
+        $this->repository->syncTeamScoresForGame($gameId);
+    }
+
+    /**
      * Build a player model from payload rules.
      *
      * @param  array<string, mixed>  $payload  Validated player payload containing either user_id or name.

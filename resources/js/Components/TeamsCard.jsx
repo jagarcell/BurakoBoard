@@ -336,12 +336,28 @@ export default function TeamsCard({ selectedGame }) {
                                     {team ? (
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
-                                                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                                                    Team {slot + 1}
-                                                </p>
-                                                <h4 className="mt-1 text-base font-semibold text-slate-900">
-                                                    {team.name}
-                                                </h4>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                                                        Team {slot + 1}
+                                                    </p>
+                                                    <span
+                                                        aria-label={`${team.name} score`}
+                                                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                                            team.current_score > 0
+                                                                ? 'bg-green-100 text-green-800'
+                                                                : team.current_score < 0
+                                                                    ? 'bg-red-100 text-red-800'
+                                                                    : 'bg-[bisque] text-green-700'
+                                                        }`}
+                                                    >
+                                                        {team.current_score}
+                                                    </span>
+                                                </div>
+                                                <div className="mt-1">
+                                                    <h4 className="text-base font-semibold text-slate-900">
+                                                        {team.name}
+                                                    </h4>
+                                                </div>
                                                 {team.players.length > 0 ? (
                                                     <ul className="mt-2 space-y-1">
                                                         {team.players.map((player) => (
