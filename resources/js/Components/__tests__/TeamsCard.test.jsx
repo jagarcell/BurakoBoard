@@ -394,4 +394,43 @@ describe('TeamsCard', () => {
 
         expect(screen.getByText('Team Alpha Updated')).toBeInTheDocument();
     });
+
+    it('shows a score badge with green bisque styling when team score is 0', async () => {
+        const team = { ...makeTeam(10, 'Team Alpha'), current_score: 0 };
+        setupGetMocks([team]);
+
+        render(<TeamsCard selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        const badge = screen.getByRole('generic', { name: 'Team Alpha score' });
+        expect(badge).toHaveTextContent('0');
+        expect(badge).toHaveClass('bg-[bisque]', 'text-green-700');
+    });
+
+    it('shows a score badge with green styling when team score is positive', async () => {
+        const team = { ...makeTeam(10, 'Team Alpha'), current_score: 850 };
+        setupGetMocks([team]);
+
+        render(<TeamsCard selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        const badge = screen.getByRole('generic', { name: 'Team Alpha score' });
+        expect(badge).toHaveTextContent('850');
+        expect(badge).toHaveClass('bg-green-100', 'text-green-800');
+    });
+
+    it('shows a score badge with red styling when team score is negative', async () => {
+        const team = { ...makeTeam(10, 'Team Alpha'), current_score: -200 };
+        setupGetMocks([team]);
+
+        render(<TeamsCard selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        const badge = screen.getByRole('generic', { name: 'Team Alpha score' });
+        expect(badge).toHaveTextContent('-200');
+        expect(badge).toHaveClass('bg-red-100', 'text-red-800');
+    });
 });
