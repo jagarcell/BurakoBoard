@@ -19,9 +19,14 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     useEffect(() => {
         setTeams(initialTeams);
         setRounds(initialRounds);
-        setScores(Object.fromEntries(initialTeams.map((t) => [t.id, ''])));
-        setInputErrors({});
-        setSaveError('');
+        setScores(prev => {
+            const newIds = new Set(initialTeams.map(t => t.id));
+            const prevIds = new Set(Object.keys(prev).map(Number));
+            const same = newIds.size === prevIds.size && [...newIds].every(id => prevIds.has(id));
+            return same ? prev : Object.fromEntries(initialTeams.map((t) => [t.id, '']));
+        });
+        setInputErrors(prev => Object.keys(prev).length > 0 ? {} : prev);
+        setSaveError(prev => prev !== '' ? '' : prev);
     }, [initialTeams, initialRounds]);
 
     const handleScoreChange = (teamId, value) => {
