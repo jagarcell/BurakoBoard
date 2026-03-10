@@ -13,6 +13,10 @@
 - Create tests for every newly created function.
 - Create tests for all newly created frontend components and keep those tests up to date whenever component code changes.
 
+## Frontend
+
+- When creating new layouts or pages, extract as many reusable components as possible; prefer small, focused components over large monolithic ones.
+
 ## Architecture
 
 - Avoid fat controllers: keep controllers thin, move business logic to services, database queries to repositories, validation to FormRequest classes, and API JSON responses to API Resource classes.
