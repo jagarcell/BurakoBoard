@@ -47,6 +47,7 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={onGameSelect} />);
 
         const selector = await screen.findByRole('combobox');
+        await screen.findByRole('option', { name: 'Select a game' });
 
         await waitFor(() => expect(selector).toHaveValue(''));
         expect(screen.getByRole('option', { name: 'Select a game' })).toBeInTheDocument();
@@ -64,6 +65,7 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={vi.fn()} />);
 
         const selector = await screen.findByRole('combobox');
+        await screen.findByRole('option', { name: 'Select a game' });
 
         await waitFor(() => expect(selector).toHaveValue(''));
         expect(screen.getByRole('button', { name: 'New' })).toBeInTheDocument();
@@ -85,6 +87,7 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={onGameSelect} />);
 
         const selector = await screen.findByRole('combobox');
+        await screen.findAllByRole('option', { name: /pts/ });
 
         await userEvent.selectOptions(selector, '8');
 
@@ -134,6 +137,7 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={onGameSelect} />);
 
         await screen.findByRole('combobox');
+        await screen.findByRole('option', { name: 'Select a game' });
 
         await userEvent.click(screen.getByRole('button', { name: 'New' }));
 
@@ -186,6 +190,7 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={onGameSelect} />);
 
         const selector = await screen.findByRole('combobox');
+        await screen.findAllByRole('option', { name: /pts/ });
         await userEvent.selectOptions(selector, '8');
 
         await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
@@ -229,6 +234,7 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={vi.fn()} />);
 
         const selector = await screen.findByRole('combobox');
+        await screen.findAllByRole('option', { name: /pts/ });
 
         await userEvent.selectOptions(selector, '8');
         expect(selector).toHaveValue('8');
