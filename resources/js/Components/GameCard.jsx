@@ -275,7 +275,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
                                 )}
 
                                 {games.map((game) => (
-                                    <option key={game.id} value={game.id}>
+                                    <option key={game.id} value={String(game.id)}>
                                         {game.name} ({game.target_points} pts)
                                     </option>
                                 ))}
