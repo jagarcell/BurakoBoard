@@ -16,6 +16,7 @@
 ## Frontend
 
 - When creating new layouts or pages, extract as many reusable components as possible; prefer small, focused components over large monolithic ones.
+- All UI state updates must be fully reactive: merge new data into existing component state directly (e.g. from an API response already in hand) rather than triggering a full page refresh or a redundant HTTP re-fetch. A full refresh is only acceptable when the update scope is too broad to merge incrementally, or when stale server-side session/auth state makes a full reload the correct behaviour.
 
 ## Architecture
 
