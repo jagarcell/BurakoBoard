@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreGameRequest;
+use App\Http\Requests\Api\V1\UpdateGameRequest;
 use App\Http\Resources\Api\V1\GameListItemResource;
 use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Services\BurakoGameService;
@@ -66,6 +67,23 @@ class GameController extends Controller
 
         return response()->json([
             'game' => new GameSummaryResource($summary),
+        ]);
+    }
+
+    /**
+     * Update an existing game's name and target points.
+     *
+     * @param  \App\Http\Requests\Api\V1\UpdateGameRequest  $request  Validated request for game update.
+     * @param  int  $gameId  Identifier of the game to update.
+     * @return \Illuminate\Http\JsonResponse Updated game list-item response.
+     * Logic: forward validated input to the service and return the refreshed game serialized as a list-item resource.
+     */
+    public function update(UpdateGameRequest $request, int $gameId): JsonResponse
+    {
+        $game = $this->service->updateGame($gameId, $request->validated());
+
+        return response()->json([
+            'game' => new GameListItemResource($game),
         ]);
     }
 }

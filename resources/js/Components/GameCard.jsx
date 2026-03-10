@@ -18,6 +18,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [form, setForm] = useState(defaultForm);
     const [errors, setErrors] = useState({});
@@ -49,9 +50,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
                             return currentGameId;
                         }
 
-                        return availableGames[0]
-                            ? String(availableGames[0].id)
-                            : '';
+                        return '';
                     });
                 });
             } catch (error) {
@@ -99,6 +98,85 @@ export default function GameCard({ onGameSelect = () => {} }) {
 
         setIsCreateModalOpen(false);
         resetForm();
+    };
+
+    const openEditModal = () => {
+        const game = games.find((g) => String(g.id) === selectedGameId);
+
+        if (! game) {
+            return;
+        }
+
+        setForm({ name: game.name, targetPoints: String(game.target_points) });
+        setErrors({});
+        setIsEditModalOpen(true);
+    };
+
+    const closeEditModal = () => {
+        if (isSaving) {
+            return;
+        }
+
+        setIsEditModalOpen(false);
+        resetForm();
+    };
+
+    const handleEditGame = async (event) => {
+        event.preventDefault();
+        setErrors({});
+
+        const trimmedName = form.name.trim();
+        const targetPoints = Number(form.targetPoints);
+
+        if (trimmedName === '' || Number.isNaN(targetPoints) || targetPoints < 1) {
+            setErrors({
+                name: trimmedName === '' ? 'A game name is required.' : undefined,
+                target_points:
+                    Number.isNaN(targetPoints) || targetPoints < 1
+                        ? 'Winner score must be at least 1.'
+                        : undefined,
+            });
+
+            return;
+        }
+
+        setIsSaving(true);
+
+        try {
+            const response = await axios.put(`/api/v1/games/${selectedGameId}`, {
+                name: trimmedName,
+                target_points: targetPoints,
+            });
+            const updatedGame = response.data?.data?.game;
+
+            if (! updatedGame) {
+                throw new Error('Game payload missing from response.');
+            }
+
+            startTransition(() => {
+                setGames((currentGames) =>
+                    currentGames.map((game) =>
+                        String(game.id) === String(updatedGame.id) ? updatedGame : game,
+                    ),
+                );
+            });
+
+            setIsEditModalOpen(false);
+            resetForm();
+        } catch (error) {
+            const apiErrors = error.response?.data?.data?.errors ?? {};
+
+            setErrors({
+                name: apiErrors.name?.[0],
+                target_points: apiErrors.target_points?.[0],
+                general:
+                    apiErrors.name?.[0] ||
+                    apiErrors.target_points?.[0] ||
+                    'Unable to update the game right now.',
+            });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleCreateGame = async (event) => {
@@ -188,26 +266,38 @@ export default function GameCard({ onGameSelect = () => {} }) {
                                 onChange={(event) => setSelectedGameId(event.target.value)}
                                 value={selectedGameId}
                             >
-                                {games.length === 0 ? (
-                                    <option value="">
-                                        {isLoading ? 'Loading games...' : 'No games available'}
-                                    </option>
-                                ) : null}
+                                {isLoading ? (
+                                    <option value="">Loading games...</option>
+                                ) : games.length === 0 ? (
+                                    <option value="">No games available</option>
+                                ) : (
+                                    <option value="">Select a game</option>
+                                )}
 
                                 {games.map((game) => (
-                                    <option key={game.id} value={game.id}>
+                                    <option key={game.id} value={String(game.id)}>
                                         {game.name} ({game.target_points} pts)
                                     </option>
                                 ))}
                             </select>
 
-                            <PrimaryButton
-                                className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
-                                onClick={openCreateModal}
-                                type="button"
-                            >
-                                New
-                            </PrimaryButton>
+                            {selectedGameId === '' ? (
+                                <PrimaryButton
+                                    className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
+                                    onClick={openCreateModal}
+                                    type="button"
+                                >
+                                    New
+                                </PrimaryButton>
+                            ) : (
+                                <PrimaryButton
+                                    className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
+                                    onClick={openEditModal}
+                                    type="button"
+                                >
+                                    Edit
+                                </PrimaryButton>
+                            )}
                         </div>
                     </div>
 
@@ -218,6 +308,75 @@ export default function GameCard({ onGameSelect = () => {} }) {
                     ) : null}
                 </div>
             </section>
+
+            <Modal maxWidth="lg" onClose={closeEditModal} show={isEditModalOpen}>
+                <form className="space-y-6 p-6" onSubmit={handleEditGame}>
+                    <div className="space-y-2">
+                        <h4 className="text-lg font-semibold text-slate-900">
+                            Edit game
+                        </h4>
+                        <p className="text-sm text-slate-600">
+                            Update the game name and the score required to declare a winner.
+                        </p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <InputLabel htmlFor="edit-game-name" value="Game name" />
+                        <TextInput
+                            className="block w-full rounded-xl"
+                            id="edit-game-name"
+                            isFocused
+                            onChange={(event) =>
+                                setForm((currentForm) => ({
+                                    ...currentForm,
+                                    name: event.target.value,
+                                }))
+                            }
+                            placeholder="Friday Burako"
+                            value={form.name}
+                        />
+                        <InputError message={errors.name} />
+                    </div>
+
+                    <div className="space-y-2">
+                        <InputLabel
+                            htmlFor="edit-game-target-points"
+                            value="Winner score"
+                        />
+                        <TextInput
+                            className="block w-full rounded-xl"
+                            id="edit-game-target-points"
+                            min="1"
+                            onChange={(event) =>
+                                setForm((currentForm) => ({
+                                    ...currentForm,
+                                    targetPoints: event.target.value,
+                                }))
+                            }
+                            step="1"
+                            type="number"
+                            value={form.targetPoints}
+                        />
+                        <InputError message={errors.target_points} />
+                    </div>
+
+                    <InputError message={errors.general} />
+
+                    <div className="flex justify-end gap-3">
+                        <SecondaryButton
+                            disabled={isSaving}
+                            onClick={closeEditModal}
+                            type="button"
+                        >
+                            Cancel
+                        </SecondaryButton>
+
+                        <PrimaryButton disabled={isSaving} type="submit">
+                            Save
+                        </PrimaryButton>
+                    </div>
+                </form>
+            </Modal>
 
             <Modal maxWidth="lg" onClose={closeCreateModal} show={isCreateModalOpen}>
                 <form className="space-y-6 p-6" onSubmit={handleCreateGame}>
