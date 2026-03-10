@@ -4,6 +4,7 @@
 
 - On a prompt "create commits" show a preview of meaningful commits and wait for approval to commit; the approval prompt will be "approved".
 - On a prompt "create PR" show a preview of the PR and wait for approval to create the PR; the approval prompt will be "approved".
+- On a prompt "send changes to new branch": (1) inspect the current changes, propose three meaningful branch name options, and wait for the user to pick one; (2) once a branch name is approved, create the branch immediately (without committing); (3) then show a preview of the commit(s) that will be created and wait for approval before committing; the approval prompt will be "approved".
 
 ## Code Quality
 
