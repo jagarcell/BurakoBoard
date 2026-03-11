@@ -299,12 +299,11 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
             resetModal();
         } catch (error) {
             const apiErrors = error.response?.data?.data?.errors ?? {};
+            const firstApiError = Object.values(apiErrors).flat()[0];
 
             setErrors({
                 teamName: apiErrors.name?.[0],
-                general:
-                    apiErrors.name?.[0] ||
-                    'Unable to save the team right now.',
+                general: firstApiError || 'Unable to save the team right now.',
             });
         } finally {
             setIsSaving(false);
