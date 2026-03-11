@@ -17,6 +17,7 @@ const mockAllTeams = [
 ];
 
 const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress' };
+const finishedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'finished' };
 
 const makeGameSummary = (teams = []) => ({
     data: {
@@ -757,5 +758,76 @@ describe('TeamsCard', () => {
         await waitFor(() =>
             expect(screen.getByText('Unable to save the team right now.')).toBeInTheDocument(),
         );
+    });
+
+    it('hides the Edit team button when the game is finished', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByRole('button', { name: 'Edit team' })).not.toBeInTheDocument();
+    });
+
+    it('hides Create team and slot selector for empty slots when the game is finished', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[]} selectedGame={finishedGame} />);
+
+        await screen.findAllByText('No team assigned.');
+
+        expect(screen.queryByRole('button', { name: 'Create team' })).not.toBeInTheDocument();
+    });
+
+    it('shows No team assigned for empty slots when the game is finished', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.getByText('No team assigned.')).toBeInTheDocument();
+    });
+
+    it('shows a winner badge on the team with the highest score when a game is finished', async () => {
+        setupGetMocks();
+
+        const winner = { ...makeTeam(10, 'Team Alpha'), current_score: 2100 };
+        const loser = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+        render(<TeamsCard initialTeams={[winner, loser]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.getByRole('generic', { name: 'Team Alpha winner' })).toBeInTheDocument();
+        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+    });
+
+    it('does not show a winner badge on the losing team when a game is finished', async () => {
+        setupGetMocks();
+
+        const winner = { ...makeTeam(10, 'Team Alpha'), current_score: 2100 };
+        const loser = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+        render(<TeamsCard initialTeams={[winner, loser]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Beta');
+
+        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+    });
+
+    it('shows no winner badge when the game is finished with tied scores', async () => {
+        setupGetMocks();
+
+        const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1500 };
+        const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 1500 };
+
+        render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByRole('generic', { name: 'Team Alpha winner' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
     });
 });

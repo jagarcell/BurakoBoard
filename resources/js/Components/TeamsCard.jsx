@@ -311,6 +311,11 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     };
 
     const teamSlots = [0, 1];
+    const isGameEditable = selectedGame?.status === 'in_progress';
+    const winnerTeamId =
+        ! isGameEditable && teams.length === 2 && teams[0].current_score !== teams[1].current_score
+            ? (teams[0].current_score > teams[1].current_score ? teams[0].id : teams[1].id)
+            : null;
 
     /** Trim and collapse inner whitespace so '  Team  Alpha  ' → 'Team Alpha'. */
     const normalizeName = (str) => str.trim().replace(/\s+/g, ' ');
@@ -415,37 +420,60 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                                     </p>
                                                 ) : null}
                                             </div>
-                                            <TeamActionButton
-                                                onClick={() => openEditModal(team)}
-                                                type="button"
-                                            >
-                                                Edit team
-                                            </TeamActionButton>
+                                            {isGameEditable ? (
+                                                <TeamActionButton
+                                                    onClick={() => openEditModal(team)}
+                                                    type="button"
+                                                >
+                                                    Edit team
+                                                </TeamActionButton>
+                                            ) : winnerTeamId === team.id ? (
+                                                <div
+                                                    aria-label={`${team.name} winner`}
+                                                    className="flex flex-shrink-0 items-center gap-1.5 rounded-full bg-yellow-400 px-3 py-1.5 text-xs font-bold text-yellow-900 shadow-sm"
+                                                >
+                                                    <svg
+                                                        aria-hidden="true"
+                                                        className="h-3.5 w-3.5 fill-yellow-900"
+                                                        viewBox="0 0 24 24"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                    >
+                                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                                    </svg>
+                                                    Winner
+                                                </div>
+                                            ) : null}
                                         </div>
                                     ) : (
                                         <>
                                             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                                                 Team {slot + 1}
                                             </p>
-                                            <TeamSlotSelector
-                                        allTeams={allTeams}
-                                        disabled={slotAdding[slot]}
-                                        excludedTeamIds={teams.map((t) => t.id)}
-                                        onAddTeam={() => handleAddExistingTeam(slot)}
-                                        onCreateTeam={openModal}
-                                        onSelect={(val) =>
-                                            setSlotSelections((s) => ({
-                                                ...s,
-                                                [slot]: val,
-                                            }))
-                                        }
-                                        selectedTeamId={slotSelections[slot]}
-                                    />
-                                        {slotAddErrors[slot] ? (
-                                            <p className="mt-2 text-sm text-red-600">
-                                                {slotAddErrors[slot]}
-                                            </p>
-                                            ) : null}
+                                            {isGameEditable ? (
+                                                <>
+                                                    <TeamSlotSelector
+                                                        allTeams={allTeams}
+                                                        disabled={slotAdding[slot]}
+                                                        excludedTeamIds={teams.map((t) => t.id)}
+                                                        onAddTeam={() => handleAddExistingTeam(slot)}
+                                                        onCreateTeam={openModal}
+                                                        onSelect={(val) =>
+                                                            setSlotSelections((s) => ({
+                                                                ...s,
+                                                                [slot]: val,
+                                                            }))
+                                                        }
+                                                        selectedTeamId={slotSelections[slot]}
+                                                    />
+                                                    {slotAddErrors[slot] ? (
+                                                        <p className="mt-2 text-sm text-red-600">
+                                                            {slotAddErrors[slot]}
+                                                        </p>
+                                                    ) : null}
+                                                </>
+                                            ) : (
+                                                <p className="text-sm italic text-slate-400">No team assigned.</p>
+                                            )}
                                         </>
                                     )}
                                 </div>
