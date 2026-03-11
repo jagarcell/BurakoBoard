@@ -12,6 +12,10 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Seed the application's database.
+     *
+     * @return void
+     * Logic: Calls individual seeders in dependency order. BaseElementSeeder populates the
+     * static scoring-element lookup table that other seeders and tests may rely on.
      */
     public function run(): void
     {
@@ -20,6 +24,10 @@ class DatabaseSeeder extends Seeder
         User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',
+        ]);
+
+        $this->call([
+            BaseElementSeeder::class,
         ]);
     }
 }
