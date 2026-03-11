@@ -16,7 +16,8 @@ const mockAllTeams = [
     { id: 101, name: 'Old Team B', players: [{ id: 10, user_id: null, display_name: 'Carlos' }] },
 ];
 
-const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000 };
+const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress' };
+const finishedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'finished' };
 
 const makeGameSummary = (teams = []) => ({
     data: {
@@ -692,5 +693,141 @@ describe('TeamsCard', () => {
         );
 
         expect(axios.get).toHaveBeenCalledTimes(2); // users + teams only — no GET for game summary or score update
+    });
+
+    it('shows API error message from the game field when the update fails because the game is finished', async () => {
+        setupGetMocks();
+
+        const apiError = { response: { data: { data: { errors: { game: ['Cannot update teams in a finished game.'] } } } } };
+        axios.put.mockRejectedValueOnce(apiError);
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+        const nameInput = screen.getByLabelText('Team name');
+        await userEvent.clear(nameInput);
+        await userEvent.type(nameInput, 'Team Alpha Updated');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+        await waitFor(() =>
+            expect(screen.getByText('Cannot update teams in a finished game.')).toBeInTheDocument(),
+        );
+    });
+
+    it('shows a name field error from the API and marks the team name input invalid on update', async () => {
+        setupGetMocks();
+
+        const apiError = { response: { data: { data: { errors: { name: ['A team with this name already exists in this game.'] } } } } };
+        axios.put.mockRejectedValueOnce(apiError);
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+        const nameInput = screen.getByLabelText('Team name');
+        await userEvent.clear(nameInput);
+        await userEvent.type(nameInput, 'Team Beta');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+        await waitFor(() =>
+            expect(screen.getAllByText('A team with this name already exists in this game.').length).toBeGreaterThan(0),
+        );
+    });
+
+    it('shows a generic fallback error when the API returns no structured errors', async () => {
+        setupGetMocks();
+
+        axios.put.mockRejectedValueOnce(new Error('Network Error'));
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+        const nameInput = screen.getByLabelText('Team name');
+        await userEvent.clear(nameInput);
+        await userEvent.type(nameInput, 'Team Alpha Updated');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+        await waitFor(() =>
+            expect(screen.getByText('Unable to save the team right now.')).toBeInTheDocument(),
+        );
+    });
+
+    it('hides the Edit team button when the game is finished', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByRole('button', { name: 'Edit team' })).not.toBeInTheDocument();
+    });
+
+    it('hides Create team and slot selector for empty slots when the game is finished', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[]} selectedGame={finishedGame} />);
+
+        await screen.findAllByText('No team assigned.');
+
+        expect(screen.queryByRole('button', { name: 'Create team' })).not.toBeInTheDocument();
+    });
+
+    it('shows No team assigned for empty slots when the game is finished', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.getByText('No team assigned.')).toBeInTheDocument();
+    });
+
+    it('shows a winner badge on the team with the highest score when a game is finished', async () => {
+        setupGetMocks();
+
+        const winner = { ...makeTeam(10, 'Team Alpha'), current_score: 2100 };
+        const loser = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+        render(<TeamsCard initialTeams={[winner, loser]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.getByRole('generic', { name: 'Team Alpha winner' })).toBeInTheDocument();
+        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+    });
+
+    it('does not show a winner badge on the losing team when a game is finished', async () => {
+        setupGetMocks();
+
+        const winner = { ...makeTeam(10, 'Team Alpha'), current_score: 2100 };
+        const loser = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+        render(<TeamsCard initialTeams={[winner, loser]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Beta');
+
+        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+    });
+
+    it('shows no winner badge when the game is finished with tied scores', async () => {
+        setupGetMocks();
+
+        const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1500 };
+        const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 1500 };
+
+        render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByRole('generic', { name: 'Team Alpha winner' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
     });
 });
