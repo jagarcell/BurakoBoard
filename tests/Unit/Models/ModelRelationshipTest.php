@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Models;
 
+use App\Models\BaseElement;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Round;
@@ -335,5 +336,89 @@ class ModelRelationshipTest extends TestCase
 
         $this->assertSame(600, (int) $scoreA);
         $this->assertSame(900, (int) $scoreB);
+    }
+
+    /**
+     * Ensure a base element can be created and retrieved with all its attributes.
+     *
+     * @return void Verifies mass-assignment and persistence of BaseElement fillable fields.
+     * Logic: create a row via the model's fillable fields and assert each persisted attribute matches the input.
+     */
+    public function test_base_element_can_be_created_with_name_label_and_points(): void
+    {
+        $element = BaseElement::query()->create([
+            'name'       => 'clean_canasta',
+            'label'      => 'Clean Canasta',
+            'points'     => 200,
+            'input_type' => 'quantity',
+        ]);
+
+        $this->assertSame('clean_canasta', $element->name);
+        $this->assertSame('Clean Canasta', $element->label);
+        $this->assertSame(200, $element->points);
+        $this->assertSame('quantity', $element->input_type);
+    }
+
+    /**
+     * Ensure a boolean-type base element defaults correctly when input_type is omitted.
+     *
+     * @return void Verifies the default value of input_type is 'boolean'.
+     * Logic: create a base element without specifying input_type and assert the column defaults to 'boolean',
+     * representing scoring elements that are either present or not (e.g. going-out bonus).
+     */
+    public function test_base_element_input_type_defaults_to_boolean(): void
+    {
+        $element = BaseElement::query()->create([
+            'name'   => 'going_out_bonus',
+            'label'  => 'Going Out Bonus',
+            'points' => 100,
+        ]);
+
+        $fresh = BaseElement::query()->findOrFail($element->id);
+        $this->assertSame('boolean', $fresh->input_type);
+    }
+
+    /**
+     * Ensure a quantity-type base element stores input_type as 'quantity'.
+     *
+     * @return void Verifies that 'quantity' is persisted correctly for countable elements.
+     * Logic: create a base element with input_type 'quantity' (e.g. clean canastas) and assert
+     * the value is stored and retrieved as 'quantity', signalling the API to accept a numeric count.
+     */
+    public function test_base_element_input_type_can_be_set_to_quantity(): void
+    {
+        $element = BaseElement::query()->create([
+            'name'       => 'dirty_canasta',
+            'label'      => 'Dirty Canasta',
+            'points'     => 100,
+            'input_type' => 'quantity',
+        ]);
+
+        $fresh = BaseElement::query()->findOrFail($element->id);
+        $this->assertSame('quantity', $fresh->input_type);
+    }
+
+    /**
+     * Ensure the name column enforces uniqueness across base elements.
+     *
+     * @return void Verifies the unique constraint on the name column.
+     * Logic: insert a base element and then attempt to insert another with the same name,
+     * expecting the database to throw a unique-constraint violation.
+     */
+    public function test_base_element_name_must_be_unique(): void
+    {
+        BaseElement::query()->create([
+            'name'   => 'burako',
+            'label'  => 'Burako',
+            'points' => 200,
+        ]);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+
+        BaseElement::query()->create([
+            'name'   => 'burako',
+            'label'  => 'Duplicate',
+            'points' => 50,
+        ]);
     }
 }
