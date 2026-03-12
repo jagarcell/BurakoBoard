@@ -1,38 +1,102 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
+import BaseElementsInput from '@/Components/BaseElementsInput';
 import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
-import TextInput from '@/Components/TextInput';
 
 export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false }) {
     const [teams, setTeams] = useState(initialTeams);
     const [rounds, setRounds] = useState(initialRounds);
-    const [scores, setScores] = useState(() =>
-        Object.fromEntries(initialTeams.map((t) => [t.id, ''])),
-    );
+    const [elements, setElements] = useState([]);
+    const [baseInputs, setBaseInputs] = useState({});
     const [isSaving, setIsSaving] = useState(false);
     const [inputErrors, setInputErrors] = useState({});
     const [saveError, setSaveError] = useState('');
 
-    // Sync from parent whenever initialTeams/initialRounds references change (data loaded or game changed)
+    // Fetch base elements once on mount
+    useEffect(() => {
+        axios.get('/api/v1/base-elements').then((response) => {
+            const els = response.data?.data?.base_elements ?? [];
+            setElements(els);
+        });
+    }, []);
+
+    // Build the default per-element values for a set of teams
+    const buildDefaultBaseInputs = (teamList, elementList) =>
+        Object.fromEntries(
+            teamList.map((t) => [
+                t.id,
+                Object.fromEntries(
+                    elementList.map((el) => [
+                        el.id,
+                        el.input_type === 'boolean' ? false : 0,
+                    ]),
+                ),
+            ]),
+        );
+
+    // Sync from parent whenever initialTeams/initialRounds references change
     useEffect(() => {
         setTeams(initialTeams);
         setRounds(initialRounds);
-        setScores(prev => {
-            const newIds = new Set(initialTeams.map(t => t.id));
+        setBaseInputs((prev) => {
+            const newIds = new Set(initialTeams.map((t) => t.id));
             const prevIds = new Set(Object.keys(prev).map(Number));
-            const same = newIds.size === prevIds.size && [...newIds].every(id => prevIds.has(id));
-            return same ? prev : Object.fromEntries(initialTeams.map((t) => [t.id, '']));
+            const same =
+                newIds.size === prevIds.size &&
+                [...newIds].every((id) => prevIds.has(id));
+
+            return same ? prev : buildDefaultBaseInputs(initialTeams, elements);
         });
-        setInputErrors(prev => Object.keys(prev).length > 0 ? {} : prev);
-        setSaveError(prev => prev !== '' ? '' : prev);
+        setInputErrors((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+        setSaveError((prev) => (prev !== '' ? '' : prev));
     }, [initialTeams, initialRounds]);
 
-    const handleScoreChange = (teamId, value) => {
-        setScores((prev) => ({ ...prev, [teamId]: value }));
-        setInputErrors((prev) => ({ ...prev, [teamId]: undefined }));
+    // Also re-seed baseInputs when elements load (if teams are already present)
+    useEffect(() => {
+        if (elements.length > 0 && teams.length > 0) {
+            setBaseInputs((prev) => {
+                // Only reset if element keys have changed (first load)
+                const firstTeamId = teams[0]?.id;
+                const prevEls = Object.keys(prev[firstTeamId] ?? {}).map(Number);
+
+                if (
+                    prevEls.length === elements.length &&
+                    elements.every((el) => prevEls.includes(el.id))
+                ) {
+                    return prev;
+                }
+
+                return buildDefaultBaseInputs(teams, elements);
+            });
+        }
+    }, [elements]);
+
+    const handleElementChange = (teamId, elementId, value) => {
+        setBaseInputs((prev) => ({
+            ...prev,
+            [teamId]: { ...prev[teamId], [elementId]: value },
+        }));
+        setInputErrors((prev) => {
+            const key = `${teamId}_${elementId}`;
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+
+            return next;
+        });
     };
+
+    const computeTeamScore = (teamId) =>
+        elements.reduce((sum, el) => {
+            const val = baseInputs[teamId]?.[el.id];
+
+            if (el.input_type === 'boolean') {
+                return sum + (val ? el.points : 0);
+            }
+
+            return sum + el.points * (parseInt(val, 10) || 0);
+        }, 0);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -42,12 +106,15 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         const newErrors = {};
 
         for (const team of teams) {
-            const val = scores[team.id];
+            for (const el of elements) {
+                if (el.input_type === 'quantity') {
+                    const val = baseInputs[team.id]?.[el.id] ?? 0;
 
-            if (val === '' || val === undefined || val === null) {
-                newErrors[team.id] = 'Score is required.';
-            } else if (! Number.isInteger(Number(val))) {
-                newErrors[team.id] = 'Score must be a whole number.';
+                    if (!Number.isInteger(Number(val)) || Number(val) < 0) {
+                        newErrors[`${team.id}_${el.id}`] =
+                            `${el.label} must be a whole number ≥ 0.`;
+                    }
+                }
             }
         }
 
@@ -65,17 +132,17 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 {
                     scores: teams.map((t) => ({
                         team_id: t.id,
-                        points: Number(scores[t.id]),
+                        points: computeTeamScore(t.id),
                     })),
                 },
             );
 
             const gameSummary = response.data?.data?.game ?? {};
-
             const updatedTeams = gameSummary.teams ?? teams;
+
             setTeams(updatedTeams);
             setRounds(gameSummary.rounds ?? rounds);
-            setScores(Object.fromEntries(teams.map((t) => [t.id, ''])));
+            setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
             onRoundRecorded?.(updatedTeams);
         } catch {
             setSaveError('Unable to record the round right now.');
@@ -124,30 +191,47 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                         </p>
 
                         <form onSubmit={handleSubmit}>
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                                 {teams.map((team) => (
-                                    <div key={team.id} className="space-y-1">
-                                        <InputLabel
-                                            htmlFor={`score-${team.id}`}
-                                            value={team.name}
-                                        />
-                                        <TextInput
-                                            className="block w-full rounded-xl"
-                                            id={`score-${team.id}`}
-                                            onChange={(e) =>
-                                                handleScoreChange(
-                                                    team.id,
-                                                    e.target.value,
-                                                )
-                                            }
-                                            placeholder="0"
-                                            step="1"
-                                            type="number"
-                                            value={scores[team.id] ?? ''}
-                                        />
-                                        <InputError
-                                            message={inputErrors[team.id]}
-                                        />
+                                    <div
+                                        key={team.id}
+                                        className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
+                                    >
+                                        <p className="mb-3 text-sm font-semibold text-slate-700">
+                                            {team.name}
+                                        </p>
+
+                                        {elements.length === 0 ? (
+                                            <p className="text-xs text-slate-400">
+                                                Loading elements…
+                                            </p>
+                                        ) : (
+                                            <BaseElementsInput
+                                                elements={elements}
+                                                errors={Object.fromEntries(
+                                                    Object.entries(inputErrors)
+                                                        .filter(([k]) =>
+                                                            k.startsWith(`${team.id}_`),
+                                                        )
+                                                        .map(([k, v]) => [
+                                                            parseInt(
+                                                                k.split('_')[1],
+                                                                10,
+                                                            ),
+                                                            v,
+                                                        ]),
+                                                )}
+                                                onChange={(elId, val) =>
+                                                    handleElementChange(
+                                                        team.id,
+                                                        elId,
+                                                        val,
+                                                    )
+                                                }
+                                                teamId={team.id}
+                                                values={baseInputs[team.id] ?? {}}
+                                            />
+                                        )}
                                     </div>
                                 ))}
                             </div>
