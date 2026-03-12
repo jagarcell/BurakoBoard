@@ -30,6 +30,8 @@ class BaseElement extends Model
         'label',
         'points',
         'input_type',
+        'mutually_exclusive',
+        'score_override',
     ];
 
     /**
@@ -38,6 +40,8 @@ class BaseElement extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'points' => 'integer',
+        'points'             => 'integer',
+        'mutually_exclusive' => 'boolean',
+        'score_override'     => 'boolean',
     ];
 }

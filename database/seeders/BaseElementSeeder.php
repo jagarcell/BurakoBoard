@@ -18,6 +18,7 @@ class BaseElementSeeder extends Seeder
      * multiple times will update existing rows rather than creating duplicates.
      * Elements with input_type 'boolean' represent an all-or-nothing condition (present / not present)
      * while 'quantity' elements are counted and their contribution is points × quantity.
+     * A negative points value on a boolean element represents a penalty deducted from the team score.
      */
     public function run(): void
     {
@@ -29,16 +30,18 @@ class BaseElementSeeder extends Seeder
                 'points'     => 100,
             ],
             [
-                'name'       => 'clean_cut',
-                'label'      => 'Clean Cut',
-                'input_type' => 'boolean',
-                'points'     => 100,
+                'name'               => 'clean_cut',
+                'label'              => 'Clean Cut',
+                'input_type'         => 'boolean',
+                'points'             => 100,
+                'mutually_exclusive' => true,
             ],
             [
-                'name'       => 'round_closure',
-                'label'      => 'Round Closure',
-                'input_type' => 'boolean',
-                'points'     => 100,
+                'name'               => 'round_closure',
+                'label'              => 'Round Closure',
+                'input_type'         => 'boolean',
+                'points'             => 100,
+                'mutually_exclusive' => true,
             ],
             [
                 'name'       => 'clean_canastra',
@@ -55,14 +58,21 @@ class BaseElementSeeder extends Seeder
             [
                 'name'       => 'clean_comodin_canastra',
                 'label'      => 'Clean Comodin Canastra',
-                'input_type' => 'quantity',
+                'input_type' => 'boolean',
                 'points'     => 3000,
             ],
             [
                 'name'       => 'dirty_comodin_canastra',
                 'label'      => 'Dirty Comodin Canastra',
-                'input_type' => 'quantity',
+                'input_type' => 'boolean',
                 'points'     => 1000,
+            ],
+            [
+                'name'           => 'incomplete_comodin_canastra',
+                'label'          => 'Incomplete Comodin Canastra',
+                'input_type'     => 'boolean',
+                'points'         => 0,
+                'score_override' => true,
             ],
             [
                 'name'       => 'clean_a_canastra',
@@ -82,9 +92,11 @@ class BaseElementSeeder extends Seeder
             BaseElement::updateOrCreate(
                 ['name' => $element['name']],
                 [
-                    'label'      => $element['label'],
-                    'input_type' => $element['input_type'],
-                    'points'     => $element['points'],
+                    'label'              => $element['label'],
+                    'input_type'         => $element['input_type'],
+                    'points'             => $element['points'],
+                    'mutually_exclusive' => $element['mutually_exclusive'] ?? false,
+                    'score_override'     => $element['score_override'] ?? false,
                 ]
             );
         }
