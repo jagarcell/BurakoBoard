@@ -82,6 +82,18 @@ class BurakoGameService
     }
 
     /**
+     * Return all available base scoring elements.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\BaseElement> All base elements ordered by id.
+     * Logic: delegate the base element retrieval to the repository so the controller can obtain the scoring
+     * catalogue without direct query coupling.
+     */
+    public function listBaseElements(): Collection
+    {
+        return $this->repository->getBaseElements();
+    }
+
+    /**
      * Return all teams with their players for the team selector.
      *
      * @return \Illuminate\Support\Collection<int, \App\Models\Team> All teams with players loaded.
