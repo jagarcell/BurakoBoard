@@ -219,5 +219,220 @@ describe('RoundsCard', () => {
         );
         expect(axios.post).not.toHaveBeenCalled();
     });
+
+    it('renders cards in hand and cards on table inputs for each team', async () => {
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const inHandInputs = await screen.findAllByLabelText('Cards in Hand');
+        const onTableInputs = screen.getAllByLabelText('Cards on Table');
+
+        expect(inHandInputs).toHaveLength(2);
+        expect(onTableInputs).toHaveLength(2);
+        expect(inHandInputs[0]).toHaveAttribute('type', 'number');
+        expect(onTableInputs[0]).toHaveAttribute('type', 'number');
+    });
+
+    it('subtracts cards in hand and adds cards on table when computing the submitted score', async () => {
+        // Team Alpha: Burako (100) − cardsInHand (40) = 60
+        // Team Beta:  2 Clean Canastra (400) + cardsOnTable (50) = 450
+        const updatedTeamA = { ...teamA, current_score: 60 };
+        const updatedTeamB = { ...teamB, current_score: 450 };
+        axios.post.mockResolvedValueOnce(
+            makeGameResponse([updatedTeamA, updatedTeamB], [round1]),
+        );
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+        const canInputs = screen.getAllByLabelText('Clean Canastra');
+        const inHandInputs = screen.getAllByLabelText('Cards in Hand');
+        const onTableInputs = screen.getAllByLabelText('Cards on Table');
+
+        // Team Alpha: check Burako
+        await userEvent.click(burakoCheckboxes[0]);
+        // Team Alpha: cards in hand = 40
+        await userEvent.clear(inHandInputs[0]);
+        await userEvent.type(inHandInputs[0], '40');
+        // Team Beta: 2 Clean Canastra
+        await userEvent.clear(canInputs[1]);
+        await userEvent.type(canInputs[1], '2');
+        // Team Beta: cards on table = 50
+        await userEvent.clear(onTableInputs[1]);
+        await userEvent.type(onTableInputs[1], '50');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+                scores: [
+                    { team_id: 10, points: 60 },
+                    { team_id: 11, points: 450 },
+                ],
+            }),
+        );
+    });
+
+    it('resets card inputs to zero after a successful round submission', async () => {
+        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const inHandInputs = await screen.findAllByLabelText('Cards in Hand');
+        await userEvent.clear(inHandInputs[0]);
+        await userEvent.type(inHandInputs[0], '25');
+        expect(inHandInputs[0]).toHaveValue(25);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() => expect(inHandInputs[0]).toHaveValue(0));
+    });
+
+    it('shows a validation error and blocks submission when cards in hand is a decimal', async () => {
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const inHandInputs = await screen.findAllByLabelText('Cards in Hand');
+        Object.defineProperty(inHandInputs[0], 'value', {
+            configurable: true,
+            writable: true,
+            value: '2.5',
+        });
+        fireEvent.input(inHandInputs[0]);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(screen.getByText('Cards in hand must be a whole number ≥ 0.')).toBeInTheDocument(),
+        );
+        expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    it('shows a validation error and blocks submission when cards on table is a decimal', async () => {
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const onTableInputs = await screen.findAllByLabelText('Cards on Table');
+        Object.defineProperty(onTableInputs[0], 'value', {
+            configurable: true,
+            writable: true,
+            value: '1.7',
+        });
+        fireEvent.input(onTableInputs[0]);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(screen.getByText('Cards on table must be a whole number ≥ 0.')).toBeInTheDocument(),
+        );
+        expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    it('subtracts both cardsInHand and cardsOnTable from base points when a score_override element is checked', async () => {
+        const overrideEl = { id: 3, name: 'penalty_element', label: 'Penalty Element', points: 0, input_type: 'boolean', score_override: true };
+        const extendedElements = [...baseElements, overrideEl];
+        axios.get.mockResolvedValue({ data: { data: { base_elements: extendedElements } } });
+        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        // Check the score_override element for Team Alpha
+        const overrideCheckboxes = await screen.findAllByLabelText('Penalty Element');
+        await userEvent.click(overrideCheckboxes[0]);
+
+        // Set cardsInHand = 60 and cardsOnTable = 100 for Team Alpha (both subtracted from base)
+        const inHandInputs = screen.getAllByLabelText('Cards in Hand');
+        const onTableInputs = screen.getAllByLabelText('Cards on Table');
+        await userEvent.clear(inHandInputs[0]);
+        await userEvent.type(inHandInputs[0], '60');
+        await userEvent.clear(onTableInputs[0]);
+        await userEvent.type(onTableInputs[0], '100');
+
+        // Also check Burako (100) for Team Alpha — counts toward base score
+        const burakoCheckboxes = screen.getAllByLabelText('Burako');
+        await userEvent.click(burakoCheckboxes[0]);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        // Burako(100) + overrideEl(0) - cardsInHand(60) - cardsOnTable(100) = -60
+        await waitFor(() =>
+            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+                scores: [
+                    { team_id: 10, points: -60 },
+                    { team_id: 11, points: 0 },
+                ],
+            }),
+        );
+    });
+
+    it('subtracts cards on table when all canastras are zero', async () => {
+        // Team Alpha: Burako (100) − cardsOnTable (30) = 70 (no canastra scored → onTable subtracted)
+        // Team Beta:  2 Clean Canastra (400) + cardsOnTable (50) = 450 (canastra scored → added)
+        const updatedTeamA = { ...teamA, current_score: 70 };
+        const updatedTeamB = { ...teamB, current_score: 450 };
+        axios.post.mockResolvedValueOnce(
+            makeGameResponse([updatedTeamA, updatedTeamB], [round1]),
+        );
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+        const canInputs = screen.getAllByLabelText('Clean Canastra');
+        const onTableInputs = screen.getAllByLabelText('Cards on Table');
+
+        // Team Alpha: Burako + cardsOnTable=30, no canastra → onTable subtracted: 100 − 30 = 70
+        await userEvent.click(burakoCheckboxes[0]);
+        await userEvent.clear(onTableInputs[0]);
+        await userEvent.type(onTableInputs[0], '30');
+
+        // Team Beta: 2 Clean Canastra + cardsOnTable=50 → canastra scored → onTable added: 400 + 50 = 450
+        await userEvent.clear(canInputs[1]);
+        await userEvent.type(canInputs[1], '2');
+        await userEvent.clear(onTableInputs[1]);
+        await userEvent.type(onTableInputs[1], '50');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+                scores: [
+                    { team_id: 10, points: 70 },
+                    { team_id: 11, points: 450 },
+                ],
+            }),
+        );
+    });
+
+    it('unchecks a mutually-exclusive boolean for other teams when checked for one team', async () => {
+        const mutualEl = { id: 3, name: 'clean_cut', label: 'Clean Cut', points: 100, input_type: 'boolean', mutually_exclusive: true };
+        axios.get.mockResolvedValue({ data: { data: { base_elements: [...baseElements, mutualEl] } } });
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const cleanCutCheckboxes = await screen.findAllByLabelText('Clean Cut');
+        expect(cleanCutCheckboxes).toHaveLength(2);
+
+        // Check Clean Cut for Team Beta (index 1)
+        await userEvent.click(cleanCutCheckboxes[1]);
+        expect(cleanCutCheckboxes[1]).toBeChecked();
+
+        // Now check Clean Cut for Team Alpha (index 0) — should uncheck Team Beta
+        await userEvent.click(cleanCutCheckboxes[0]);
+        expect(cleanCutCheckboxes[0]).toBeChecked();
+        expect(cleanCutCheckboxes[1]).not.toBeChecked();
+    });
+
+    it('does not affect other teams when a non-mutually-exclusive boolean is checked', async () => {
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+
+        // Check Burako for Team Alpha — Team Beta Burako should remain unchecked (independent)
+        await userEvent.click(burakoCheckboxes[0]);
+        expect(burakoCheckboxes[0]).toBeChecked();
+        expect(burakoCheckboxes[1]).not.toBeChecked();
+
+        // Also check Burako for Team Beta — both can be checked simultaneously
+        await userEvent.click(burakoCheckboxes[1]);
+        expect(burakoCheckboxes[0]).toBeChecked();
+        expect(burakoCheckboxes[1]).toBeChecked();
+    });
 });
 
