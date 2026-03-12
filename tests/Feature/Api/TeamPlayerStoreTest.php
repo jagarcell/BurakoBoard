@@ -199,4 +199,22 @@ class TeamPlayerStoreTest extends TestCase
             ->assertStatus(201)
             ->assertJsonPath('data.game.teams.0.players.0.user_id', $user->id);
     }
+
+    /**
+     * Ensure adding a player to a team in a finished game is rejected with 422.
+     *
+     * @return void Verifies that players cannot be added to teams in a finished game.
+     * Logic: create a finished game with a team, attempt to add a player, and assert an unprocessable response.
+     */
+    public function test_player_store_rejected_for_finished_game(): void
+    {
+        $game = $this->makeGame('finished');
+        $team = $this->makeTeam($game);
+
+        $response = $this->postJson("/api/v1/games/{$game->id}/teams/{$team->id}/players", [
+            'name' => 'Carlos',
+        ]);
+
+        $response->assertUnprocessable();
+    }
 }

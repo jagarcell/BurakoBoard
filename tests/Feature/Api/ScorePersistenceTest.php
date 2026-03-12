@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\Game;
 use App\Models\Team;
 use App\Repositories\BurakoGameRepository;
 use App\Services\BurakoGameService;
@@ -242,5 +243,34 @@ class ScorePersistenceTest extends TestCase
         $teams = $response->json('data.game.teams');
 
         return (int) collect($teams)->firstWhere('name', $name)['id'];
+    }
+
+    /**
+     * Ensure recording a round on a finished game is rejected with 422.
+     *
+     * @return void Verifies that rounds cannot be added to a finished game.
+     * Logic: create a finished game with two teams, attempt to post a round, and assert an unprocessable response.
+     */
+    public function test_round_recording_rejected_for_finished_game(): void
+    {
+        $game = Game::query()->create([
+            'name'                 => 'Finished Game',
+            'target_points'        => 2000,
+            'status'               => 'finished',
+            'winning_team_id'      => null,
+            'current_round_number' => 5,
+        ]);
+
+        $teamA = Team::query()->create(['game_id' => $game->id, 'name' => 'Alpha', 'current_score' => 1200]);
+        $teamB = Team::query()->create(['game_id' => $game->id, 'name' => 'Beta',  'current_score' => 800]);
+
+        $response = $this->postJson("/api/v1/games/{$game->id}/rounds", [
+            'scores' => [
+                ['team_id' => $teamA->id, 'points' => 300],
+                ['team_id' => $teamB->id, 'points' => 200],
+            ],
+        ]);
+
+        $response->assertUnprocessable();
     }
 }
