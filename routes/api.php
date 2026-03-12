@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\BaseElementController;
 use App\Http\Controllers\Api\V1\GameController;
 use App\Http\Controllers\Api\V1\RoundController;
 use App\Http\Controllers\Api\V1\TeamController;
@@ -16,6 +17,7 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/users', [UserController::class, 'index']);
     Route::get('/teams', [TeamController::class, 'index']);
+    Route::get('/base-elements', [BaseElementController::class, 'index']);
 
     Route::get('/games', [GameController::class, 'index']);
     Route::post('/games', [GameController::class, 'store']);

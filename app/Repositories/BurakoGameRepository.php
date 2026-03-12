@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Models\BaseElement;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Round;
@@ -338,6 +339,21 @@ class BurakoGameRepository
         return User::query()
             ->select(['id', 'name'])
             ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Return all available base scoring elements ordered by id.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\BaseElement> All base elements ordered by id.
+     * Logic: fetch the full base_elements catalogue ordered by id so the round scoring form can render
+     * the correct input controls (checkbox for boolean, number input for quantity) with their point values.
+     */
+    public function getBaseElements(): Collection
+    {
+        return BaseElement::query()
+            ->select(['id', 'name', 'label', 'points', 'input_type'])
+            ->orderBy('id')
             ->get();
     }
 
