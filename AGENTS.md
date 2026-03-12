@@ -15,7 +15,7 @@ During every coding session:
 ## Workflow
 
 - On a prompt "create commits" show a preview of meaningful commits and wait for approval to commit; the approval prompt will be "approved".
-- On a prompt "create PR" show a preview of the PR and wait for approval to create the PR; the approval prompt will be "approved".
+- On a prompt "create PR" show a preview of the PR and wait for approval to create the PR; the approval prompt will be "approved". The PR description must include a **QA Steps** section with concrete, numbered steps a reviewer must follow to manually verify the changes in a local or staging environment. Each step must be specific and actionable (e.g., navigate to URL, submit form, assert expected outcome), covering both the happy path and relevant edge cases.
 - On a prompt "send changes to new branch": (1) inspect the current changes, propose three meaningful branch name options, and wait for the user to pick one; (2) once a branch name is approved, create the branch immediately without creating any committs.
 
 ## Code Quality
