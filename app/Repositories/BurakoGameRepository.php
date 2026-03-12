@@ -347,12 +347,13 @@ class BurakoGameRepository
      *
      * @return \Illuminate\Support\Collection<int, \App\Models\BaseElement> All base elements ordered by id.
      * Logic: fetch the full base_elements catalogue ordered by id so the round scoring form can render
-     * the correct input controls (checkbox for boolean, number input for quantity) with their point values.
+     * the correct input controls (checkbox for boolean, number input for quantity) with their point values
+     * and mutual-exclusivity flag.
      */
     public function getBaseElements(): Collection
     {
         return BaseElement::query()
-            ->select(['id', 'name', 'label', 'points', 'input_type'])
+            ->select(['id', 'name', 'label', 'points', 'input_type', 'mutually_exclusive', 'score_override'])
             ->orderBy('id')
             ->get();
     }

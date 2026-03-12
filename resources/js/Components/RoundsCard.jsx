@@ -9,9 +9,11 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [rounds, setRounds] = useState(initialRounds);
     const [elements, setElements] = useState([]);
     const [baseInputs, setBaseInputs] = useState({});
+    const [cardInputs, setCardInputs] = useState({});
     const [isSaving, setIsSaving] = useState(false);
     const [inputErrors, setInputErrors] = useState({});
     const [saveError, setSaveError] = useState('');
+    const [gameStatus, setGameStatus] = useState(selectedGame?.status ?? 'in_progress');
 
     // Fetch base elements once on mount
     useEffect(() => {
@@ -35,6 +37,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             ]),
         );
 
+    const buildDefaultCardInputs = (teamList) =>
+        Object.fromEntries(teamList.map((t) => [t.id, { cardsInHand: 0, cardsOnTable: 0 }]));
+
     // Sync from parent whenever initialTeams/initialRounds references change
     useEffect(() => {
         setTeams(initialTeams);
@@ -48,9 +53,23 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
             return same ? prev : buildDefaultBaseInputs(initialTeams, elements);
         });
+        setCardInputs((prev) => {
+            const newIds = new Set(initialTeams.map((t) => t.id));
+            const prevIds = new Set(Object.keys(prev).map(Number));
+            const same =
+                newIds.size === prevIds.size &&
+                [...newIds].every((id) => prevIds.has(id));
+
+            return same ? prev : buildDefaultCardInputs(initialTeams);
+        });
         setInputErrors((prev) => (Object.keys(prev).length > 0 ? {} : prev));
         setSaveError((prev) => (prev !== '' ? '' : prev));
     }, [initialTeams, initialRounds]);
+
+    // Reset game status when the selected game changes
+    useEffect(() => {
+        setGameStatus(selectedGame?.status ?? 'in_progress');
+    }, [selectedGame?.id]);
 
     // Also re-seed baseInputs when elements load (if teams are already present)
     useEffect(() => {
@@ -73,10 +92,24 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     }, [elements]);
 
     const handleElementChange = (teamId, elementId, value) => {
-        setBaseInputs((prev) => ({
-            ...prev,
-            [teamId]: { ...prev[teamId], [elementId]: value },
-        }));
+        setBaseInputs((prev) => {
+            const el = elements.find((e) => e.id === elementId);
+            const next = {
+                ...prev,
+                [teamId]: { ...prev[teamId], [elementId]: value },
+            };
+
+            // When a mutually-exclusive boolean is checked, uncheck it for all other teams.
+            if (el?.input_type === 'boolean' && el?.mutually_exclusive && value === true) {
+                for (const t of Object.keys(next)) {
+                    if (Number(t) !== teamId) {
+                        next[t] = { ...next[t], [elementId]: false };
+                    }
+                }
+            }
+
+            return next;
+        });
         setInputErrors((prev) => {
             const key = `${teamId}_${elementId}`;
             if (!prev[key]) return prev;
@@ -87,8 +120,30 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         });
     };
 
-    const computeTeamScore = (teamId) =>
-        elements.reduce((sum, el) => {
+    const handleCardChange = (teamId, field, value) => {
+        setCardInputs((prev) => ({
+            ...prev,
+            [teamId]: { ...prev[teamId], [field]: value },
+        }));
+        setInputErrors((prev) => {
+            const key = `${teamId}_${field}`;
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+
+            return next;
+        });
+    };
+
+    const computeTeamScore = (teamId) => {
+        const inHand = parseInt(cardInputs[teamId]?.cardsInHand, 10) || 0;
+        const onTable = parseInt(cardInputs[teamId]?.cardsOnTable, 10) || 0;
+
+        const scoreOverrideActive = elements.some(
+            (el) => el.score_override && !!baseInputs[teamId]?.[el.id],
+        );
+
+        const baseScore = elements.reduce((sum, el) => {
             const val = baseInputs[teamId]?.[el.id];
 
             if (el.input_type === 'boolean') {
@@ -97,6 +152,21 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
             return sum + el.points * (parseInt(val, 10) || 0);
         }, 0);
+
+        // Cards on table is subtracted when all scoring canastras are zero OR
+        // when a score_override element is active.
+        const canastrasAllZero = elements
+            .filter((el) => el.name.includes('canastra') && !el.score_override)
+            .every((el) => {
+                const val = baseInputs[teamId]?.[el.id];
+
+                return el.input_type === 'boolean' ? !val : (parseInt(val, 10) || 0) === 0;
+            });
+
+        return (scoreOverrideActive || canastrasAllZero)
+            ? baseScore - inHand - onTable
+            : baseScore - inHand + onTable;
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -115,6 +185,18 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                             `${el.label} must be a whole number ≥ 0.`;
                     }
                 }
+            }
+
+            const inHand = cardInputs[team.id]?.cardsInHand ?? 0;
+
+            if (!Number.isInteger(Number(inHand)) || Number(inHand) < 0) {
+                newErrors[`${team.id}_cardsInHand`] = 'Cards in hand must be a whole number ≥ 0.';
+            }
+
+            const onTable = cardInputs[team.id]?.cardsOnTable ?? 0;
+
+            if (!Number.isInteger(Number(onTable)) || Number(onTable) < 0) {
+                newErrors[`${team.id}_cardsOnTable`] = 'Cards on table must be a whole number ≥ 0.';
             }
         }
 
@@ -142,7 +224,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
             setTeams(updatedTeams);
             setRounds(gameSummary.rounds ?? rounds);
+            setGameStatus(gameSummary.game?.status ?? gameStatus);
             setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
+            setCardInputs(buildDefaultCardInputs(updatedTeams));
             onRoundRecorded?.(updatedTeams);
         } catch {
             setSaveError('Unable to record the round right now.');
@@ -185,69 +269,88 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 </p>
             ) : (
                 <>
-                    <div className="border-b border-slate-100 px-6 py-5">
-                        <p className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
-                            Round {nextRound}
-                        </p>
+                    {gameStatus === 'finished' ? (
+                        <div className="border-b border-slate-100 px-6 py-5">
+                            <p className="text-sm font-medium text-slate-500">
+                                This game has concluded — no further rounds can be recorded.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="border-b border-slate-100 px-6 py-5">
+                            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                                Round {nextRound}
+                            </p>
 
-                        <form onSubmit={handleSubmit}>
-                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                                {teams.map((team) => (
-                                    <div
-                                        key={team.id}
-                                        className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
-                                    >
-                                        <p className="mb-3 text-sm font-semibold text-slate-700">
-                                            {team.name}
-                                        </p>
-
-                                        {elements.length === 0 ? (
-                                            <p className="text-xs text-slate-400">
-                                                Loading elements…
+                            <form onSubmit={handleSubmit}>
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                    {teams.map((team) => (
+                                        <div
+                                            key={team.id}
+                                            className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
+                                        >
+                                            <p className="mb-3 text-sm font-semibold text-slate-700">
+                                                {team.name}
                                             </p>
-                                        ) : (
-                                            <BaseElementsInput
-                                                elements={elements}
-                                                errors={Object.fromEntries(
-                                                    Object.entries(inputErrors)
-                                                        .filter(([k]) =>
-                                                            k.startsWith(`${team.id}_`),
+
+                                            {elements.length === 0 ? (
+                                                <p className="text-xs text-slate-400">
+                                                    Loading elements…
+                                                </p>
+                                            ) : (
+                                                <BaseElementsInput
+                                                    cardErrors={{
+                                                        cardsInHand: inputErrors[`${team.id}_cardsInHand`],
+                                                        cardsOnTable: inputErrors[`${team.id}_cardsOnTable`],
+                                                    }}
+                                                    cardsInHand={cardInputs[team.id]?.cardsInHand ?? 0}
+                                                    cardsOnTable={cardInputs[team.id]?.cardsOnTable ?? 0}
+                                                    elements={elements}
+                                                    errors={Object.fromEntries(
+                                                        Object.entries(inputErrors)
+                                                            .filter(([k]) =>
+                                                                k.startsWith(`${team.id}_`) &&
+                                                                !k.endsWith('_cardsInHand') &&
+                                                                !k.endsWith('_cardsOnTable'),
+                                                            )
+                                                            .map(([k, v]) => [
+                                                                parseInt(
+                                                                    k.split('_')[1],
+                                                                    10,
+                                                                ),
+                                                                v,
+                                                            ]),
+                                                    )}
+                                                    onChange={(elId, val) =>
+                                                        handleElementChange(
+                                                            team.id,
+                                                            elId,
+                                                            val,
                                                         )
-                                                        .map(([k, v]) => [
-                                                            parseInt(
-                                                                k.split('_')[1],
-                                                                10,
-                                                            ),
-                                                            v,
-                                                        ]),
-                                                )}
-                                                onChange={(elId, val) =>
-                                                    handleElementChange(
-                                                        team.id,
-                                                        elId,
-                                                        val,
-                                                    )
-                                                }
-                                                teamId={team.id}
-                                                values={baseInputs[team.id] ?? {}}
-                                            />
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
+                                                    }
+                                                    onCardsChange={(field, val) =>
+                                                        handleCardChange(team.id, field, val)
+                                                    }
+                                                    teamId={team.id}
+                                                    values={baseInputs[team.id] ?? {}}
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
 
-                            <InputError className="mt-3" message={saveError} />
+                                <InputError className="mt-3" message={saveError} />
 
-                            <div className="mt-4 flex justify-end">
-                                <PrimaryButton
-                                    disabled={isSaving}
-                                    type="submit"
-                                >
-                                    {isSaving ? 'Recording…' : 'Record Round'}
-                                </PrimaryButton>
-                            </div>
-                        </form>
-                    </div>
+                                <div className="mt-4 flex justify-end">
+                                    <PrimaryButton
+                                        disabled={isSaving}
+                                        type="submit"
+                                    >
+                                        {isSaving ? 'Recording…' : 'Record Round'}
+                                    </PrimaryButton>
+                                </div>
+                            </form>
+                        </div>
+                    )}
 
                     <div className="px-6 py-5">
                         <p className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">

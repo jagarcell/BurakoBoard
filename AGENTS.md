@@ -1,9 +1,21 @@
 # Agent Rules
 
+## Coding Sessions
+
+During every coding session:
+
+1. Create logs/agent-session.md
+2. Append every reasoning step.
+3. Record:
+   - files read
+   - commands executed
+   - code generated
+4. Show a message that reads DONE! and an optional brief description of what was done when the current development is complete.
+
 ## Workflow
 
 - On a prompt "create commits" show a preview of meaningful commits and wait for approval to commit; the approval prompt will be "approved".
-- On a prompt "create PR" show a preview of the PR and wait for approval to create the PR; the approval prompt will be "approved".
+- On a prompt "create PR" show a preview of the PR and wait for approval to create the PR; the approval prompt will be "approved". The PR description must include a **QA Steps** section with concrete, numbered steps a reviewer must follow to manually verify the changes in a local or staging environment. Each step must be specific and actionable (e.g., navigate to URL, submit form, assert expected outcome), covering both the happy path and relevant edge cases.
 - On a prompt "send changes to new branch": (1) inspect the current changes, propose three meaningful branch name options, and wait for the user to pick one; (2) once a branch name is approved, create the branch immediately without creating any committs.
 
 ## Code Quality
@@ -27,3 +39,7 @@
 ## Models
 
 - When creating new models, explicitly define the table name and primary key properties.
+
+## Data Modelling
+
+- Never reference a specific element name, slug, or ID in business logic or UI components to trigger special behaviour. Instead, add a descriptive boolean attribute to the data model (e.g. `score_override`, `mutually_exclusive`) and drive the behaviour from that attribute. This keeps logic data-driven and extensible without requiring code changes.
