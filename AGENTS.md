@@ -1,5 +1,17 @@
 # Agent Rules
 
+## Coding Sessions
+
+During every coding session:
+
+1. Create logs/agent-session.md
+2. Append every reasoning step.
+3. Record:
+   - files read
+   - commands executed
+   - code generated
+4. Show a message that reads DONE! and an optional brief description of what was done when the current development is complete.
+
 ## Workflow
 
 - On a prompt "create commits" show a preview of meaningful commits and wait for approval to commit; the approval prompt will be "approved".
@@ -27,3 +39,7 @@
 ## Models
 
 - When creating new models, explicitly define the table name and primary key properties.
+
+## Data Modelling
+
+- Never reference a specific element name, slug, or ID in business logic or UI components to trigger special behaviour. Instead, add a descriptive boolean attribute to the data model (e.g. `score_override`, `mutually_exclusive`) and drive the behaviour from that attribute. This keeps logic data-driven and extensible without requiring code changes.
