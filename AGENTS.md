@@ -30,6 +30,7 @@ During every coding session:
 - When creating new layouts or pages, extract as many reusable components as possible; prefer small, focused components over large monolithic ones.
 - All UI state updates must be fully reactive: merge new data into existing component state directly (e.g. from an API response already in hand) rather than triggering a full page refresh or a redundant HTTP re-fetch. A full refresh is only acceptable when the update scope is too broad to merge incrementally, or when stale server-side session/auth state makes a full reload the correct behaviour.
 - Minimise perceived latency: perform all client-side validation before firing any network request; apply optimistic updates immediately (flip state before the API call and roll back on failure) wherever the outcome is predictable; and show loading indicators inline next to the triggering element rather than blocking the whole page. Minimize Payload Size, only send the fields you need, use pagination or cursor-based loading, avoid sending deeply nested structures if not required.
+- **Mobile-First Layout**: Always design and implement UI using a mobile-first approach. Start with base styles targeting small screens (≥320px), then layer responsive overrides using Tailwind's `sm:`, `md:`, `lg:`, and `xl:` prefixes for progressively larger viewports. Never use unprefixed layout utilities (e.g. `flex`, `grid`, `hidden`) if they would break the mobile layout — make the mobile state the default and override upward.
 
 ## Architecture
 
