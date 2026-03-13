@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import BaseElementsInput from '@/Components/BaseElementsInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
@@ -14,6 +14,17 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [inputErrors, setInputErrors] = useState({});
     const [saveError, setSaveError] = useState('');
     const [gameStatus, setGameStatus] = useState(selectedGame?.status ?? 'in_progress');
+
+    // Tracks whether the draft for the current game has been fetched so the
+    // auto-save effect is blocked until the initial draft load is complete.
+    const draftLoadedRef = useRef(false);
+    // When true, the very next auto-save is skipped (used after round submission
+    // to prevent saving the reset-to-default inputs as a new draft).
+    const skipNextDraftSave = useRef(false);
+    const draftSaveTimerRef = useRef(null);
+    // Always-current reference to selectedGame used inside debounced callbacks.
+    const selectedGameRef = useRef(selectedGame);
+    useEffect(() => { selectedGameRef.current = selectedGame; }, [selectedGame]);
 
     // Fetch base elements once on mount
     useEffect(() => {
@@ -90,6 +101,61 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             });
         }
     }, [elements]);
+
+    // Fetch the saved draft for the current game once elements are available.
+    // Runs on mount (after elements load) and whenever the selected game changes.
+    // Draft values overlay any defaults that were populated by the effects above.
+    useEffect(() => {
+        if (!selectedGame?.id || elements.length === 0) return;
+
+        draftLoadedRef.current = false;
+        let cancelled = false;
+
+        axios
+            .get(`/api/v1/games/${selectedGame.id}/round-draft`)
+            .then((response) => {
+                if (cancelled) return;
+                const draft = response.data?.data?.round_draft;
+                if (draft?.base_inputs) setBaseInputs(draft.base_inputs);
+                if (draft?.card_inputs) setCardInputs(draft.card_inputs);
+            })
+            .catch(() => { /* silently ignore – leave defaults in place */ })
+            .finally(() => {
+                if (!cancelled) draftLoadedRef.current = true;
+            });
+
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedGame?.id, elements.length]);
+
+    // Debounced auto-save: persist inputs to round-draft whenever they change,
+    // but only after the initial draft fetch has completed and the form is active.
+    useEffect(() => {
+        if (!draftLoadedRef.current || !selectedGameRef.current?.id) return;
+        if (selectedGameRef.current.status === 'finished') return;
+
+        if (skipNextDraftSave.current) {
+            skipNextDraftSave.current = false;
+            return;
+        }
+
+        if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+
+        draftSaveTimerRef.current = setTimeout(() => {
+            const game = selectedGameRef.current;
+            if (game?.id) {
+                axios.put(`/api/v1/games/${game.id}/round-draft`, {
+                    base_inputs: baseInputs,
+                    card_inputs: cardInputs,
+                }).catch(() => { /* silently ignore draft save failures */ });
+            }
+        }, 800);
+
+        return () => {
+            if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [baseInputs, cardInputs]);
 
     const handleElementChange = (teamId, elementId, value) => {
         setBaseInputs((prev) => {
@@ -225,6 +291,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             setTeams(updatedTeams);
             setRounds(gameSummary.rounds ?? rounds);
             setGameStatus(gameSummary.game?.status ?? gameStatus);
+            // Cancel any pending draft save and skip the next one triggered by
+            // the input reset below — the backend already deleted the draft.
+            if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+            skipNextDraftSave.current = true;
             setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
             setCardInputs(buildDefaultCardInputs(updatedTeams));
             onRoundRecorded?.(updatedTeams);
