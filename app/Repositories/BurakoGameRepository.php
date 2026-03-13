@@ -6,6 +6,7 @@ use App\Models\BaseElement;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Round;
+use App\Models\RoundDraft;
 use App\Models\RoundScore;
 use App\Models\Team;
 use App\Models\User;
@@ -473,5 +474,51 @@ class BurakoGameRepository
             'teams' => $teamPayload,
             'rounds' => $rounds,
         ];
+    }
+
+    /**
+     * Retrieve the round draft for a game, if one exists.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \App\Models\RoundDraft|null The draft or null if none has been saved yet.
+     * Logic: look up a single draft row by game_id and return it, letting callers
+     * decide what to do when no draft exists yet.
+     */
+    public function getRoundDraft(int $gameId): ?RoundDraft
+    {
+        return RoundDraft::query()->where('game_id', $gameId)->first();
+    }
+
+    /**
+     * Create or update the round draft for a game.
+     *
+     * @param  int  $gameId      Identifier of the game.
+     * @param  array<string, mixed>  $baseInputs  Per-team element values keyed by team ID then element ID.
+     * @param  array<string, mixed>  $cardInputs  Per-team card counts keyed by team ID.
+     * @return \App\Models\RoundDraft The created or updated draft.
+     * Logic: use updateOrCreate to respect the unique index on game_id, then return the
+     * fresh record so callers always see the persisted state.
+     */
+    public function upsertRoundDraft(int $gameId, array $baseInputs, array $cardInputs): RoundDraft
+    {
+        $draft = RoundDraft::query()->updateOrCreate(
+            ['game_id' => $gameId],
+            ['base_inputs' => $baseInputs, 'card_inputs' => $cardInputs],
+        );
+
+        return $draft->fresh();
+    }
+
+    /**
+     * Delete the round draft for a game.
+     *
+     * @param  int  $gameId  Identifier of the game whose draft should be removed.
+     * @return void
+     * Logic: remove the draft row by game_id so stale inputs are not presented
+     * to the user after a round has been successfully recorded.
+     */
+    public function deleteRoundDraft(int $gameId): void
+    {
+        RoundDraft::query()->where('game_id', $gameId)->delete();
     }
 }

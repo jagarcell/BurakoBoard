@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Game;
 use App\Models\Player;
+use App\Models\RoundDraft;
 use App\Models\Team;
 use App\Repositories\BurakoGameRepository;
 use Illuminate\Support\Collection;
@@ -252,6 +253,8 @@ class BurakoGameService
             $this->repository->updateGameRoundCounter($game, $round->round_number);
         });
 
+        $this->repository->deleteRoundDraft($gameId);
+
         return $this->repository->getGameSummary($gameId);
     }
 
@@ -277,6 +280,54 @@ class BurakoGameService
     public function syncGameScores(int $gameId): void
     {
         $this->repository->syncTeamScoresForGame($gameId);
+    }
+
+    /**
+     * Build a player model from payload rules.
+     *
+     * @param  array<string, mixed>  $payload  Validated player payload containing either user_id or name.
+     * @return \App\Models\Player The resolved player model.
+     * Logic: reuse existing player record for registered users, otherwise create an ad-hoc named player entry.
+     */
+    /**
+     * Return the current round draft for a game, or null if none exists.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \App\Models\RoundDraft|null The draft or null if no draft has been saved yet.
+     * Logic: confirm the game exists before delegating the lookup to the repository
+     * so unknown game IDs raise a 404 rather than returning a silent null.
+     */
+    public function getRoundDraft(int $gameId): ?RoundDraft
+    {
+        $this->repository->findGameOrFail($gameId);
+
+        return $this->repository->getRoundDraft($gameId);
+    }
+
+    /**
+     * Create or update the round draft for a game with the provided input values.
+     *
+     * @param  int  $gameId   Identifier of the game.
+     * @param  array<string, mixed>  $payload  Validated payload containing base_inputs and card_inputs.
+     * @return \App\Models\RoundDraft The created or updated draft.
+     * Logic: verify the game exists and is still in progress, then delegate persistence
+     * to the repository, maintaining the one-draft-per-game invariant.
+     */
+    public function saveRoundDraft(int $gameId, array $payload): RoundDraft
+    {
+        $game = $this->repository->findGameOrFail($gameId);
+
+        if ($game->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'game' => 'Cannot save a draft for a finished game.',
+            ]);
+        }
+
+        return $this->repository->upsertRoundDraft(
+            $gameId,
+            $payload['base_inputs'] ?? [],
+            $payload['card_inputs'] ?? [],
+        );
     }
 
     /**

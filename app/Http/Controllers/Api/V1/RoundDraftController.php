@@ -1,0 +1,65 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\UpsertRoundDraftRequest;
+use App\Services\BurakoGameService;
+use Illuminate\Http\JsonResponse;
+
+class RoundDraftController extends Controller
+{
+    /**
+     * Construct the controller with the game service dependency.
+     *
+     * @param  \App\Services\BurakoGameService  $service  Service that handles game business logic.
+     * @return void
+     * Logic: inject the shared service so draft operations stay consistent with
+     * the rest of the game workflow.
+     */
+    public function __construct(private readonly BurakoGameService $service)
+    {
+    }
+
+    /**
+     * Return the current round draft for a game.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Http\JsonResponse JSON payload with the draft or null.
+     * Logic: delegate retrieval to the service and wrap the result in a consistent
+     * data envelope; null is returned when no draft has been saved yet so the
+     * frontend can distinguish between an empty draft and missing data.
+     */
+    public function show(int $gameId): JsonResponse
+    {
+        $draft = $this->service->getRoundDraft($gameId);
+
+        return response()->json([
+            'round_draft' => $draft === null ? null : [
+                'base_inputs' => $draft->base_inputs,
+                'card_inputs' => $draft->card_inputs,
+            ],
+        ]);
+    }
+
+    /**
+     * Create or update the round draft for a game.
+     *
+     * @param  \App\Http\Requests\Api\V1\UpsertRoundDraftRequest  $request  Validated draft payload.
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Http\JsonResponse JSON payload with the saved draft.
+     * Logic: delegate persistence to the service and return the saved draft in a
+     * consistent data envelope so the frontend can confirm what was stored.
+     */
+    public function upsert(UpsertRoundDraftRequest $request, int $gameId): JsonResponse
+    {
+        $draft = $this->service->saveRoundDraft($gameId, $request->validated());
+
+        return response()->json([
+            'round_draft' => [
+                'base_inputs' => $draft->base_inputs,
+                'card_inputs' => $draft->card_inputs,
+            ],
+        ]);
+    }
+}

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\BaseElementController;
 use App\Http\Controllers\Api\V1\GameController;
 use App\Http\Controllers\Api\V1\RoundController;
+use App\Http\Controllers\Api\V1\RoundDraftController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TeamPlayerController;
 use App\Http\Controllers\Api\V1\UserController;
@@ -27,6 +28,8 @@ Route::prefix('v1')->group(function () {
     Route::put('/games/{gameId}/teams/{teamId}', [TeamController::class, 'update']);
     Route::post('/games/{gameId}/teams/{teamId}/players', [TeamPlayerController::class, 'store']);
     Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);
+    Route::get('/games/{gameId}/round-draft', [RoundDraftController::class, 'show']);
+    Route::put('/games/{gameId}/round-draft', [RoundDraftController::class, 'upsert']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/user', function (Request $request) {
