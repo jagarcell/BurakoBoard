@@ -37,6 +37,10 @@ const oneGame = [
 ];
 
 describe('GameCard', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
     it('shows the Select a game placeholder and no auto-selection on load', async () => {
         const onGameSelect = vi.fn();
 
@@ -242,5 +246,81 @@ describe('GameCard', () => {
         await userEvent.selectOptions(selector, '');
         expect(selector).toHaveValue('');
         expect(screen.getByRole('button', { name: 'New' })).toBeInTheDocument();
+    });
+
+    it('persists the selected game id to localStorage when a game is chosen', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const selector = await screen.findByRole('combobox');
+        await screen.findAllByRole('option', { name: /pts/ });
+
+        await userEvent.selectOptions(selector, '8');
+
+        expect(localStorage.getItem('burako_selected_game_id')).toBe('8');
+    });
+
+    it('restores the previously selected game from localStorage on mount', async () => {
+        localStorage.setItem('burako_selected_game_id', '8');
+
+        const onGameSelect = vi.fn();
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={onGameSelect} />);
+
+        const selector = await screen.findByRole('combobox');
+        await screen.findAllByRole('option', { name: /pts/ });
+
+        await waitFor(() => expect(selector).toHaveValue('8'));
+        await waitFor(() =>
+            expect(onGameSelect).toHaveBeenLastCalledWith(
+                expect.objectContaining({ id: 8, name: 'Late Table' }),
+            ),
+        );
+    });
+
+    it('ignores a stale localStorage game id when the game no longer exists in the list', async () => {
+        localStorage.setItem('burako_selected_game_id', '999');
+
+        const onGameSelect = vi.fn();
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={onGameSelect} />);
+
+        const selector = await screen.findByRole('combobox');
+        await screen.findAllByRole('option', { name: /pts/ });
+
+        await waitFor(() => expect(selector).toHaveValue(''));
+        await waitFor(() =>
+            expect(onGameSelect).toHaveBeenLastCalledWith(null),
+        );
+    });
+
+    it('removes the localStorage entry when the placeholder is selected', async () => {
+        localStorage.setItem('burako_selected_game_id', '8');
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const selector = await screen.findByRole('combobox');
+        await screen.findAllByRole('option', { name: /pts/ });
+
+        await waitFor(() => expect(selector).toHaveValue('8'));
+
+        await userEvent.selectOptions(selector, '');
+
+        expect(localStorage.getItem('burako_selected_game_id')).toBeNull();
     });
 });
