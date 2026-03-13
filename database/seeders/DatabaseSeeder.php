@@ -21,10 +21,14 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        try {
+            User::factory()->create([
+                'name' => 'Test User',
+                'email' => 'test@example.com',
+            ]);
+        } catch (\Exception $e) {
+            // Ignore if the user already exists
+        }
 
         $this->call([
             BaseElementSeeder::class,
