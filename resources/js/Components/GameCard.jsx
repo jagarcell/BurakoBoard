@@ -12,9 +12,13 @@ const defaultForm = {
     targetPoints: '2000',
 };
 
+const STORAGE_KEY = 'burako_selected_game_id';
+
 export default function GameCard({ onGameSelect = () => {} }) {
     const [games, setGames] = useState([]);
-    const [selectedGameId, setSelectedGameId] = useState('');
+    const [selectedGameId, setSelectedGameId] = useState(
+        () => localStorage.getItem(STORAGE_KEY) ?? '',
+    );
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -72,6 +76,14 @@ export default function GameCard({ onGameSelect = () => {} }) {
             isActive = false;
         };
     }, []);
+
+    useEffect(() => {
+        if (selectedGameId !== '') {
+            localStorage.setItem(STORAGE_KEY, selectedGameId);
+        } else {
+            localStorage.removeItem(STORAGE_KEY);
+        }
+    }, [selectedGameId]);
 
     useEffect(() => {
         const selectedGame = games.find(
