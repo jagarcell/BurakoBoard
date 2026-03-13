@@ -44,3 +44,9 @@ During every coding session:
 ## Data Modelling
 
 - Never reference a specific element name, slug, or ID in business logic or UI components to trigger special behaviour. Instead, add a descriptive boolean attribute to the data model (e.g. `score_override`, `mutually_exclusive`) and drive the behaviour from that attribute. This keeps logic data-driven and extensible without requiring code changes.
+
+## Database
+
+- **Indexes**: whenever a migration adds a column used in a `WHERE` clause, a `JOIN` condition, or an `ORDER BY`, add an index for it in the same migration. Composite indexes should reflect the most common query filter order. Foreign key columns are always indexed.
+- **Injection prevention**: never concatenate user input into raw SQL strings. Use Eloquent query builder methods (`where`, `join`, `orderBy`, etc.) or named/positional bindings (`whereRaw('col = ?', [$value])`) for all dynamic values. Never pass unvalidated input directly to `DB::statement`, `DB::select`, or `whereRaw`.
+- **Selective columns**: always specify only the columns needed in `select([...])` / `get([...])` calls. Never use `SELECT *` in repository queries. In joins, prefix ambiguous column names with their table name to avoid collisions and unintended data leakage.
