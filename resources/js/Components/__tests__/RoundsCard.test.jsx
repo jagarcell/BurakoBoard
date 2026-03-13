@@ -434,5 +434,95 @@ describe('RoundsCard', () => {
         expect(burakoCheckboxes[0]).toBeChecked();
         expect(burakoCheckboxes[1]).toBeChecked();
     });
+
+    describe('round draft persistence', () => {
+        it('pre-fills inputs from a saved draft when the game loads', async () => {
+            const draftResponse = {
+                data: {
+                    data: {
+                        round_draft: {
+                            base_inputs: {
+                                10: { 1: true, 2: 3 },
+                                11: { 1: false, 2: 1 },
+                            },
+                            card_inputs: {
+                                10: { cardsInHand: 5, cardsOnTable: 0 },
+                                11: { cardsInHand: 0, cardsOnTable: 2 },
+                            },
+                        },
+                    },
+                },
+            };
+
+            axios.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve(draftResponse)
+                    : Promise.resolve(elementsResponse),
+            );
+
+            render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+            // Draft checkbox for Team Alpha should be pre-checked
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+            await waitFor(() => expect(burakoCheckboxes[0]).toBeChecked());
+
+            // Draft quantity for Team Alpha should be 3
+            const canInputs = screen.getAllByLabelText('Clean Canastra');
+            await waitFor(() => expect(canInputs[0]).toHaveValue(3));
+
+            // Draft card inputs should be applied
+            const inHandInputs = screen.getAllByLabelText('Cards in Hand');
+            await waitFor(() => expect(inHandInputs[0]).toHaveValue(5));
+        });
+
+        it('sends a PUT request to persist the draft when inputs change', async () => {
+            axios.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+            axios.put = vi.fn().mockResolvedValue({});
+
+            render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+            await userEvent.click(burakoCheckboxes[0]);
+
+            await waitFor(
+                () =>
+                    expect(axios.put).toHaveBeenCalledWith(
+                        '/api/v1/games/5/round-draft',
+                        expect.objectContaining({ base_inputs: expect.any(Object) }),
+                    ),
+                { timeout: 2000 },
+            );
+        });
+
+        it('does not save a draft immediately after a successful round submission', async () => {
+            axios.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+            axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+            axios.put = vi.fn().mockResolvedValue({});
+
+            render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+            await screen.findAllByLabelText('Burako');
+            await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+            // Wait for the round to be recorded
+            await waitFor(() => expect(axios.post).toHaveBeenCalled());
+
+            // Reset vi.fn call count after the round post
+            axios.put.mockClear();
+
+            // No draft PUT should fire right after submission (inputs were just reset to defaults)
+            // Use a short wait that is less than the 800ms debounce
+            await new Promise((r) => setTimeout(r, 100));
+            expect(axios.put).not.toHaveBeenCalled();
+        });
+    });
 });
 
