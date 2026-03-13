@@ -62,6 +62,22 @@ describe('BaseElementsInput', () => {
         expect(screen.getByText('×200 pts')).toBeInTheDocument();
     });
 
+    it('shows VOID instead of a point label when the element has 0 points', () => {
+        const zeroPointsEl = { id: 3, name: 'zero_el', label: 'Zero El', points: 0, input_type: 'boolean' };
+
+        render(
+            <BaseElementsInput
+                elements={[zeroPointsEl]}
+                onChange={() => {}}
+                teamId={10}
+                values={{}}
+            />,
+        );
+
+        expect(screen.getByText('VOID')).toBeInTheDocument();
+        expect(screen.queryByText('0 pts', { selector: '.text-slate-400' })).not.toBeInTheDocument();
+    });
+
     it('calls onChange with true when a boolean checkbox is checked', async () => {
         const onChange = vi.fn();
 

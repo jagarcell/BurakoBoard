@@ -89,9 +89,11 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                     />
 
                     <span className="shrink-0 text-xs text-slate-400">
-                        {isBoolean
-                            ? `${el.points.toLocaleString()} pts`
-                            : `×${el.points.toLocaleString()} pts`}
+                        {el.points === 0
+                            ? 'VOID'
+                            : isBoolean
+                                ? `${el.points.toLocaleString()} pts`
+                                : `×${el.points.toLocaleString()} pts`}
                     </span>
                 </div>
 
