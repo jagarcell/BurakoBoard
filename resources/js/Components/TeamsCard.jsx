@@ -12,7 +12,7 @@ import TextInput from '@/Components/TextInput';
 const defaultTeamForm = { name: '', players: [] };
 const defaultPlayerInput = { userId: '', name: '' };
 
-export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate = null, isFetching = false }) {
+export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate = null, isFetching = false, onTeamsChange, onTeamCreated }) {
     const [teams, setTeams] = useState(initialTeams);
     const [users, setUsers] = useState([]);
     const [allTeams, setAllTeams] = useState([]);
@@ -200,9 +200,12 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                 );
             }
 
+            const newTeamsFromSlot = lastResponse.data?.data?.game?.teams ?? summaryTeams;
             startTransition(() => {
-                setTeams(lastResponse.data?.data?.game?.teams ?? summaryTeams);
+                setTeams(newTeamsFromSlot);
             });
+            onTeamsChange?.(newTeamsFromSlot);
+            onTeamCreated?.();
 
             setSlotSelections((s) => ({ ...s, [slot]: '' }));
         } catch {
@@ -257,9 +260,11 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                     );
                 }
 
+                const newTeamsFromEdit = lastResponse.data?.data?.game?.teams ?? [];
                 startTransition(() => {
-                    setTeams(lastResponse.data?.data?.game?.teams ?? []);
+                    setTeams(newTeamsFromEdit);
                 });
+                onTeamsChange?.(newTeamsFromEdit);
             } else {
                 const teamResponse = await axios.post(
                     `/api/v1/games/${selectedGame.id}/teams`,
@@ -288,11 +293,12 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                     );
                 }
 
+                const newTeamsFromCreate = lastResponse.data?.data?.game?.teams ?? summaryTeams;
                 startTransition(() => {
-                    setTeams(
-                        lastResponse.data?.data?.game?.teams ?? summaryTeams,
-                    );
+                    setTeams(newTeamsFromCreate);
                 });
+                onTeamsChange?.(newTeamsFromCreate);
+                onTeamCreated?.();
             }
 
             setIsModalOpen(false);
