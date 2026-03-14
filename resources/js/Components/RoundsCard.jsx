@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import BaseElementsInput from '@/Components/BaseElementsInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
@@ -14,6 +14,53 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [inputErrors, setInputErrors] = useState({});
     const [saveError, setSaveError] = useState('');
     const [gameStatus, setGameStatus] = useState(selectedGame?.status ?? 'in_progress');
+
+    const [expandedRound, setExpandedRound] = useState(null);
+    // Cache of per-round draft data keyed by round_number.
+    const [roundDraftCache, setRoundDraftCache] = useState({});
+    const [loadingDraftRound, setLoadingDraftRound] = useState(null);
+
+    // Collapse any expanded round detail when the user clicks anywhere outside a round toggle.
+    useEffect(() => {
+        const collapse = () => setExpandedRound(null);
+        document.addEventListener('click', collapse);
+        return () => document.removeEventListener('click', collapse);
+    }, []);
+
+    // Collapse any expanded round detail when the selected game changes.
+    useEffect(() => {
+        setExpandedRound(null);
+        setRoundDraftCache((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+    }, [selectedGame?.id]);
+
+    // Fetch the archived draft for a round when it is expanded, using a cache
+    // so each round is only fetched once per game session.
+    useEffect(() => {
+        if (expandedRound === null || !selectedGame?.id) return;
+        if (roundDraftCache[expandedRound] !== undefined) return;
+
+        let cancelled = false;
+        setLoadingDraftRound(expandedRound);
+
+        axios
+            .get(`/api/v1/games/${selectedGame.id}/rounds/${expandedRound}/draft`)
+            .then((response) => {
+                if (cancelled) return;
+                const draft = response.data?.data?.round_draft ?? null;
+                setRoundDraftCache((prev) => ({ ...prev, [expandedRound]: draft }));
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setRoundDraftCache((prev) => ({ ...prev, [expandedRound]: null }));
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLoadingDraftRound(null);
+            });
+
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [expandedRound]);
 
     // Tracks whether the draft for the current game has been fetched so the
     // auto-save effect is blocked until the initial draft load is complete.
@@ -272,6 +319,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             return;
         }
 
+        setExpandedRound(null);
         setIsSaving(true);
 
         try {
@@ -447,30 +495,118 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                     {t.name}
                                                 </th>
                                             ))}
+                                            <th className="pb-2 pl-3 w-8" />
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {rounds.map((round) => (
-                                            <tr key={round.round_number}>
-                                                <td className="py-2 font-medium text-slate-700">
-                                                    {round.round_number}
-                                                </td>
-                                                {teams.map((t) => {
-                                                    const s = round.scores.find(
-                                                        (sc) =>
-                                                            sc.team_id === t.id,
-                                                    );
+                                            <Fragment key={round.round_number}>
+                                                <tr>
+                                                    <td className="py-2 font-medium text-slate-700">
+                                                        {round.round_number}
+                                                    </td>
+                                                    {teams.map((t) => {
+                                                        const s = round.scores.find(
+                                                            (sc) => sc.team_id === t.id,
+                                                        );
 
-                                                    return (
-                                                        <td
-                                                            key={t.id}
-                                                            className="py-2 text-right text-slate-700"
+                                                        return (
+                                                            <td
+                                                                key={t.id}
+                                                                className="py-2 text-right text-slate-700"
+                                                            >
+                                                                {s ? s.points : '—'}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                    <td className="py-2 pl-3 text-right">
+                                                        <button
+                                                            aria-expanded={expandedRound === round.round_number}
+                                                            aria-label={`${expandedRound === round.round_number ? 'Collapse' : 'Expand'} round ${round.round_number} detail`}
+                                                            className="inline-flex items-center justify-center rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setExpandedRound((prev) =>
+                                                                    prev === round.round_number
+                                                                        ? null
+                                                                        : round.round_number,
+                                                                );
+                                                            }}
+                                                            type="button"
                                                         >
-                                                            {s ? s.points : '—'}
+                                                            <svg
+                                                                aria-hidden="true"
+                                                                className={`h-4 w-4 transition-transform duration-200 ${
+                                                                    expandedRound === round.round_number
+                                                                        ? 'rotate-180'
+                                                                        : ''
+                                                                }`}
+                                                                fill="currentColor"
+                                                                viewBox="0 0 20 20"
+                                                            >
+                                                                <path
+                                                                    clipRule="evenodd"
+                                                                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                                                                    fillRule="evenodd"
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+
+                                                {expandedRound === round.round_number && (
+                                                    <tr>
+                                                        <td
+                                                            className="pb-3 pt-0"
+                                                            colSpan={teams.length + 2}
+                                                        >
+                                                            <div className="rounded-xl border border-indigo-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_60%),linear-gradient(135deg,_#eef2ff_0%,_#f8fafc_100%)] px-4 py-4">
+                                                                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-indigo-400">
+                                                                    Round {round.round_number} — Scoring Detail
+                                                                </p>
+
+                                                                {loadingDraftRound === round.round_number ? (
+                                                                    <p className="text-xs text-slate-400">Loading detail…</p>
+                                                                ) : (
+                                                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                                        {teams.map((t) => {
+                                                                            const draft = roundDraftCache[round.round_number];
+                                                                            const draftBase = draft?.base_inputs?.[t.id] ?? draft?.base_inputs?.[String(t.id)] ?? {};
+                                                                            const draftCards = draft?.card_inputs?.[t.id] ?? draft?.card_inputs?.[String(t.id)] ?? {};
+
+                                                                            return (
+                                                                                <div
+                                                                                    key={t.id}
+                                                                                    className="rounded-xl border border-indigo-100 bg-white px-4 py-3 shadow-sm"
+                                                                                >
+                                                                                    <p className="mb-3 text-xs font-semibold text-indigo-500">
+                                                                                        {t.name}
+                                                                                    </p>
+
+                                                                                    {draft === null || elements.length === 0 ? (
+                                                                                        <p className="text-xs italic text-slate-400">
+                                                                                            No scoring detail captured for this round.
+                                                                                        </p>
+                                                                                    ) : (
+                                                                                        <BaseElementsInput
+                                                                                            cardsInHand={draftCards.cardsInHand ?? 0}
+                                                                                            cardsOnTable={draftCards.cardsOnTable ?? 0}
+                                                                                            elements={elements}
+                                                                                            readOnly
+                                                                                            teamId={`hist-${round.round_number}-${t.id}`}
+                                                                                            values={draftBase}
+                                                                                        />
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </td>
-                                                    );
-                                                })}
-                                            </tr>
+                                                    </tr>
+                                                )}
+                                            </Fragment>
                                         ))}
                                     </tbody>
                                 </table>
