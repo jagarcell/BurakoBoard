@@ -3,6 +3,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import BaseElementsInput from '@/Components/BaseElementsInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
+import useWinnerSound from '@/hooks/useWinnerSound';
 
 export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false, hasTwoTeams = false }) {
     const [teams, setTeams] = useState(initialTeams);
@@ -14,6 +15,8 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [inputErrors, setInputErrors] = useState({});
     const [saveError, setSaveError] = useState('');
     const [gameStatus, setGameStatus] = useState(selectedGame?.status ?? 'in_progress');
+
+    const { unlock: unlockWinnerSound, play: playWinnerSound } = useWinnerSound();
 
     const [expandedRound, setExpandedRound] = useState(null);
     // Cache of per-round draft data keyed by round_number.
@@ -287,6 +290,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        // Unlock AudioContext synchronously while the user-gesture is still
+        // live so the victory fanfare works on iOS Safari.
+        unlockWinnerSound();
         setInputErrors({});
         setSaveError('');
 
@@ -340,16 +346,18 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             const gameSummary = response.data?.data?.game ?? {};
             const updatedTeams = gameSummary.teams ?? teams;
 
+            const newGameStatus = gameSummary.game?.status ?? gameStatus;
             setTeams(updatedTeams);
             setRounds(gameSummary.rounds ?? rounds);
-            setGameStatus(gameSummary.game?.status ?? gameStatus);
+            setGameStatus(newGameStatus);
+            if (newGameStatus === 'finished') playWinnerSound();
             // Cancel any pending draft save and skip the next one triggered by
             // the input reset below — the backend already deleted the draft.
             if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
             skipNextDraftSave.current = true;
             setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
             setCardInputs(buildDefaultCardInputs(updatedTeams));
-            onRoundRecorded?.(updatedTeams);
+            onRoundRecorded?.(updatedTeams, newGameStatus);
         } catch {
             setSaveError('Unable to record the round right now.');
         } finally {

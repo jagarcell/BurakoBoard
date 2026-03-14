@@ -1,10 +1,12 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import GameCard from '@/Components/GameCard';
 import RoundsCard from '@/Components/RoundsCard';
 import TeamsCard from '@/Components/TeamsCard';
+import useConfetti from '@/hooks/useConfetti';
+import useWinnerSound from '@/hooks/useWinnerSound';
 
 export default function Dashboard() {
     const [selectedGame, setSelectedGame] = useState(null);
@@ -13,8 +15,27 @@ export default function Dashboard() {
     const [isFetching, setIsFetching] = useState(false);
     const [hasTwoTeams, setHasTwoTeams] = useState(false);
 
+    const { unlock: unlockBadgeSound, play: playBadgeSound } = useWinnerSound();
+    const { fire: fireConfetti, burst: burstConfetti } = useConfetti();
+
+    const handleWinnerBadgeClick = useCallback(() => {
+        unlockBadgeSound();
+        playBadgeSound();
+        burstConfetti();
+    }, [unlockBadgeSound, playBadgeSound, burstConfetti]);
+
     const handleTeamsChange = (newTeams) => {
         setGameSummary((prev) => (prev ? { ...prev, teams: newTeams } : prev));
+    };
+
+    const handleRoundRecorded = (updatedTeams, gameStatus) => {
+        setScoreUpdate(updatedTeams);
+        if (gameStatus) {
+            setSelectedGame((prev) => (prev ? { ...prev, status: gameStatus } : prev));
+        }
+        if (gameStatus === 'finished') {
+            fireConfetti();
+        }
     };
 
     const handleTeamCreated = () => {
@@ -90,6 +111,7 @@ export default function Dashboard() {
                         isFetching={isFetching}
                         onTeamCreated={handleTeamCreated}
                         onTeamsChange={handleTeamsChange}
+                        onWinnerBadgeClick={handleWinnerBadgeClick}
                         scoreUpdate={scoreUpdate}
                         selectedGame={selectedGame}
                     />
@@ -99,7 +121,7 @@ export default function Dashboard() {
                         initialRounds={initialRounds}
                         initialTeams={initialTeams}
                         isFetching={isFetching}
-                        onRoundRecorded={setScoreUpdate}
+                        onRoundRecorded={handleRoundRecorded}
                         selectedGame={selectedGame}
                     />
                 </div>
