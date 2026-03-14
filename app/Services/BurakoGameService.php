@@ -198,7 +198,9 @@ class BurakoGameService
      * @param  int  $gameId  Identifier of the game.
      * @param  array<string, mixed>  $payload  Validated round score payload.
      * @return array<string, mixed> Game summary payload after recording the round.
-     * Logic: validate full team coverage, persist round and per-team points in a transaction, update totals, and close game on winner.
+     * Logic: validate full team coverage, persist round and per-team points in a transaction,
+     * update totals, close game on winner, then archive the active draft under the committed
+     * round number so it can later be retrieved as a read-only scoring breakdown.
      */
     public function recordRound(int $gameId, array $payload): array
     {
@@ -227,9 +229,12 @@ class BurakoGameService
             ]);
         }
 
-        DB::transaction(function () use ($game, $gameId, $scores): void {
+        $committedRoundNumber = 0;
+
+        DB::transaction(function () use ($game, $gameId, $scores, &$committedRoundNumber): void {
             $roundNumber = $this->repository->getNextRoundNumber($gameId);
             $round = $this->repository->createRound($gameId, $roundNumber);
+            $committedRoundNumber = $roundNumber;
 
             $updatedTeams = collect();
 
@@ -253,7 +258,9 @@ class BurakoGameService
             $this->repository->updateGameRoundCounter($game, $round->round_number);
         });
 
-        $this->repository->deleteRoundDraft($gameId);
+        // Archive the active draft under the committed round number so it can be
+        // retrieved later as a read-only scoring breakdown for that round.
+        $this->repository->archiveRoundDraft($gameId, $committedRoundNumber);
 
         return $this->repository->getGameSummary($gameId);
     }
@@ -302,6 +309,22 @@ class BurakoGameService
         $this->repository->findGameOrFail($gameId);
 
         return $this->repository->getRoundDraft($gameId);
+    }
+
+    /**
+     * Return the archived draft captured when a specific round was committed.
+     *
+     * @param  int  $gameId      Identifier of the game.
+     * @param  int  $roundNumber The round number whose draft should be retrieved.
+     * @return \App\Models\RoundDraft|null The archived draft or null if none was captured for that round.
+     * Logic: confirm the game exists so unknown game IDs raise a 404 rather than a silent null,
+     * then delegate the lookup to the repository using the composite (game_id, round_number) key.
+     */
+    public function getRoundDraftForRound(int $gameId, int $roundNumber): ?RoundDraft
+    {
+        $this->repository->findGameOrFail($gameId);
+
+        return $this->repository->getRoundDraftForRound($gameId, $roundNumber);
     }
 
     /**

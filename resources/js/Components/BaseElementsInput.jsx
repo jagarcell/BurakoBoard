@@ -8,7 +8,7 @@ import InputLabel from '@/Components/InputLabel';
  * - quantity elements show a numeric input
  * Two additional fields for cards held in hand (subtracted from the total) and cards laid on the
  * table (added to the total) are appended after the base elements list.
- * A computed total is displayed at the bottom.
+ * A computed total is displayed at the bottom unless readOnly is true.
  *
  * @param {Object[]} elements      - Base element objects from the API ({ id, name, label, points, input_type }).
  * @param {number}   teamId        - Team identifier; used to generate unique input IDs when multiple teams are shown.
@@ -19,8 +19,9 @@ import InputLabel from '@/Components/InputLabel';
  * @param {number}   cardsOnTable  - Total points of cards laid on the table; added to the running total.
  * @param {Function} onCardsChange - Callback (field: 'cardsInHand' | 'cardsOnTable', value: string) fired on card input change.
  * @param {Object}   cardErrors    - Validation messages: { cardsInHand?: string, cardsOnTable?: string }.
+ * @param {boolean}  readOnly      - When true all inputs are disabled, errors are hidden, and the total row is omitted.
  */
-export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {} }) {
+export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false }) {
     // When a score_override boolean element is checked both cardsInHand and
     // cardsOnTable are subtracted from the base score (penalty mode).
     const scoreOverrideActive = elements.some((el) => el.score_override && !!values[el.id]);
@@ -67,15 +68,18 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                     {isBoolean ? (
                         <Checkbox
                             checked={!!values[el.id]}
+                            disabled={readOnly}
                             id={inputId}
-                            onChange={(e) => onChange(el.id, e.target.checked)}
+                            onChange={readOnly ? undefined : (e) => onChange(el.id, e.target.checked)}
                         />
                     ) : (
                         <input
-                            className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+                            className={`w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 focus:outline-none${readOnly ? ' cursor-not-allowed opacity-60' : ''}`}
+                            disabled={readOnly}
                             id={inputId}
                             min="0"
-                            onChange={(e) => onChange(el.id, e.target.value)}
+                            onChange={readOnly ? undefined : (e) => onChange(el.id, e.target.value)}
+                            readOnly={readOnly}
                             step="1"
                             type="number"
                             value={values[el.id] ?? 0}
@@ -97,7 +101,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                     </span>
                 </div>
 
-                {errors[el.id] && (
+                {!readOnly && errors[el.id] && (
                     <InputError message={errors[el.id]} />
                 )}
             </div>
@@ -124,10 +128,12 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                 <div className="space-y-0.5">
                     <div className="flex items-center gap-3">
                         <input
-                            className="w-16 rounded-lg border border-rose-200 bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-200"
+                            className={`w-16 rounded-lg border border-rose-200 bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-200${readOnly ? ' cursor-not-allowed opacity-60' : ''}`}
+                            disabled={readOnly}
                             id={`team-${teamId}-cards-in-hand`}
                             min="0"
-                            onChange={(e) => onCardsChange?.('cardsInHand', e.target.value)}
+                            onChange={readOnly ? undefined : (e) => onCardsChange?.('cardsInHand', e.target.value)}
+                            readOnly={readOnly}
                             step="1"
                             type="number"
                             value={cardsInHand}
@@ -139,7 +145,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                         />
                         <span className="shrink-0 text-xs font-medium text-rose-500">−pts</span>
                     </div>
-                    {cardErrors.cardsInHand && (
+                    {!readOnly && cardErrors.cardsInHand && (
                         <InputError message={cardErrors.cardsInHand} />
                     )}
                 </div>
@@ -147,10 +153,12 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                 <div className="space-y-0.5">
                     <div className="flex items-center gap-3">
                         <input
-                            className={`w-16 rounded-lg border bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 ${cardsOnTableNegative ? 'border-rose-200 focus:border-rose-400 focus:ring-rose-200' : 'border-emerald-200 focus:border-emerald-400 focus:ring-emerald-200'}`}
+                            className={`w-16 rounded-lg border bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 ${cardsOnTableNegative ? 'border-rose-200 focus:border-rose-400 focus:ring-rose-200' : 'border-emerald-200 focus:border-emerald-400 focus:ring-emerald-200'}${readOnly ? ' cursor-not-allowed opacity-60' : ''}`}
+                            disabled={readOnly}
                             id={`team-${teamId}-cards-on-table`}
                             min="0"
-                            onChange={(e) => onCardsChange?.('cardsOnTable', e.target.value)}
+                            onChange={readOnly ? undefined : (e) => onCardsChange?.('cardsOnTable', e.target.value)}
+                            readOnly={readOnly}
                             step="1"
                             type="number"
                             value={cardsOnTable}
@@ -164,18 +172,20 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             {cardsOnTableNegative ? '−pts' : '+pts'}
                         </span>
                     </div>
-                    {cardErrors.cardsOnTable && (
+                    {!readOnly && cardErrors.cardsOnTable && (
                         <InputError message={cardErrors.cardsOnTable} />
                     )}
                 </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-                <span className="text-sm font-medium text-slate-500">Score</span>
-                <span className="text-base font-semibold text-slate-900">
-                    {total.toLocaleString()} pts
-                </span>
-            </div>
+            {!readOnly && (
+                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <span className="text-sm font-medium text-slate-500">Score</span>
+                    <span className="text-base font-semibold text-slate-900">
+                        {total.toLocaleString()} pts
+                    </span>
+                </div>
+            )}
         </div>
     );
 }

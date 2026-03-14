@@ -43,6 +43,28 @@ class RoundDraftController extends Controller
     }
 
     /**
+     * Return the archived draft captured when a specific round was committed.
+     *
+     * @param  int  $gameId      Identifier of the game.
+     * @param  int  $roundNumber The round number whose draft should be retrieved.
+     * @return \Illuminate\Http\JsonResponse JSON payload with the archived draft or null.
+     * Logic: delegate retrieval to the service and wrap the result in a consistent data
+     * envelope; null is returned when no draft was captured for that round (e.g. the
+     * round was recorded before draft archiving was introduced).
+     */
+    public function showByRound(int $gameId, int $roundNumber): JsonResponse
+    {
+        $draft = $this->service->getRoundDraftForRound($gameId, $roundNumber);
+
+        return response()->json([
+            'round_draft' => $draft === null ? null : [
+                'base_inputs' => $draft->base_inputs,
+                'card_inputs' => $draft->card_inputs,
+            ],
+        ]);
+    }
+
+    /**
      * Create or update the round draft for a game.
      *
      * @param  \App\Http\Requests\Api\V1\UpsertRoundDraftRequest  $request  Validated draft payload.

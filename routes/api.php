@@ -30,6 +30,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);
     Route::get('/games/{gameId}/round-draft', [RoundDraftController::class, 'show']);
     Route::put('/games/{gameId}/round-draft', [RoundDraftController::class, 'upsert']);
+    Route::get('/games/{gameId}/rounds/{roundNumber}/draft', [RoundDraftController::class, 'showByRound']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/user', function (Request $request) {
