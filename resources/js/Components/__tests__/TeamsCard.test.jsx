@@ -800,8 +800,8 @@ describe('TeamsCard', () => {
 
         await screen.findByText('Team Alpha');
 
-        expect(screen.getByRole('generic', { name: 'Team Alpha winner' })).toBeInTheDocument();
-        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Team Alpha winner' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Team Beta winner' })).not.toBeInTheDocument();
     });
 
     it('does not show a winner badge on the losing team when a game is finished', async () => {
@@ -814,7 +814,7 @@ describe('TeamsCard', () => {
 
         await screen.findByText('Team Beta');
 
-        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Team Beta winner' })).not.toBeInTheDocument();
     });
 
     it('shows no winner badge when the game is finished with tied scores', async () => {
@@ -827,8 +827,30 @@ describe('TeamsCard', () => {
 
         await screen.findByText('Team Alpha');
 
-        expect(screen.queryByRole('generic', { name: 'Team Alpha winner' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Team Alpha winner' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+    });
+
+    it('calls onWinnerBadgeClick when the winner badge is clicked', async () => {
+        setupGetMocks();
+
+        const onWinnerBadgeClick = vi.fn();
+        const winner = { ...makeTeam(10, 'Team Alpha'), current_score: 2100 };
+        const loser  = { ...makeTeam(11, 'Team Beta'),  current_score: 800 };
+
+        render(
+            <TeamsCard
+                initialTeams={[winner, loser]}
+                onWinnerBadgeClick={onWinnerBadgeClick}
+                selectedGame={finishedGame}
+            />,
+        );
+
+        await screen.findByText('Team Alpha');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Team Alpha winner' }));
+
+        expect(onWinnerBadgeClick).toHaveBeenCalledTimes(1);
     });
 
     it('calls onTeamsChange with the updated teams list when a new team is created', async () => {
@@ -950,5 +972,151 @@ describe('TeamsCard', () => {
 
         await waitFor(() => expect(screen.getByText('Team Alpha Updated')).toBeInTheDocument());
         expect(onTeamCreated).not.toHaveBeenCalled();
+    });
+
+    describe('score badge colour when both teams have positive scores', () => {
+        it('shows a green badge on the team with the higher score', async () => {
+            setupGetMocks();
+
+            const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1200 };
+            const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+            render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            const badge = screen.getByRole('generic', { name: 'Team Alpha score' });
+            expect(badge).toHaveClass('bg-green-100', 'text-green-800');
+        });
+
+        it('shows a yellow badge on the team with the lower score', async () => {
+            setupGetMocks();
+
+            const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1200 };
+            const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+            render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Beta');
+
+            const badge = screen.getByRole('generic', { name: 'Team Beta score' });
+            expect(badge).toHaveClass('bg-yellow-100', 'text-yellow-800');
+        });
+
+        it('shows green badges on both teams when their positive scores are equal', async () => {
+            setupGetMocks();
+
+            const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1000 };
+            const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 1000 };
+
+            render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.getByRole('generic', { name: 'Team Alpha score' })).toHaveClass('bg-green-100', 'text-green-800');
+            expect(screen.getByRole('generic', { name: 'Team Beta score' })).toHaveClass('bg-green-100', 'text-green-800');
+        });
+
+        it('does not apply yellow badge when only one team has a positive score', async () => {
+            setupGetMocks();
+
+            const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 500 };
+            const teamB = { ...makeTeam(11, 'Team Beta'), current_score: -100 };
+
+            render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.getByRole('generic', { name: 'Team Alpha score' })).toHaveClass('bg-green-100', 'text-green-800');
+            expect(screen.getByRole('generic', { name: 'Team Beta score' })).toHaveClass('bg-red-100', 'text-red-800');
+        });
+    });
+
+    describe('score difference row', () => {
+        it('shows the difference row between the two team rows when both teams are present', async () => {
+            setupGetMocks();
+
+            const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1200 };
+            const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+            render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.getByRole('generic', { name: 'Score difference' })).toBeInTheDocument();
+            expect(screen.getByRole('generic', { name: 'Score difference' })).toHaveTextContent('400');
+        });
+
+        it('shows the difference row with the absolute value when the second team leads', async () => {
+            setupGetMocks();
+
+            const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 500 };
+            const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 900 };
+
+            render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.getByRole('generic', { name: 'Score difference' })).toHaveTextContent('400');
+        });
+
+        it('shows 0 in the difference row when both scores are equal', async () => {
+            setupGetMocks();
+
+            const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 750 };
+            const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 750 };
+
+            render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.getByRole('generic', { name: 'Score difference' })).toHaveTextContent('0');
+        });
+
+        it('does not show the difference row when only one team is present', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.queryByRole('generic', { name: 'Score difference' })).not.toBeInTheDocument();
+        });
+
+        it('does not show the difference row when no teams are present', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+            await waitFor(() =>
+                expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+            );
+
+            expect(screen.queryByRole('generic', { name: 'Score difference' })).not.toBeInTheDocument();
+        });
+
+        it('updates the difference row reactively when scoreUpdate prop changes', async () => {
+            const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1000 };
+            const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 1000 };
+
+            setupGetMocks();
+
+            const { rerender } = render(
+                <TeamsCard initialTeams={[teamA, teamB]} scoreUpdate={null} selectedGame={selectedGame} />,
+            );
+
+            await screen.findByText('Team Alpha');
+            expect(screen.getByRole('generic', { name: 'Score difference' })).toHaveTextContent('0');
+
+            const updatedTeamA = { ...teamA, current_score: 1300 };
+
+            rerender(
+                <TeamsCard initialTeams={[teamA, teamB]} scoreUpdate={[updatedTeamA]} selectedGame={selectedGame} />,
+            );
+
+            await waitFor(() =>
+                expect(screen.getByRole('generic', { name: 'Score difference' })).toHaveTextContent('300'),
+            );
+        });
     });
 });

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { Fragment, startTransition, useEffect, useRef, useState } from 'react';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -12,7 +12,7 @@ import TextInput from '@/Components/TextInput';
 const defaultTeamForm = { name: '', players: [] };
 const defaultPlayerInput = { userId: '', name: '' };
 
-export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate = null, isFetching = false, onTeamsChange, onTeamCreated }) {
+export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate = null, isFetching = false, onTeamsChange, onTeamCreated, onWinnerBadgeClick = null }) {
     const [teams, setTeams] = useState(initialTeams);
     const [users, setUsers] = useState([]);
     const [allTeams, setAllTeams] = useState([]);
@@ -323,6 +323,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
             ? (teams[0].current_score > teams[1].current_score ? teams[0].id : teams[1].id)
             : null;
 
+    const bothPositive = teams.length === 2 && teams[0].current_score > 0 && teams[1].current_score > 0;
+
     /** Trim and collapse inner whitespace so '  Team  Alpha  ' → 'Team Alpha'. */
     const normalizeName = (str) => str.trim().replace(/\s+/g, ' ');
 
@@ -381,9 +383,13 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                     ) : (
                         teamSlots.map((slot) => {
                             const team = teams[slot];
+                            const scoreDiff = teams.length === 2
+                                ? Math.abs(teams[0].current_score - teams[1].current_score)
+                                : null;
 
                             return (
-                                <div key={slot} className="px-6 py-5">
+                                <Fragment key={slot}>
+                                <div className="px-6 py-5">
                                     {team ? (
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
@@ -394,11 +400,13 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                                     <span
                                                         aria-label={`${team.name} score`}
                                                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                                            team.current_score > 0
-                                                                ? 'bg-green-100 text-green-800'
-                                                                : team.current_score < 0
-                                                                    ? 'bg-red-100 text-red-800'
-                                                                    : 'bg-[bisque] text-green-700'
+                                                            team.current_score < 0
+                                                                ? 'bg-red-100 text-red-800'
+                                                                : team.current_score === 0
+                                                                    ? 'bg-[bisque] text-green-700'
+                                                                    : bothPositive && team.current_score < teams[1 - slot].current_score
+                                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                                        : 'bg-green-100 text-green-800'
                                                         }`}
                                                     >
                                                         {team.current_score}
@@ -434,9 +442,11 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                                     Edit team
                                                 </TeamActionButton>
                                             ) : winnerTeamId === team.id ? (
-                                                <div
+                                                <button
                                                     aria-label={`${team.name} winner`}
-                                                    className="flex flex-shrink-0 items-center gap-1.5 rounded-full bg-yellow-400 px-3 py-1.5 text-xs font-bold text-yellow-900 shadow-sm"
+                                                    className="flex flex-shrink-0 items-center gap-1.5 rounded-full bg-yellow-400 px-3 py-1.5 text-xs font-bold text-yellow-900 shadow-sm transition-transform active:scale-95"
+                                                    onClick={onWinnerBadgeClick ?? undefined}
+                                                    type="button"
                                                 >
                                                     <svg
                                                         aria-hidden="true"
@@ -447,7 +457,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                                         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                                                     </svg>
                                                     Winner
-                                                </div>
+                                                </button>
                                             ) : null}
                                         </div>
                                     ) : (
@@ -483,6 +493,20 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                         </>
                                     )}
                                 </div>
+                                {slot === 0 && scoreDiff !== null && (
+                                    <div
+                                        aria-label="Score difference"
+                                        className="bg-slate-50 px-6 py-3 text-center"
+                                    >
+                                        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                                            Difference
+                                        </p>
+                                        <p className="text-lg font-bold text-slate-700">
+                                            {scoreDiff}
+                                        </p>
+                                    </div>
+                                )}
+                                </Fragment>
                             );
                         })
                     )}
