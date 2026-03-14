@@ -524,5 +524,226 @@ describe('RoundsCard', () => {
             expect(axios.put).not.toHaveBeenCalled();
         });
     });
+
+    describe('round history expand/collapse', () => {
+        const round2 = {
+            round_number: 2,
+            scores: [
+                { team_id: 10, team_name: 'Team Alpha', points: 200 },
+                { team_id: 11, team_name: 'Team Beta', points: 150 },
+            ],
+        };
+
+        const nullDraftResponse = { data: { data: { round_draft: null } } };
+        const roundDraftResponse = {
+            data: {
+                data: {
+                    round_draft: {
+                        base_inputs: {
+                            10: { 1: true, 2: 0 },
+                            11: { 1: false, 2: 2 },
+                        },
+                        card_inputs: {
+                            10: { cardsInHand: 5, cardsOnTable: 0 },
+                            11: { cardsInHand: 0, cardsOnTable: 10 },
+                        },
+                    },
+                },
+            },
+        };
+
+        beforeEach(() => {
+            // Provide a no-op PUT so the debounced draft save doesn't throw.
+            axios.put = vi.fn().mockResolvedValue({});
+            // Mock all GET calls: active draft and per-round draft return null; elements return fixture.
+            axios.get.mockImplementation((url) => {
+                if (url.includes('/round-draft') || url.match(/\/rounds\/\d+\/draft/)) {
+                    return Promise.resolve(nullDraftResponse);
+                }
+                return Promise.resolve(elementsResponse);
+            });
+        });
+
+        it('renders an expand button for each round in the history', async () => {
+            render(
+                <RoundsCard
+                    initialRounds={[round1, round2]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            const expandButtons = screen.getAllByRole('button', { name: /expand round/i });
+            expect(expandButtons).toHaveLength(2);
+        });
+
+        it('clicking the expand button shows the round scoring detail panel', async () => {
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            const expandButton = screen.getByRole('button', { name: /expand round 1 detail/i });
+            await userEvent.click(expandButton);
+
+            expect(screen.getByText(/round 1.*scoring detail/i)).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /collapse round 1 detail/i })).toBeInTheDocument();
+        });
+
+        it('clicking the button again collapses the detail panel', async () => {
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            const expandButton = screen.getByRole('button', { name: /expand round 1 detail/i });
+            await userEvent.click(expandButton);
+
+            expect(screen.getByText(/round 1.*scoring detail/i)).toBeInTheDocument();
+
+            const collapseButton = screen.getByRole('button', { name: /collapse round 1 detail/i });
+            await userEvent.click(collapseButton);
+
+            expect(screen.queryByText(/scoring detail/i)).not.toBeInTheDocument();
+        });
+
+        it('expanding a second round collapses the first (accordion)', async () => {
+            render(
+                <RoundsCard
+                    initialRounds={[round1, round2]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            // Expand round 1
+            await userEvent.click(screen.getByRole('button', { name: /expand round 1 detail/i }));
+            expect(screen.getByText(/round 1.*scoring detail/i)).toBeInTheDocument();
+
+            // Expand round 2 → round 1 detail should disappear
+            await userEvent.click(screen.getByRole('button', { name: /expand round 2 detail/i }));
+            expect(screen.queryByText(/round 1.*scoring detail/i)).not.toBeInTheDocument();
+            expect(screen.getByText(/round 2.*scoring detail/i)).toBeInTheDocument();
+        });
+
+        it('shows each team name inside the detail panel when the draft is null', async () => {
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            await userEvent.click(screen.getByRole('button', { name: /expand round 1 detail/i }));
+
+            // Wait for the draft fetch to resolve (null) and the loading state to clear.
+            await waitFor(() =>
+                expect(screen.queryByText(/loading detail/i)).not.toBeInTheDocument(),
+            );
+
+            // Both team names should appear in the detail panel.
+            expect(screen.getAllByText('Team Alpha').length).toBeGreaterThanOrEqual(1);
+            expect(screen.getAllByText('Team Beta').length).toBeGreaterThanOrEqual(1);
+
+            // No draft captured message should be present for both teams.
+            expect(screen.getAllByText(/no scoring detail captured/i)).toHaveLength(2);
+        });
+
+        it('shows read-only draft inputs when a draft is available for the round', async () => {
+            axios.get.mockImplementation((url) => {
+                if (url.match(/\/rounds\/\d+\/draft/)) return Promise.resolve(roundDraftResponse);
+                if (url.includes('/round-draft')) return Promise.resolve(nullDraftResponse);
+                return Promise.resolve(elementsResponse);
+            });
+
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            await userEvent.click(screen.getByRole('button', { name: /expand round 1 detail/i }));
+
+            // Wait for the draft to load and render the read-only inputs.
+            await waitFor(() =>
+                expect(screen.queryByText(/loading detail/i)).not.toBeInTheDocument(),
+            );
+
+            // Read-only inputs should be present (Cards in Hand appears twice — one per team in the detail panel).
+            const cardsInHandInputs = screen.getAllByLabelText('Cards in Hand');
+            const disabledInputs = cardsInHandInputs.filter((input) => input.disabled);
+            expect(disabledInputs.length).toBeGreaterThanOrEqual(2);
+            // All those inputs should be disabled (read-only mode).
+            disabledInputs.forEach((input) => expect(input).toBeDisabled());
+        });
+
+        it('clicking outside the toggle collapses the expanded detail', async () => {
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            await userEvent.click(screen.getByRole('button', { name: /expand round 1 detail/i }));
+            expect(screen.getByText(/round 1.*scoring detail/i)).toBeInTheDocument();
+
+            // Simulate a click anywhere else on the document
+            fireEvent.click(document.body);
+
+            expect(screen.queryByText(/scoring detail/i)).not.toBeInTheDocument();
+        });
+
+        it('recording a round collapses any expanded detail', async () => {
+            axios.post.mockResolvedValueOnce(
+                makeGameResponse([teamA, teamB], [round1]),
+            );
+
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            // Expand round 1
+            await userEvent.click(screen.getByRole('button', { name: /expand round 1 detail/i }));
+            expect(screen.getByText(/round 1.*scoring detail/i)).toBeInTheDocument();
+
+            // Submit a new round
+            await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+            await waitFor(() =>
+                expect(screen.queryByText(/scoring detail/i)).not.toBeInTheDocument(),
+            );
+        });
+    });
 });
 

@@ -113,6 +113,7 @@ class RoundDraftTest extends TestCase
     {
         RoundDraft::query()->create([
             'game_id' => $this->game->id,
+            'round_number' => 0,
             'base_inputs' => [$this->teamA->id => [1 => true]],
             'card_inputs' => [$this->teamA->id => ['cardsInHand' => 7, 'cardsOnTable' => 0]],
         ]);
@@ -125,11 +126,11 @@ class RoundDraftTest extends TestCase
     }
 
     /**
-     * PUT called twice keeps only one draft row per game (upsert behaviour).
+     * PUT called twice keeps only one active draft row per game (upsert behaviour).
      *
      * @return void
-     * Logic: confirm the unique constraint on game_id is respected and the
-     * row count stays at one after multiple PUT calls for the same game.
+     * Logic: confirm the unique constraint on (game_id, round_number=0) is respected
+     * and the active draft count stays at one after multiple PUT calls for the same game.
      */
     public function test_upsert_replaces_existing_draft(): void
     {
@@ -143,25 +144,32 @@ class RoundDraftTest extends TestCase
             'card_inputs' => [],
         ])->assertOk();
 
-        $this->assertSame(1, RoundDraft::query()->where('game_id', $this->game->id)->count());
+        $this->assertSame(
+            1,
+            RoundDraft::query()
+                ->where('game_id', $this->game->id)
+                ->where('round_number', 0)
+                ->count(),
+        );
     }
 
     /**
-     * Recording a round deletes the draft for that game.
+     * Recording a round archives the draft under the committed round number.
      *
      * @return void
-     * Logic: verify the automatic draft cleanup that happens as part of recordRound
-     * so that stale draft inputs are not shown to the user after a round is saved.
+     * Logic: verify that after a round is recorded, the draft row is updated with the
+     * round number (archived) rather than deleted, so it can be retrieved as historical detail.
      */
-    public function test_recording_a_round_deletes_the_draft(): void
+    public function test_recording_a_round_archives_the_draft(): void
     {
         RoundDraft::query()->create([
             'game_id' => $this->game->id,
+            'round_number' => 0,
             'base_inputs' => [],
             'card_inputs' => [],
         ]);
 
-        $this->assertDatabaseHas('round_drafts', ['game_id' => $this->game->id]);
+        $this->assertDatabaseHas('round_drafts', ['game_id' => $this->game->id, 'round_number' => 0]);
 
         $this->service->recordRound($this->game->id, [
             'scores' => [
@@ -170,7 +178,98 @@ class RoundDraftTest extends TestCase
             ],
         ]);
 
+        // Active draft (round_number = 0) should be gone.
+        $this->assertDatabaseMissing('round_drafts', ['game_id' => $this->game->id, 'round_number' => 0]);
+
+        // Archived draft (round_number = 1) should now exist.
+        $this->assertDatabaseHas('round_drafts', ['game_id' => $this->game->id, 'round_number' => 1]);
+    }
+
+    /**
+     * Recording a round with no active draft leaves no draft rows and does not error.
+     *
+     * @return void
+     * Logic: archiveRoundDraft is a no-op when no active draft exists, so recording
+     * a round without a prior draft save must succeed and leave the table empty.
+     */
+    public function test_recording_a_round_without_active_draft_succeeds(): void
+    {
         $this->assertDatabaseMissing('round_drafts', ['game_id' => $this->game->id]);
+
+        $this->service->recordRound($this->game->id, [
+            'scores' => [
+                ['team_id' => $this->teamA->id, 'points' => 50],
+                ['team_id' => $this->teamB->id, 'points' => 75],
+            ],
+        ]);
+
+        $this->assertDatabaseMissing('round_drafts', ['game_id' => $this->game->id]);
+    }
+
+    /**
+     * GET /api/v1/games/{gameId}/rounds/{roundNumber}/draft returns the archived draft.
+     *
+     * @return void
+     * Logic: record a round that had an active draft, then confirm the new
+     * endpoint returns the archived inputs under the correct round number.
+     */
+    public function test_show_by_round_returns_archived_draft(): void
+    {
+        RoundDraft::query()->create([
+            'game_id' => $this->game->id,
+            'round_number' => 0,
+            'base_inputs' => [$this->teamA->id => [1 => true]],
+            'card_inputs' => [$this->teamA->id => ['cardsInHand' => 3, 'cardsOnTable' => 0]],
+        ]);
+
+        $this->service->recordRound($this->game->id, [
+            'scores' => [
+                ['team_id' => $this->teamA->id, 'points' => 150],
+                ['team_id' => $this->teamB->id, 'points' => 100],
+            ],
+        ]);
+
+        $response = $this->getJson("/api/v1/games/{$this->game->id}/rounds/1/draft");
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.round_draft.card_inputs.' . $this->teamA->id . '.cardsInHand', 3);
+    }
+
+    /**
+     * GET /api/v1/games/{gameId}/rounds/{roundNumber}/draft returns null when no draft was captured.
+     *
+     * @return void
+     * Logic: when a round was recorded without a prior active draft (e.g. before draft archiving
+     * was introduced), the endpoint should return null rather than a 404.
+     */
+    public function test_show_by_round_returns_null_when_no_draft_captured(): void
+    {
+        // Record a round without saving a draft first.
+        $this->service->recordRound($this->game->id, [
+            'scores' => [
+                ['team_id' => $this->teamA->id, 'points' => 50],
+                ['team_id' => $this->teamB->id, 'points' => 75],
+            ],
+        ]);
+
+        $response = $this->getJson("/api/v1/games/{$this->game->id}/rounds/1/draft");
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.round_draft', null);
+    }
+
+    /**
+     * GET /api/v1/games/{gameId}/rounds/{roundNumber}/draft returns 404 for an unknown game.
+     *
+     * @return void
+     * Logic: confirm the service guard raises a model-not-found exception that
+     * translates to a 404 when the game id does not exist.
+     */
+    public function test_show_by_round_returns_404_for_unknown_game(): void
+    {
+        $this->getJson('/api/v1/games/99999/rounds/1/draft')->assertNotFound();
     }
 
     /**
