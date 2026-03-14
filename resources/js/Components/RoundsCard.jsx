@@ -4,7 +4,7 @@ import BaseElementsInput from '@/Components/BaseElementsInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 
-export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false }) {
+export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false, hasTwoTeams = false }) {
     const [teams, setTeams] = useState(initialTeams);
     const [rounds, setRounds] = useState(initialRounds);
     const [elements, setElements] = useState([]);
@@ -260,10 +260,14 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             const val = baseInputs[teamId]?.[el.id];
 
             if (el.input_type === 'boolean') {
-                return sum + (val ? el.points : 0);
+                const isActive = !!val;
+
+                return sum + (isActive ? el.points : -(el.penalty ?? 0));
             }
 
-            return sum + el.points * (parseInt(val, 10) || 0);
+            const qty = parseInt(val, 10) || 0;
+
+            return sum + (qty > 0 ? el.points * qty : -(el.penalty ?? 0));
         }, 0);
 
         // Cards on table is subtracted when all scoring canastras are zero OR
@@ -354,6 +358,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     };
 
     const nextRound = rounds.length + 1;
+    const showScoringForm = hasTwoTeams || teams.length >= 2;
 
     return (
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
@@ -377,11 +382,11 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 <p className="px-6 py-5 text-sm text-slate-400">
                     Select a game above to record rounds.
                 </p>
-            ) : isFetching && teams.length < 2 ? (
+            ) : isFetching && ! showScoringForm ? (
                 <p className="px-6 py-5 text-sm text-slate-400">
                     Loading rounds…
                 </p>
-            ) : teams.length < 2 ? (
+            ) : ! showScoringForm ? (
                 <p className="px-6 py-5 text-sm text-slate-400">
                     Add both teams before recording rounds.
                 </p>
