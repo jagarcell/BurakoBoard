@@ -313,7 +313,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             const onTable = cardInputs[team.id]?.cardsOnTable ?? 0;
 
             if (!Number.isInteger(Number(onTable)) || Number(onTable) < 0) {
-                newErrors[`${team.id}_cardsOnTable`] = 'Cards on table must be a whole number ≥ 0.';
+                newErrors[`${team.id}_cardsOnTable`] = 'Points on table must be a whole number ≥ 0.';
             }
         }
 
@@ -356,6 +356,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             setIsSaving(false);
         }
     };
+
+    const getAccruedScore = (teamId) =>
+        rounds.reduce((sum, round) => {
+            const s = round.scores?.find((sc) => sc.team_id === teamId);
+            return sum + (s ? s.points : 0);
+        }, 0);
 
     const nextRound = rounds.length + 1;
     const showScoringForm = hasTwoTeams || teams.length >= 2;
@@ -411,9 +417,22 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                             key={team.id}
                                             className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
                                         >
-                                            <p className="mb-3 text-sm font-semibold text-slate-700">
-                                                {team.name}
-                                            </p>
+                                            <div className="mb-3 flex items-center justify-between gap-2">
+                                                <p className="text-sm font-semibold text-slate-700">
+                                                    {team.name}
+                                                </p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-xs font-medium text-slate-400">
+                                                        Partial Score:
+                                                    </span>
+                                                    <span
+                                                        className="text-sm font-semibold tabular-nums text-indigo-600"
+                                                        title="Accrued score + this round"
+                                                    >
+                                                        {getAccruedScore(team.id) + computeTeamScore(team.id)}
+                                                    </span>
+                                                </div>
+                                            </div>
 
                                             {elements.length === 0 ? (
                                                 <p className="text-xs text-slate-400">
