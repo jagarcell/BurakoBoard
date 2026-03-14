@@ -93,8 +93,8 @@ describe('RoundsCard', () => {
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[round1]} selectedGame={selectedGame} />);
 
         await screen.findByText('1');
-        expect(screen.getByText('100')).toBeInTheDocument();
-        expect(screen.getByText('400')).toBeInTheDocument();
+        expect(screen.getAllByText('100').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('400').length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows the correct next round number based on history length', async () => {
@@ -133,7 +133,7 @@ describe('RoundsCard', () => {
             }),
         );
 
-        await screen.findByText('100');
+        await screen.findAllByText('100');
     });
 
     it('resets base element inputs to defaults after a successful round submission', async () => {
@@ -223,8 +223,8 @@ describe('RoundsCard', () => {
     it('renders cards in hand and cards on table inputs for each team', async () => {
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
-        const inHandInputs = await screen.findAllByLabelText('Cards in Hand');
-        const onTableInputs = screen.getAllByLabelText('Cards on Table');
+        const inHandInputs = await screen.findAllByLabelText('Points in Hand');
+        const onTableInputs = screen.getAllByLabelText('Points on Table');
 
         expect(inHandInputs).toHaveLength(2);
         expect(onTableInputs).toHaveLength(2);
@@ -232,8 +232,8 @@ describe('RoundsCard', () => {
         expect(onTableInputs[0]).toHaveAttribute('type', 'number');
     });
 
-    it('subtracts cards in hand and adds cards on table when computing the submitted score', async () => {
-        // Team Alpha: Burako (100) − cardsInHand (40) = 60
+    it('subtracts points in hand and adds points on table when computing the submitted score', async () => {
+        // Team Alpha: Burako (100) − pointsInHand (40) = 60
         // Team Beta:  2 Clean Canastra (400) + cardsOnTable (50) = 450
         const updatedTeamA = { ...teamA, current_score: 60 };
         const updatedTeamB = { ...teamB, current_score: 450 };
@@ -245,18 +245,18 @@ describe('RoundsCard', () => {
 
         const burakoCheckboxes = await screen.findAllByLabelText('Burako');
         const canInputs = screen.getAllByLabelText('Clean Canastra');
-        const inHandInputs = screen.getAllByLabelText('Cards in Hand');
-        const onTableInputs = screen.getAllByLabelText('Cards on Table');
+        const inHandInputs = screen.getAllByLabelText('Points in Hand');
+        const onTableInputs = screen.getAllByLabelText('Points on Table');
 
         // Team Alpha: check Burako
         await userEvent.click(burakoCheckboxes[0]);
-        // Team Alpha: cards in hand = 40
+        // Team Alpha: points in hand = 40
         await userEvent.clear(inHandInputs[0]);
         await userEvent.type(inHandInputs[0], '40');
         // Team Beta: 2 Clean Canastra
         await userEvent.clear(canInputs[1]);
         await userEvent.type(canInputs[1], '2');
-        // Team Beta: cards on table = 50
+        // Team Beta: points on table = 50
         await userEvent.clear(onTableInputs[1]);
         await userEvent.type(onTableInputs[1], '50');
 
@@ -277,7 +277,7 @@ describe('RoundsCard', () => {
 
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
-        const inHandInputs = await screen.findAllByLabelText('Cards in Hand');
+        const inHandInputs = await screen.findAllByLabelText('Points in Hand');
         await userEvent.clear(inHandInputs[0]);
         await userEvent.type(inHandInputs[0], '25');
         expect(inHandInputs[0]).toHaveValue(25);
@@ -290,7 +290,7 @@ describe('RoundsCard', () => {
     it('shows a validation error and blocks submission when cards in hand is a decimal', async () => {
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
-        const inHandInputs = await screen.findAllByLabelText('Cards in Hand');
+        const inHandInputs = await screen.findAllByLabelText('Points in Hand');
         Object.defineProperty(inHandInputs[0], 'value', {
             configurable: true,
             writable: true,
@@ -306,10 +306,10 @@ describe('RoundsCard', () => {
         expect(axios.post).not.toHaveBeenCalled();
     });
 
-    it('shows a validation error and blocks submission when cards on table is a decimal', async () => {
+    it('shows a validation error and blocks submission when points on table is a decimal', async () => {
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
-        const onTableInputs = await screen.findAllByLabelText('Cards on Table');
+        const onTableInputs = await screen.findAllByLabelText('Points on Table');
         Object.defineProperty(onTableInputs[0], 'value', {
             configurable: true,
             writable: true,
@@ -320,12 +320,12 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(screen.getByText('Cards on table must be a whole number ≥ 0.')).toBeInTheDocument(),
+            expect(screen.getByText('Points on table must be a whole number ≥ 0.')).toBeInTheDocument(),
         );
         expect(axios.post).not.toHaveBeenCalled();
     });
 
-    it('subtracts both cardsInHand and cardsOnTable from base points when a score_override element is checked', async () => {
+    it('subtracts both pointsInHand and pointsOnTable from base points when a score_override element is checked', async () => {
         const overrideEl = { id: 3, name: 'penalty_element', label: 'Penalty Element', points: 0, input_type: 'boolean', score_override: true };
         const extendedElements = [...baseElements, overrideEl];
         axios.get.mockResolvedValue({ data: { data: { base_elements: extendedElements } } });
@@ -337,9 +337,9 @@ describe('RoundsCard', () => {
         const overrideCheckboxes = await screen.findAllByLabelText('Penalty Element');
         await userEvent.click(overrideCheckboxes[0]);
 
-        // Set cardsInHand = 60 and cardsOnTable = 100 for Team Alpha (both subtracted from base)
-        const inHandInputs = screen.getAllByLabelText('Cards in Hand');
-        const onTableInputs = screen.getAllByLabelText('Cards on Table');
+        // Set pointsInHand = 60 and pointsOnTable = 100 for Team Alpha (both subtracted from base)
+        const inHandInputs = screen.getAllByLabelText('Points in Hand');
+        const onTableInputs = screen.getAllByLabelText('Points on Table');
         await userEvent.clear(inHandInputs[0]);
         await userEvent.type(inHandInputs[0], '60');
         await userEvent.clear(onTableInputs[0]);
@@ -351,7 +351,7 @@ describe('RoundsCard', () => {
 
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
-        // Burako(100) + overrideEl(0) - cardsInHand(60) - cardsOnTable(100) = -60
+        // Burako(100) + overrideEl(0) - pointsInHand(60) - pointsOnTable(100) = -60
         await waitFor(() =>
             expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
                 scores: [
@@ -362,9 +362,9 @@ describe('RoundsCard', () => {
         );
     });
 
-    it('subtracts cards on table when all canastras are zero', async () => {
-        // Team Alpha: Burako (100) − cardsOnTable (30) = 70 (no canastra scored → onTable subtracted)
-        // Team Beta:  2 Clean Canastra (400) + cardsOnTable (50) = 450 (canastra scored → added)
+    it('subtracts points on table when all canastras are zero', async () => {
+        // Team Alpha: Burako (100) − pointsOnTable (30) = 70 (no canastra scored → onTable subtracted)
+        // Team Beta:  2 Clean Canastra (400) + pointsOnTable (50) = 450 (canastra scored → added)
         const updatedTeamA = { ...teamA, current_score: 70 };
         const updatedTeamB = { ...teamB, current_score: 450 };
         axios.post.mockResolvedValueOnce(
@@ -375,14 +375,14 @@ describe('RoundsCard', () => {
 
         const burakoCheckboxes = await screen.findAllByLabelText('Burako');
         const canInputs = screen.getAllByLabelText('Clean Canastra');
-        const onTableInputs = screen.getAllByLabelText('Cards on Table');
+        const onTableInputs = screen.getAllByLabelText('Points on Table');
 
-        // Team Alpha: Burako + cardsOnTable=30, no canastra → onTable subtracted: 100 − 30 = 70
+        // Team Alpha: Burako + pointsOnTable=30, no canastra → onTable subtracted: 100 − 30 = 70
         await userEvent.click(burakoCheckboxes[0]);
         await userEvent.clear(onTableInputs[0]);
         await userEvent.type(onTableInputs[0], '30');
 
-        // Team Beta: 2 Clean Canastra + cardsOnTable=50 → canastra scored → onTable added: 400 + 50 = 450
+        // Team Beta: 2 Clean Canastra + pointsOnTable=50 → canastra scored → onTable added: 400 + 50 = 450
         await userEvent.clear(canInputs[1]);
         await userEvent.type(canInputs[1], '2');
         await userEvent.clear(onTableInputs[1]);
@@ -515,7 +515,7 @@ describe('RoundsCard', () => {
             await waitFor(() => expect(canInputs[0]).toHaveValue(3));
 
             // Draft card inputs should be applied
-            const inHandInputs = screen.getAllByLabelText('Cards in Hand');
+            const inHandInputs = screen.getAllByLabelText('Points in Hand');
             await waitFor(() => expect(inHandInputs[0]).toHaveValue(5));
         });
 
@@ -734,9 +734,9 @@ describe('RoundsCard', () => {
                 expect(screen.queryByText(/loading detail/i)).not.toBeInTheDocument(),
             );
 
-            // Read-only inputs should be present (Cards in Hand appears twice — one per team in the detail panel).
-            const cardsInHandInputs = screen.getAllByLabelText('Cards in Hand');
-            const disabledInputs = cardsInHandInputs.filter((input) => input.disabled);
+            // Read-only inputs should be present (Points in Hand appears twice — one per team in the detail panel).
+            const pointsInHandInputs = screen.getAllByLabelText('Points in Hand');
+            const disabledInputs = pointsInHandInputs.filter((input) => input.disabled);
             expect(disabledInputs.length).toBeGreaterThanOrEqual(2);
             // All those inputs should be disabled (read-only mode).
             disabledInputs.forEach((input) => expect(input).toBeDisabled());
@@ -859,6 +859,75 @@ describe('RoundsCard', () => {
             expect(
                 screen.queryByText('Add both teams before recording rounds.'),
             ).not.toBeInTheDocument();
+        });
+    });
+
+    describe('live running-total score next to team name', () => {
+        const mockDraftAndElements = (url) =>
+            url.includes('round-draft')
+                ? Promise.resolve({ data: { data: { round_draft: null } } })
+                : Promise.resolve(elementsResponse);
+
+        it('shows 0 for each team when there are no previous rounds and no inputs entered', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Team Alpha');
+            // Both accrued+ongoing totals should be 0
+            const zeros = screen.getAllByTitle('Accrued score + this round');
+            expect(zeros).toHaveLength(2);
+            zeros.forEach((el) => expect(el).toHaveTextContent('0'));
+        });
+
+        it('reflects past-round accrued scores when rounds are provided', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            // Wait for the two running-total spans to appear (they appear as soon as showScoringForm is true)
+            const totals = await screen.findAllByTitle('Accrued score + this round');
+            // round1: Team Alpha = 100, Team Beta = 400; no current inputs so ongoing = 0
+            expect(totals[0]).toHaveTextContent('100');
+            expect(totals[1]).toHaveTextContent('400');
+        });
+
+        it('updates the running total live as the user types into a quantity input', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            // Wait for elements to load (Clean Canastra inputs appear)
+            const canInputs = await screen.findAllByLabelText('Clean Canastra');
+
+            // Type 1 into Team Alpha's Clean Canastra quantity input
+            await user.clear(canInputs[0]);
+            await user.type(canInputs[0], '1');
+
+            // Team Alpha accrued 100 from round1 + 200 points for 1 clean canastra = 300
+            const totals = screen.getAllByTitle('Accrued score + this round');
+            expect(totals[0]).toHaveTextContent('300');
+            // Team Beta unchanged: 400
+            expect(totals[1]).toHaveTextContent('400');
         });
     });
 });

@@ -1,0 +1,138 @@
+import '@testing-library/jest-dom/vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import NumericStepper from '@/Components/NumericStepper';
+
+describe('NumericStepper', () => {
+    it('renders an input of type number', () => {
+        render(<NumericStepper id="test-input" onChange={() => {}} value={0} />);
+
+        expect(screen.getByRole('spinbutton')).toBeInTheDocument();
+        expect(screen.getByRole('spinbutton')).toHaveAttribute('type', 'number');
+    });
+
+    it('associates the input with the provided id', () => {
+        render(<NumericStepper id="my-stepper" onChange={() => {}} value={0} />);
+
+        expect(document.getElementById('my-stepper')).toBeInTheDocument();
+        expect(document.getElementById('my-stepper')).toHaveAttribute('type', 'number');
+    });
+
+    it('renders a decrease (−) button and an increase (+) button', () => {
+        render(<NumericStepper id="test-input" onChange={() => {}} value={3} />);
+
+        expect(screen.getByRole('button', { name: /decrease/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /increase/i })).toBeInTheDocument();
+    });
+
+    it('calls onChange with the decremented value string when the − button is clicked', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper id="test-input" onChange={onChange} value={5} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /decrease/i }));
+
+        expect(onChange).toHaveBeenCalledWith('4');
+    });
+
+    it('calls onChange with the incremented value string when the + button is clicked', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper id="test-input" onChange={onChange} value={5} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /increase/i }));
+
+        expect(onChange).toHaveBeenCalledWith('6');
+    });
+
+    it('clamps decrement at the min value (default 0)', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper id="test-input" onChange={onChange} value={0} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /decrease/i }));
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('disables the decrease button when the value equals min', () => {
+        render(<NumericStepper id="test-input" onChange={() => {}} value={0} />);
+
+        expect(screen.getByRole('button', { name: /decrease/i })).toBeDisabled();
+    });
+
+    it('enables the decrease button when the value is above min', () => {
+        render(<NumericStepper id="test-input" onChange={() => {}} value={1} />);
+
+        expect(screen.getByRole('button', { name: /decrease/i })).toBeEnabled();
+    });
+
+    it('respects a custom min prop for clamping', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper id="test-input" min={2} onChange={onChange} value={2} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /decrease/i }));
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('respects a custom step prop when decrementing', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper id="test-input" onChange={onChange} step={5} value={10} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /decrease/i }));
+
+        expect(onChange).toHaveBeenCalledWith('5');
+    });
+
+    it('respects a custom step prop when incrementing', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper id="test-input" onChange={onChange} step={5} value={10} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /increase/i }));
+
+        expect(onChange).toHaveBeenCalledWith('15');
+    });
+
+    it('disables both buttons and the input when disabled is true', () => {
+        render(<NumericStepper disabled id="test-input" onChange={() => {}} value={3} />);
+
+        expect(screen.getByRole('button', { name: /decrease/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /increase/i })).toBeDisabled();
+        expect(screen.getByRole('spinbutton')).toBeDisabled();
+    });
+
+    it('does not call onChange when the − button is clicked while disabled', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper disabled id="test-input" onChange={onChange} value={5} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /decrease/i }));
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('does not call onChange when the + button is clicked while disabled', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper disabled id="test-input" onChange={onChange} value={5} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /increase/i }));
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('calls onChange with the typed value when the input is changed directly', async () => {
+        const onChange = vi.fn();
+
+        render(<NumericStepper id="test-input" onChange={onChange} value={0} />);
+
+        await userEvent.clear(screen.getByRole('spinbutton'));
+        await userEvent.type(screen.getByRole('spinbutton'), '7');
+
+        expect(onChange).toHaveBeenLastCalledWith('7');
+    });
+});

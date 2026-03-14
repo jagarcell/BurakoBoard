@@ -22,9 +22,7 @@ export default function Dashboard() {
 
         axios
             .get(`/api/v1/games/${selectedGame.id}/has-two-teams`)
-            .then((response) => {
-                console.log('Has two teams:', response.data?.data?.has_two_teams ?? false);
-                setHasTwoTeams(response.data?.data?.has_two_teams ?? false)})
+            .then((response) => setHasTwoTeams(response.data?.data?.has_two_teams ?? false))
             .catch(() => {});
     };
 

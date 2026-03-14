@@ -167,8 +167,8 @@ describe('BaseElementsInput', () => {
             />,
         );
 
-        expect(screen.getByLabelText('Cards in Hand')).toBeInTheDocument();
-        expect(screen.getByLabelText('Cards in Hand')).toHaveAttribute('type', 'number');
+        expect(screen.getByLabelText('Points in Hand')).toBeInTheDocument();
+        expect(screen.getByLabelText('Points in Hand')).toHaveAttribute('type', 'number');
     });
 
     it('renders a number input for cards on table', () => {
@@ -181,11 +181,11 @@ describe('BaseElementsInput', () => {
             />,
         );
 
-        expect(screen.getByLabelText('Cards on Table')).toBeInTheDocument();
-        expect(screen.getByLabelText('Cards on Table')).toHaveAttribute('type', 'number');
+        expect(screen.getByLabelText('Points on Table')).toBeInTheDocument();
+        expect(screen.getByLabelText('Points on Table')).toHaveAttribute('type', 'number');
     });
 
-    it('shows a subtraction indicator next to the cards in hand input', () => {
+    it('shows a subtraction indicator next to the points in hand input', () => {
         render(
             <BaseElementsInput
                 elements={[]}
@@ -195,12 +195,12 @@ describe('BaseElementsInput', () => {
             />,
         );
 
-        // Both Cards in Hand and Cards on Table show −pts when no canastras are present.
+        // Both Points in Hand and Points on Table show −pts when no canastras are present.
         const minusPts = screen.getAllByText('−pts');
         expect(minusPts.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows a subtraction indicator next to the cards on table input when all canastras are zero', () => {
+    it('shows a subtraction indicator next to the points on table input when all canastras are zero', () => {
         render(
             <BaseElementsInput
                 elements={[]}
@@ -242,13 +242,13 @@ describe('BaseElementsInput', () => {
             />,
         );
 
-        await userEvent.clear(screen.getByLabelText('Cards in Hand'));
-        await userEvent.type(screen.getByLabelText('Cards in Hand'), '5');
+        await userEvent.clear(screen.getByLabelText('Points in Hand'));
+        await userEvent.type(screen.getByLabelText('Points in Hand'), '5');
 
         expect(onCardsChange).toHaveBeenLastCalledWith('cardsInHand', '5');
     });
 
-    it('calls onCardsChange with cardsOnTable when the cards on table input changes', async () => {
+    it('calls onCardsChange with cardsOnTable when the points on table input changes', async () => {
         const onCardsChange = vi.fn();
 
         render(
@@ -262,13 +262,13 @@ describe('BaseElementsInput', () => {
             />,
         );
 
-        await userEvent.clear(screen.getByLabelText('Cards on Table'));
-        await userEvent.type(screen.getByLabelText('Cards on Table'), '3');
+        await userEvent.clear(screen.getByLabelText('Points on Table'));
+        await userEvent.type(screen.getByLabelText('Points on Table'), '3');
 
         expect(onCardsChange).toHaveBeenLastCalledWith('cardsOnTable', '3');
     });
 
-    it('subtracts cards in hand from the total', () => {
+    it('subtracts points in hand from the total', () => {
         render(
             <BaseElementsInput
                 cardsInHand={50}
@@ -540,6 +540,87 @@ describe('BaseElementsInput', () => {
             // penaltyQuantityEl qty=2 → normal 2 × 50 = 100; no cards → total = 100
             const ptLabels = screen.getAllByText('100 pts');
             expect(ptLabels.length).toBeGreaterThanOrEqual(1);
+        });
+    });
+
+    describe('NumericStepper buttons', () => {
+        it('calls onChange with incremented value when the + button next to a quantity element is clicked', async () => {
+            const onChange = vi.fn();
+
+            render(
+                <BaseElementsInput
+                    elements={[quantityEl]}
+                    onChange={onChange}
+                    teamId={10}
+                    values={{ 2: 2 }}
+                />,
+            );
+
+            const increaseButtons = screen.getAllByRole('button', { name: /increase/i });
+            await userEvent.click(increaseButtons[0]);
+
+            expect(onChange).toHaveBeenCalledWith(2, '3');
+        });
+
+        it('calls onChange with decremented value when the − button next to a quantity element is clicked', async () => {
+            const onChange = vi.fn();
+
+            render(
+                <BaseElementsInput
+                    elements={[quantityEl]}
+                    onChange={onChange}
+                    teamId={10}
+                    values={{ 2: 2 }}
+                />,
+            );
+
+            const decreaseButtons = screen.getAllByRole('button', { name: /decrease/i });
+            await userEvent.click(decreaseButtons[0]);
+
+            expect(onChange).toHaveBeenCalledWith(2, '1');
+        });
+
+        it('calls onCardsChange with incremented cardsInHand when its + button is clicked', async () => {
+            const onCardsChange = vi.fn();
+
+            render(
+                <BaseElementsInput
+                    cardsInHand={3}
+                    elements={[]}
+                    onChange={() => {}}
+                    onCardsChange={onCardsChange}
+                    teamId={10}
+                    values={{}}
+                />,
+            );
+
+            // Points in Hand + button is the second increase button (quantity section absent; only card steppers)
+            const increaseButtons = screen.getAllByRole('button', { name: /increase/i });
+            // First stepper is pointsInHand, second is pointsOnTable
+            await userEvent.click(increaseButtons[0]);
+
+            expect(onCardsChange).toHaveBeenCalledWith('cardsInHand', '4');
+        });
+
+        it('calls onCardsChange with incremented cardsOnTable when its + button is clicked', async () => {
+            const onCardsChange = vi.fn();
+
+            render(
+                <BaseElementsInput
+                    cardsOnTable={1}
+                    elements={[quantityEl]}
+                    onChange={() => {}}
+                    onCardsChange={onCardsChange}
+                    teamId={10}
+                    values={{ 2: 1 }}
+                />,
+            );
+
+            // With one quantity element there are three steppers: quantity, cardsInHand, cardsOnTable
+            const increaseButtons = screen.getAllByRole('button', { name: /increase/i });
+            await userEvent.click(increaseButtons[2]);
+
+            expect(onCardsChange).toHaveBeenCalledWith('cardsOnTable', '2');
         });
     });
 });
