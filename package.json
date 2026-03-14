@@ -27,5 +27,8 @@
         "tailwindcss": "^3.2.1",
         "vite": "^7.0.7",
         "vitest": "^4.0.18"
+    },
+    "dependencies": {
+        "canvas-confetti": "^1.9.4"
     }
 }

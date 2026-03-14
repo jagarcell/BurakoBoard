@@ -6,6 +6,12 @@ import RoundsCard from '@/Components/RoundsCard';
 
 vi.mock('axios');
 
+const mockPlayWinnerSound = vi.fn();
+const mockUnlockWinnerSound = vi.fn();
+vi.mock('@/hooks/useWinnerSound', () => ({
+    default: () => ({ unlock: mockUnlockWinnerSound, play: mockPlayWinnerSound }),
+}));
+
 const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000 };
 
 const baseElements = [
@@ -15,11 +21,11 @@ const baseElements = [
 
 const elementsResponse = { data: { data: { base_elements: baseElements } } };
 
-const makeGameResponse = (teams = [], rounds = []) => ({
+const makeGameResponse = (teams = [], rounds = [], gameStatus = 'in_progress') => ({
     data: {
         data: {
             game: {
-                game: { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress' },
+                game: { id: 5, name: 'Friday Table', target_points: 2000, status: gameStatus },
                 teams,
                 rounds,
             },
@@ -41,6 +47,8 @@ const round1 = {
 describe('RoundsCard', () => {
     beforeEach(() => {
         vi.resetAllMocks();
+        mockPlayWinnerSound.mockReset();
+        mockUnlockWinnerSound.mockReset();
         // Each test gets a working base-elements GET response so the form renders
         axios.get.mockResolvedValue(elementsResponse);
     });
@@ -173,8 +181,95 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(onRoundRecorded).toHaveBeenCalledWith([updatedTeamA, updatedTeamB]),
+            expect(onRoundRecorded).toHaveBeenCalledWith([updatedTeamA, updatedTeamB], 'in_progress'),
         );
+    });
+
+    it('calls onRoundRecorded callback with updated teams and finished status when the round ends the game', async () => {
+        const updatedTeamA = { ...teamA, current_score: 2100 };
+        const updatedTeamB = { ...teamB, current_score: 800 };
+        axios.post.mockResolvedValueOnce(
+            makeGameResponse([updatedTeamA, updatedTeamB], [round1], 'finished'),
+        );
+
+        const onRoundRecorded = vi.fn();
+
+        render(
+            <RoundsCard
+                initialTeams={[teamA, teamB]}
+                initialRounds={[]}
+                onRoundRecorded={onRoundRecorded}
+                selectedGame={selectedGame}
+            />,
+        );
+
+        await screen.findAllByLabelText('Burako');
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(onRoundRecorded).toHaveBeenCalledWith([updatedTeamA, updatedTeamB], 'finished'),
+        );
+    });
+
+    it('plays the winner sound when the recorded round ends the game', async () => {
+        const updatedTeamA = { ...teamA, current_score: 2100 };
+        const updatedTeamB = { ...teamB, current_score: 800 };
+        axios.post.mockResolvedValueOnce(
+            makeGameResponse([updatedTeamA, updatedTeamB], [round1], 'finished'),
+        );
+
+        render(
+            <RoundsCard
+                initialTeams={[teamA, teamB]}
+                initialRounds={[]}
+                selectedGame={selectedGame}
+            />,
+        );
+
+        await screen.findAllByLabelText('Burako');
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() => expect(mockPlayWinnerSound).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not play the winner sound when the round does not end the game', async () => {
+        const updatedTeamA = { ...teamA, current_score: 100 };
+        const updatedTeamB = { ...teamB, current_score: 400 };
+        axios.post.mockResolvedValueOnce(
+            makeGameResponse([updatedTeamA, updatedTeamB], [round1], 'in_progress'),
+        );
+
+        render(
+            <RoundsCard
+                initialTeams={[teamA, teamB]}
+                initialRounds={[]}
+                selectedGame={selectedGame}
+            />,
+        );
+
+        await screen.findAllByLabelText('Burako');
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() => expect(axios.post).toHaveBeenCalled());
+        expect(mockPlayWinnerSound).not.toHaveBeenCalled();
+    });
+
+    it('calls unlockWinnerSound synchronously when the Record Round button is clicked', async () => {
+        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+
+        render(
+            <RoundsCard
+                initialTeams={[teamA, teamB]}
+                initialRounds={[]}
+                selectedGame={selectedGame}
+            />,
+        );
+
+        await screen.findAllByLabelText('Burako');
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() => expect(axios.post).toHaveBeenCalled());
+        expect(mockUnlockWinnerSound).toHaveBeenCalledTimes(1);
     });
 
     it('shows a save error and does not call onRoundRecorded when the API call fails', async () => {
