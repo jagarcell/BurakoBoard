@@ -1,6 +1,7 @@
 import Checkbox from '@/Components/Checkbox';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
+import NumericStepper from '@/Components/NumericStepper';
 
 /**
  * Renders a list of base scoring elements for one team with the appropriate input control per element:
@@ -88,15 +89,11 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             onChange={readOnly ? undefined : (e) => onChange(el.id, e.target.checked)}
                         />
                     ) : (
-                        <input
-                            className={`w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 focus:outline-none${readOnly ? ' cursor-not-allowed opacity-60' : ''}`}
+                        <NumericStepper
                             disabled={readOnly}
                             id={inputId}
-                            min="0"
-                            onChange={readOnly ? undefined : (e) => onChange(el.id, e.target.value)}
+                            onChange={(val) => onChange(el.id, val)}
                             readOnly={readOnly}
-                            step="1"
-                            type="number"
                             value={values[el.id] ?? 0}
                         />
                     )}
@@ -144,21 +141,18 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
             <div className="mt-1 space-y-2 border-t border-dashed border-slate-200 pt-2">
                 <div className="space-y-0.5">
                     <div className="flex items-center gap-3">
-                        <input
-                            className={`w-16 rounded-lg border border-rose-200 bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-200${readOnly ? ' cursor-not-allowed opacity-60' : ''}`}
+                        <NumericStepper
                             disabled={readOnly}
                             id={`team-${teamId}-cards-in-hand`}
-                            min="0"
-                            onChange={readOnly ? undefined : (e) => onCardsChange?.('cardsInHand', e.target.value)}
+                            onChange={(val) => onCardsChange?.('cardsInHand', val)}
                             readOnly={readOnly}
-                            step="1"
-                            type="number"
                             value={cardsInHand}
+                            variant="rose"
                         />
                         <InputLabel
                             className="flex-1 cursor-pointer select-none"
                             htmlFor={`team-${teamId}-cards-in-hand`}
-                            value="Cards in Hand"
+                            value="Points in Hand"
                         />
                         <span className="shrink-0 text-xs font-medium text-rose-500">−pts</span>
                     </div>
@@ -169,21 +163,18 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
 
                 <div className="space-y-0.5">
                     <div className="flex items-center gap-3">
-                        <input
-                            className={`w-16 rounded-lg border bg-white px-2 py-1 text-right text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 ${cardsOnTableNegative ? 'border-rose-200 focus:border-rose-400 focus:ring-rose-200' : 'border-emerald-200 focus:border-emerald-400 focus:ring-emerald-200'}${readOnly ? ' cursor-not-allowed opacity-60' : ''}`}
+                        <NumericStepper
                             disabled={readOnly}
                             id={`team-${teamId}-cards-on-table`}
-                            min="0"
-                            onChange={readOnly ? undefined : (e) => onCardsChange?.('cardsOnTable', e.target.value)}
+                            onChange={(val) => onCardsChange?.('cardsOnTable', val)}
                             readOnly={readOnly}
-                            step="1"
-                            type="number"
                             value={cardsOnTable}
+                            variant={cardsOnTableNegative ? 'rose' : 'emerald'}
                         />
                         <InputLabel
                             className="flex-1 cursor-pointer select-none"
                             htmlFor={`team-${teamId}-cards-on-table`}
-                            value="Cards on Table"
+                            value="Points on Table"
                         />
                         <span className={`shrink-0 text-xs font-medium ${cardsOnTableNegative ? 'text-rose-500' : 'text-emerald-600'}`}>
                             {cardsOnTableNegative ? '−pts' : '+pts'}
