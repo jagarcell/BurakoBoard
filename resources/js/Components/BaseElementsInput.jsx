@@ -10,7 +10,7 @@ import InputLabel from '@/Components/InputLabel';
  * table (added to the total) are appended after the base elements list.
  * A computed total is displayed at the bottom unless readOnly is true.
  *
- * @param {Object[]} elements      - Base element objects from the API ({ id, name, label, points, input_type }).
+ * @param {Object[]} elements      - Base element objects from the API ({ id, name, label, points, penalty, input_type }).
  * @param {number}   teamId        - Team identifier; used to generate unique input IDs when multiple teams are shown.
  * @param {Object}   values        - Map of { [elementId]: boolean | number } representing the current element inputs.
  * @param {Function} onChange      - Callback (elementId: number, value: boolean | number) called on every element change.
@@ -20,6 +20,10 @@ import InputLabel from '@/Components/InputLabel';
  * @param {Function} onCardsChange - Callback (field: 'cardsInHand' | 'cardsOnTable', value: string) fired on card input change.
  * @param {Object}   cardErrors    - Validation messages: { cardsInHand?: string, cardsOnTable?: string }.
  * @param {boolean}  readOnly      - When true all inputs are disabled, errors are hidden, and the total row is omitted.
+ *
+ * Logic: When an element has a non-zero `penalty` value and is not active (boolean unchecked or
+ * quantity = 0), the points slot displays the penalty as a negative score (e.g. −100 pts) in
+ * rose/red text, giving the user a visual cue that a deduction will be applied.
  */
 export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false }) {
     // When a score_override boolean element is checked both cardsInHand and
@@ -42,10 +46,14 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
         const raw = values[el.id];
 
         if (el.input_type === 'boolean') {
-            return sum + (raw ? el.points : 0);
+            const isActive = !!raw;
+
+            return sum + (isActive ? el.points : -(el.penalty ?? 0));
         }
 
-        return sum + el.points * (parseInt(raw, 10) || 0);
+        const qty = parseInt(raw, 10) || 0;
+
+        return sum + (qty > 0 ? el.points * qty : -(el.penalty ?? 0));
     }, 0);
 
     const inHand = parseInt(cardsInHand, 10) || 0;
@@ -61,6 +69,13 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
     const renderElement = (el) => {
         const inputId = `team-${teamId}-el-${el.id}`;
         const isBoolean = el.input_type === 'boolean';
+
+        // An element is "active" when its checkbox is checked (boolean) or its
+        // quantity is greater than zero. When inactive and the element carries a
+        // penalty, we surface the penalty as a negative score so the user can see
+        // what deduction they are incurring.
+        const isActive = isBoolean ? !!values[el.id] : (parseInt(values[el.id], 10) || 0) > 0;
+        const showPenalty = (el.penalty ?? 0) > 0 && !isActive;
 
         return (
             <div key={el.id} className="space-y-0.5">
@@ -92,12 +107,14 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                         value={el.label}
                     />
 
-                    <span className="shrink-0 text-xs text-slate-400">
-                        {el.points === 0
-                            ? 'VOID'
-                            : isBoolean
-                                ? `${el.points.toLocaleString()} pts`
-                                : `×${el.points.toLocaleString()} pts`}
+                    <span className={`shrink-0 text-xs ${showPenalty ? 'font-medium text-rose-500' : 'text-slate-400'}`}>
+                        {showPenalty
+                            ? `−${el.penalty.toLocaleString()} pts`
+                            : el.points === 0
+                                ? 'VOID'
+                                : isBoolean
+                                    ? `${el.points.toLocaleString()} pts`
+                                    : `×${el.points.toLocaleString()} pts`}
                     </span>
                 </div>
 

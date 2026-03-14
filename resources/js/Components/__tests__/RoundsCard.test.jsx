@@ -435,6 +435,50 @@ describe('RoundsCard', () => {
         expect(burakoCheckboxes[1]).toBeChecked();
     });
 
+    it('subtracts element penalty from the submitted score when a boolean element with penalty is unchecked', async () => {
+        const penalizedBurako = { id: 1, name: 'burako', label: 'Burako', points: 100, penalty: 100, input_type: 'boolean' };
+        axios.get.mockResolvedValue({ data: { data: { base_elements: [penalizedBurako] } } });
+        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], []));
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        // Leave Burako unchecked for both teams — penalty of -100 applies to each
+        await screen.findAllByLabelText('Burako');
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+                scores: [
+                    { team_id: 10, points: -100 },
+                    { team_id: 11, points: -100 },
+                ],
+            }),
+        );
+    });
+
+    it('uses element points (not penalty) in the submitted score when a boolean element with penalty is checked', async () => {
+        const penalizedBurako = { id: 1, name: 'burako', label: 'Burako', points: 100, penalty: 100, input_type: 'boolean' };
+        axios.get.mockResolvedValue({ data: { data: { base_elements: [penalizedBurako] } } });
+        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], []));
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+        // Check Burako for Team Alpha only
+        await userEvent.click(burakoCheckboxes[0]);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+                scores: [
+                    { team_id: 10, points: 100 },  // checked → normal 100 pts
+                    { team_id: 11, points: -100 },  // unchecked → -100 penalty
+                ],
+            }),
+        );
+    });
+
     describe('round draft persistence', () => {
         it('pre-fills inputs from a saved draft when the game loads', async () => {
             const draftResponse = {
@@ -743,6 +787,78 @@ describe('RoundsCard', () => {
             await waitFor(() =>
                 expect(screen.queryByText(/scoring detail/i)).not.toBeInTheDocument(),
             );
+        });
+    });
+
+    describe('hasTwoTeams prop', () => {
+        it('shows the scoring form when hasTwoTeams is true even with no local teams', async () => {
+            axios.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+
+            render(
+                <RoundsCard
+                    hasTwoTeams={true}
+                    initialRounds={[]}
+                    initialTeams={[]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Round 1');
+            expect(
+                screen.queryByText('Add both teams before recording rounds.'),
+            ).not.toBeInTheDocument();
+        });
+
+        it('still shows the "Add both teams" message when hasTwoTeams is false and no teams are present', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams={false}
+                    initialRounds={[]}
+                    initialTeams={[]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Add both teams before recording rounds.');
+        });
+
+        it('shows the scoring form when hasTwoTeams becomes true after team assignment', async () => {
+            axios.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+
+            const { rerender } = render(
+                <RoundsCard
+                    hasTwoTeams={false}
+                    initialRounds={[]}
+                    initialTeams={[]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            expect(
+                screen.getByText('Add both teams before recording rounds.'),
+            ).toBeInTheDocument();
+
+            rerender(
+                <RoundsCard
+                    hasTwoTeams={true}
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Round 1');
+            expect(
+                screen.queryByText('Add both teams before recording rounds.'),
+            ).not.toBeInTheDocument();
         });
     });
 });

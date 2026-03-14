@@ -146,8 +146,8 @@ describe('GameCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'New' }));
 
         await userEvent.type(screen.getByLabelText('Game name'), 'Finals Table');
-        await userEvent.clear(screen.getByLabelText('Winner score'));
-        await userEvent.type(screen.getByLabelText('Winner score'), '3000');
+        await userEvent.clear(screen.getByLabelText('Winning score'));
+        await userEvent.type(screen.getByLabelText('Winning score'), '3000');
         await userEvent.click(screen.getByRole('button', { name: 'Accept' }));
 
         await waitFor(() =>
@@ -202,7 +202,7 @@ describe('GameCard', () => {
         expect(screen.getByText('Edit game')).toBeInTheDocument();
 
         const nameInput = screen.getByLabelText('Game name');
-        const scoreInput = screen.getByLabelText('Winner score');
+        const scoreInput = screen.getByLabelText('Winning score');
 
         expect(nameInput).toHaveValue('Late Table');
         expect(scoreInput).toHaveValue(2000);

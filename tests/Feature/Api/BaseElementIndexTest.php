@@ -30,9 +30,9 @@ class BaseElementIndexTest extends TestCase
     /**
      * Ensure the base elements index returns all elements with the correct fields.
      *
-     * @return void Verifies the endpoint exposes id, name, label, points, and input_type.
-     * Logic: create a boolean and a quantity element, call the endpoint, and assert both rows
-     * are present with correctly serialized fields.
+     * @return void Verifies the endpoint exposes id, name, label, points, penalty, and input_type.
+     * Logic: create a boolean element with a penalty value and a quantity element, call the endpoint, and assert both rows
+     * are present with correctly serialized fields including the penalty column.
      */
     public function test_base_elements_index_returns_all_elements_with_correct_fields(): void
     {
@@ -40,6 +40,7 @@ class BaseElementIndexTest extends TestCase
             'name'       => 'burako',
             'label'      => 'Burako',
             'points'     => 100,
+            'penalty'    => 100,
             'input_type' => 'boolean',
         ]);
 
@@ -59,9 +60,11 @@ class BaseElementIndexTest extends TestCase
             ->assertJsonPath('data.base_elements.0.name', 'burako')
             ->assertJsonPath('data.base_elements.0.label', 'Burako')
             ->assertJsonPath('data.base_elements.0.points', 100)
+            ->assertJsonPath('data.base_elements.0.penalty', 100)
             ->assertJsonPath('data.base_elements.0.input_type', 'boolean')
             ->assertJsonPath('data.base_elements.1.name', 'clean_canastra')
             ->assertJsonPath('data.base_elements.1.points', 200)
+            ->assertJsonPath('data.base_elements.1.penalty', 0)
             ->assertJsonPath('data.base_elements.1.input_type', 'quantity');
     }
 
@@ -109,6 +112,7 @@ class BaseElementIndexTest extends TestCase
         $this->assertArrayHasKey('name', $element);
         $this->assertArrayHasKey('label', $element);
         $this->assertArrayHasKey('points', $element);
+        $this->assertArrayHasKey('penalty', $element);
         $this->assertArrayHasKey('input_type', $element);
         $this->assertArrayNotHasKey('created_at', $element);
         $this->assertArrayNotHasKey('updated_at', $element);

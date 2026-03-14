@@ -28,6 +28,7 @@ class BaseElementSeeder extends Seeder
                 'label'      => 'Burako',
                 'input_type' => 'boolean',
                 'points'     => 100,
+                'penalty'    => 100,
             ],
             [
                 'name'               => 'clean_cut',
@@ -59,7 +60,7 @@ class BaseElementSeeder extends Seeder
                 'name'       => 'clean_comodin_canastra',
                 'label'      => 'Clean Comodin Canastra',
                 'input_type' => 'boolean',
-                'points'     => 3000,
+                'points'     => 2000,
             ],
             [
                 'name'       => 'dirty_comodin_canastra',
@@ -78,7 +79,7 @@ class BaseElementSeeder extends Seeder
                 'name'       => 'clean_a_canastra',
                 'label'      => 'Clean A Canastra',
                 'input_type' => 'quantity',
-                'points'     => 600,
+                'points'     => 500,
             ],
             [
                 'name'       => 'dirty_a_canastra',
@@ -95,6 +96,7 @@ class BaseElementSeeder extends Seeder
                     'label'              => $element['label'],
                     'input_type'         => $element['input_type'],
                     'points'             => $element['points'],
+                    'penalty'            => $element['penalty'] ?? 0,
                     'mutually_exclusive' => $element['mutually_exclusive'] ?? false,
                     'score_override'     => $element['score_override'] ?? false,
                 ]

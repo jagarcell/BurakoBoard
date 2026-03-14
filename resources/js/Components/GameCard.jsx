@@ -145,7 +145,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
                 name: trimmedName === '' ? 'A game name is required.' : undefined,
                 target_points:
                     Number.isNaN(targetPoints) || targetPoints < 1
-                        ? 'Winner score must be at least 1.'
+                        ? 'Winning score must be at least 1.'
                         : undefined,
             });
 
@@ -203,7 +203,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
                 name: trimmedName === '' ? 'A game name is required.' : undefined,
                 target_points:
                     Number.isNaN(targetPoints) || targetPoints < 1
-                        ? 'Winner score must be at least 1.'
+                        ? 'Winning score must be at least 1.'
                         : undefined,
             });
 
@@ -353,7 +353,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
                     <div className="space-y-2">
                         <InputLabel
                             htmlFor="edit-game-target-points"
-                            value="Winner score"
+                            value="Winning score"
                         />
                         <TextInput
                             className="block w-full rounded-xl"
@@ -422,7 +422,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
                     <div className="space-y-2">
                         <InputLabel
                             htmlFor="new-game-target-points"
-                            value="Winner score"
+                            value="Winning score"
                         />
                         <TextInput
                             className="block w-full rounded-xl"

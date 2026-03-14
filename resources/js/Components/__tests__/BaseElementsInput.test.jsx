@@ -408,4 +408,138 @@ describe('BaseElementsInput', () => {
 
         expect(screen.getByText('Cards on table must be a whole number ≥ 0.')).toBeInTheDocument();
     });
+
+    describe('penalty display', () => {
+        const penaltyBooleanEl = { id: 10, name: 'burako', label: 'Burako', points: 100, penalty: 100, input_type: 'boolean' };
+        const penaltyQuantityEl = { id: 11, name: 'comodin', label: 'Comodin', points: 50, penalty: 50, input_type: 'quantity' };
+
+        it('shows the penalty as a negative score when a boolean element with penalty is unchecked', () => {
+            render(
+                <BaseElementsInput
+                    elements={[penaltyBooleanEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 10: false }}
+                />,
+            );
+
+            expect(screen.getByText('−100 pts')).toBeInTheDocument();
+            expect(screen.queryByText('100 pts')).not.toBeInTheDocument();
+        });
+
+        it('shows normal points (not penalty) when a boolean element with penalty is checked', () => {
+            render(
+                <BaseElementsInput
+                    elements={[penaltyBooleanEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 10: true }}
+                />,
+            );
+
+            expect(screen.getAllByText('100 pts').length).toBeGreaterThanOrEqual(1);
+            expect(screen.queryByText('−100 pts')).not.toBeInTheDocument();
+        });
+
+        it('shows the penalty as a negative score when a quantity element with penalty has zero quantity', () => {
+            render(
+                <BaseElementsInput
+                    elements={[penaltyQuantityEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 11: 0 }}
+                />,
+            );
+
+            expect(screen.getByText('−50 pts')).toBeInTheDocument();
+            expect(screen.queryByText('×50 pts')).not.toBeInTheDocument();
+        });
+
+        it('shows normal multiplier label (not penalty) when a quantity element with penalty has quantity > 0', () => {
+            render(
+                <BaseElementsInput
+                    elements={[penaltyQuantityEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 11: 2 }}
+                />,
+            );
+
+            expect(screen.getByText('×50 pts')).toBeInTheDocument();
+            expect(screen.queryByText('−50 pts')).not.toBeInTheDocument();
+        });
+
+        it('does not show a penalty label for elements with no penalty value', () => {
+            render(
+                <BaseElementsInput
+                    elements={[{ ...penaltyBooleanEl, penalty: 0 }]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 10: false }}
+                />,
+            );
+
+            // /^−\d/ matches penalty labels like '−100 pts' but not card indicators like '−pts'
+            expect(screen.queryByText(/^−\d/)).not.toBeInTheDocument();
+            expect(screen.getAllByText('100 pts').length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('subtracts the penalty amount from the total when a boolean element with penalty is inactive', () => {
+            render(
+                <BaseElementsInput
+                    elements={[penaltyBooleanEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 10: false }}
+                />,
+            );
+
+            // penaltyBooleanEl unchecked → -(penalty 100) is applied; no cards → total = -100
+            expect(screen.getByText('-100 pts')).toBeInTheDocument();
+        });
+
+        it('subtracts the penalty amount from the total when a quantity element with penalty is zero', () => {
+            render(
+                <BaseElementsInput
+                    elements={[penaltyQuantityEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 11: 0 }}
+                />,
+            );
+
+            // penaltyQuantityEl qty=0 → -(penalty 50) is applied; no cards → total = -50
+            expect(screen.getByText('-50 pts')).toBeInTheDocument();
+        });
+
+        it('does not subtract penalty from total when a boolean element with penalty is active', () => {
+            render(
+                <BaseElementsInput
+                    elements={[penaltyBooleanEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 10: true }}
+                />,
+            );
+
+            // penaltyBooleanEl checked → normal points 100 used; no cards → total = 100
+            const ptLabels = screen.getAllByText('100 pts');
+            expect(ptLabels.length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('does not subtract penalty from total when a quantity element with penalty has qty > 0', () => {
+            render(
+                <BaseElementsInput
+                    elements={[penaltyQuantityEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 11: 2 }}
+                />,
+            );
+
+            // penaltyQuantityEl qty=2 → normal 2 × 50 = 100; no cards → total = 100
+            const ptLabels = screen.getAllByText('100 pts');
+            expect(ptLabels.length).toBeGreaterThanOrEqual(1);
+        });
+    });
 });

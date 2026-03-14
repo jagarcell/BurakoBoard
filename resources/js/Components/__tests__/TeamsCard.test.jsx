@@ -830,4 +830,125 @@ describe('TeamsCard', () => {
         expect(screen.queryByRole('generic', { name: 'Team Alpha winner' })).not.toBeInTheDocument();
         expect(screen.queryByRole('generic', { name: 'Team Beta winner' })).not.toBeInTheDocument();
     });
+
+    it('calls onTeamsChange with the updated teams list when a new team is created', async () => {
+        setupGetMocks();
+
+        const onTeamsChange = vi.fn();
+        const createdTeam = makeTeam(20, 'Team Alpha');
+        axios.post.mockResolvedValueOnce(makeGameSummary([createdTeam]));
+
+        render(<TeamsCard initialTeams={[]} onTeamsChange={onTeamsChange} selectedGame={selectedGame} />);
+
+        await waitFor(() =>
+            expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+        );
+
+        await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+        await userEvent.type(screen.getByLabelText('Team name'), 'Team Alpha');
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
+
+        await waitFor(() =>
+            expect(onTeamsChange).toHaveBeenCalledWith([createdTeam]),
+        );
+    });
+
+    it('calls onTeamsChange with the updated teams list when an existing team is edited', async () => {
+        setupGetMocks();
+
+        const onTeamsChange = vi.fn();
+        const updatedTeam = makeTeam(10, 'Team Alpha Updated');
+        axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} onTeamsChange={onTeamsChange} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+        const nameInput = screen.getByLabelText('Team name');
+        await userEvent.clear(nameInput);
+        await userEvent.type(nameInput, 'Team Alpha Updated');
+        await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+        await waitFor(() =>
+            expect(onTeamsChange).toHaveBeenCalledWith([updatedTeam]),
+        );
+    });
+
+    it('calls onTeamsChange with the updated teams list when an existing team is added via slot selector', async () => {
+        setupGetMocks(mockAllTeams);
+
+        const onTeamsChange = vi.fn();
+        const copiedTeam = makeTeam(20, 'Old Team A');
+        axios.post.mockResolvedValueOnce(makeGameSummary([copiedTeam]));
+
+        render(<TeamsCard initialTeams={[]} onTeamsChange={onTeamsChange} selectedGame={selectedGame} />);
+
+        const selectors = await screen.findAllByRole('combobox');
+        await waitFor(() => within(selectors[0]).getByRole('option', { name: 'Old Team A' }));
+        await userEvent.selectOptions(selectors[0], '100');
+        await userEvent.click(screen.getByRole('button', { name: 'Add team' }));
+
+        await waitFor(() =>
+            expect(onTeamsChange).toHaveBeenCalledWith([copiedTeam]),
+        );
+    });
+
+    it('calls onTeamCreated after a new team is created', async () => {
+        setupGetMocks();
+
+        const onTeamCreated = vi.fn();
+        const createdTeam = makeTeam(20, 'Team Alpha');
+        axios.post.mockResolvedValueOnce(makeGameSummary([createdTeam]));
+
+        render(<TeamsCard initialTeams={[]} onTeamCreated={onTeamCreated} selectedGame={selectedGame} />);
+
+        await waitFor(() =>
+            expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+        );
+
+        await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+        await userEvent.type(screen.getByLabelText('Team name'), 'Team Alpha');
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
+
+        await waitFor(() => expect(onTeamCreated).toHaveBeenCalledTimes(1));
+    });
+
+    it('calls onTeamCreated after an existing team is added via slot selector', async () => {
+        setupGetMocks(mockAllTeams);
+
+        const onTeamCreated = vi.fn();
+        const copiedTeam = makeTeam(20, 'Old Team A');
+        axios.post.mockResolvedValueOnce(makeGameSummary([copiedTeam]));
+
+        render(<TeamsCard initialTeams={[]} onTeamCreated={onTeamCreated} selectedGame={selectedGame} />);
+
+        const selectors = await screen.findAllByRole('combobox');
+        await waitFor(() => within(selectors[0]).getByRole('option', { name: 'Old Team A' }));
+        await userEvent.selectOptions(selectors[0], '100');
+        await userEvent.click(screen.getByRole('button', { name: 'Add team' }));
+
+        await waitFor(() => expect(onTeamCreated).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not call onTeamCreated when an existing team is edited', async () => {
+        setupGetMocks();
+
+        const onTeamCreated = vi.fn();
+        const updatedTeam = makeTeam(10, 'Team Alpha Updated');
+        axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+
+        render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} onTeamCreated={onTeamCreated} selectedGame={selectedGame} />);
+
+        await screen.findByText('Team Alpha');
+        await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+        const nameInput = screen.getByLabelText('Team name');
+        await userEvent.clear(nameInput);
+        await userEvent.type(nameInput, 'Team Alpha Updated');
+        await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+        await waitFor(() => expect(screen.getByText('Team Alpha Updated')).toBeInTheDocument());
+        expect(onTeamCreated).not.toHaveBeenCalled();
+    });
 });

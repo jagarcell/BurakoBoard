@@ -278,6 +278,20 @@ class BurakoGameService
     }
 
     /**
+     * Determine whether a game has two teams assigned.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return bool True when the game already has two teams, false otherwise.
+     * Logic: verify the game exists (throws 404 if missing), then delegate the team count check to the repository.
+     */
+    public function gameHasTwoTeams(int $gameId): bool
+    {
+        $this->repository->findGameOrFail($gameId);
+
+        return $this->repository->gameHasTwoTeams($gameId);
+    }
+
+    /**
      * Recompute and persist current_score for every team in a game from its round history.
      *
      * @param  int  $gameId  Identifier of the game whose team scores need syncing.

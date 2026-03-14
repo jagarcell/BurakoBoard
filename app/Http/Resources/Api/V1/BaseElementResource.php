@@ -12,8 +12,9 @@ class BaseElementResource extends JsonResource
      *
      * @param  \Illuminate\Http\Request  $request  Current request context.
      * @return array<string, mixed> Serialized base element fields consumed by the round scoring form.
-     * Logic: expose id, name, label, points, input_type and mutually_exclusive so the frontend can render the correct
-     * input control (checkbox for boolean, number for quantity) and calculate point contributions.
+     * Logic: expose id, name, label, points, penalty, input_type, mutually_exclusive and score_override so the
+     * frontend can render the correct input control (checkbox for boolean, number for quantity), calculate point
+     * contributions, and apply penalty deductions when the element is not checked or has no quantity.
      */
     public function toArray(Request $request): array
     {
@@ -22,6 +23,7 @@ class BaseElementResource extends JsonResource
             'name'               => $this->resource->name,
             'label'              => $this->resource->label,
             'points'             => (int) $this->resource->points,
+            'penalty'            => (int) $this->resource->penalty,
             'input_type'         => $this->resource->input_type,
             'mutually_exclusive' => (bool) $this->resource->mutually_exclusive,
             'score_override'     => (bool) $this->resource->score_override,

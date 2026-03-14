@@ -11,12 +11,29 @@ export default function Dashboard() {
     const [gameSummary, setGameSummary] = useState(null);
     const [scoreUpdate, setScoreUpdate] = useState(null);
     const [isFetching, setIsFetching] = useState(false);
+    const [hasTwoTeams, setHasTwoTeams] = useState(false);
+
+    const handleTeamsChange = (newTeams) => {
+        setGameSummary((prev) => (prev ? { ...prev, teams: newTeams } : prev));
+    };
+
+    const handleTeamCreated = () => {
+        if (! selectedGame?.id) return;
+
+        axios
+            .get(`/api/v1/games/${selectedGame.id}/has-two-teams`)
+            .then((response) => {
+                console.log('Has two teams:', response.data?.data?.has_two_teams ?? false);
+                setHasTwoTeams(response.data?.data?.has_two_teams ?? false)})
+            .catch(() => {});
+    };
 
     useEffect(() => {
         if (! selectedGame) {
             setGameSummary(null);
             setScoreUpdate(null);
             setIsFetching(false);
+            setHasTwoTeams(false);
 
             return;
         }
@@ -30,11 +47,13 @@ export default function Dashboard() {
                 if (! isActive) return;
 
                 const summary = response.data?.data?.game ?? {};
+                const teams = summary.teams ?? [];
 
                 setGameSummary({
-                    teams: summary.teams ?? [],
+                    teams,
                     rounds: summary.rounds ?? [],
                 });
+                setHasTwoTeams(teams.length >= 2);
                 setIsFetching(false);
                 setScoreUpdate(null);
             })
@@ -42,6 +61,7 @@ export default function Dashboard() {
                 if (! isActive) return;
 
                 setGameSummary({ teams: [], rounds: [] });
+                setHasTwoTeams(false);
                 setIsFetching(false);
             });
 
@@ -70,11 +90,14 @@ export default function Dashboard() {
                     <TeamsCard
                         initialTeams={initialTeams}
                         isFetching={isFetching}
+                        onTeamCreated={handleTeamCreated}
+                        onTeamsChange={handleTeamsChange}
                         scoreUpdate={scoreUpdate}
                         selectedGame={selectedGame}
                     />
 
                     <RoundsCard
+                        hasTwoTeams={hasTwoTeams}
                         initialRounds={initialRounds}
                         initialTeams={initialTeams}
                         isFetching={isFetching}

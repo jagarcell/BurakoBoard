@@ -29,6 +29,7 @@ class BaseElement extends Model
         'name',
         'label',
         'points',
+        'penalty',
         'input_type',
         'mutually_exclusive',
         'score_override',
@@ -41,6 +42,7 @@ class BaseElement extends Model
      */
     protected $casts = [
         'points'             => 'integer',
+        'penalty'            => 'integer',
         'mutually_exclusive' => 'boolean',
         'score_override'     => 'boolean',
     ];
