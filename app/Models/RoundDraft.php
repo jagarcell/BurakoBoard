@@ -28,6 +28,7 @@ class RoundDraft extends Model
      */
     protected $fillable = [
         'game_id',
+        'round_number',
         'base_inputs',
         'card_inputs',
     ];
