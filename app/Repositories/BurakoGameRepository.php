@@ -173,6 +173,20 @@ class BurakoGameRepository
     }
 
     /**
+     * Determine whether a game already has exactly two teams assigned.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return bool True when the game has two or more team rows, false otherwise.
+     * Logic: count team rows scoped to the game and return true only when the count reaches the two-team requirement.
+     */
+    public function gameHasTwoTeams(int $gameId): bool
+    {
+        return Team::query()
+            ->where('game_id', $gameId)
+            ->count('id') >= 2;
+    }
+
+    /**
      * Calculate the next round number for a game.
      *
      * @param  int  $gameId  Identifier of the game.
@@ -348,13 +362,13 @@ class BurakoGameRepository
      *
      * @return \Illuminate\Support\Collection<int, \App\Models\BaseElement> All base elements ordered by id.
      * Logic: fetch the full base_elements catalogue ordered by id so the round scoring form can render
-     * the correct input controls (checkbox for boolean, number input for quantity) with their point values
-     * and mutual-exclusivity flag.
+     * the correct input controls (checkbox for boolean, number input for quantity) with their point values,
+     * penalty deduction, and mutual-exclusivity flag.
      */
     public function getBaseElements(): Collection
     {
         return BaseElement::query()
-            ->select(['id', 'name', 'label', 'points', 'input_type', 'mutually_exclusive', 'score_override'])
+            ->select(['id', 'name', 'label', 'points', 'penalty', 'input_type', 'mutually_exclusive', 'score_override'])
             ->orderBy('id')
             ->get();
     }

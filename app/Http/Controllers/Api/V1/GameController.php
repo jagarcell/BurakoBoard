@@ -86,4 +86,20 @@ class GameController extends Controller
             'game' => new GameListItemResource($game),
         ]);
     }
+
+    /**
+     * Report whether a game already has two teams assigned.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Http\JsonResponse Response containing a boolean has_two_teams flag.
+     * Logic: delegate the team count check to the service and return a lightweight flag the frontend uses to determine when the round scoring inputs should become visible.
+     */
+    public function hasTwoTeams(int $gameId): JsonResponse
+    {
+        $hasTwoTeams = $this->service->gameHasTwoTeams($gameId);
+
+        return response()->json([
+            'has_two_teams' => $hasTwoTeams,
+        ]);
+    }
 }
