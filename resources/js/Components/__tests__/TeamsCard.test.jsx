@@ -1118,5 +1118,62 @@ describe('TeamsCard', () => {
                 expect(screen.getByRole('generic', { name: 'Score difference' })).toHaveTextContent('300'),
             );
         });
+
+        describe('arrow direction', () => {
+            it('applies an upward arrow above the rectangle when the first team leads', async () => {
+                setupGetMocks();
+
+                const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1200 };
+                const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+                render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+                await screen.findByText('Team Alpha');
+
+                // In jsdom getBoundingClientRect returns width:0, arrowHalfWidth=16, triangleWidth=32px.
+                const row = screen.getByRole('generic', { name: 'Score difference' });
+                const triangle = row.firstChild.firstChild;
+
+                expect(triangle).toHaveStyle({
+                    clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+                    width: '32px',
+                });
+            });
+
+            it('applies a downward arrow below the rectangle when the second team leads', async () => {
+                setupGetMocks();
+
+                const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 500 };
+                const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 900 };
+
+                render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+                await screen.findByText('Team Alpha');
+
+                const row = screen.getByRole('generic', { name: 'Score difference' });
+                const triangle = row.lastChild.firstChild;
+
+                expect(triangle).toHaveStyle({
+                    clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)',
+                    width: '32px',
+                });
+            });
+
+            it('renders only the rectangle with no triangle when both teams are tied', async () => {
+                setupGetMocks();
+
+                const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 750 };
+                const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 750 };
+
+                render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={selectedGame} />);
+
+                await screen.findByText('Team Alpha');
+
+                const row = screen.getByRole('generic', { name: 'Score difference' });
+
+                expect(row.childElementCount).toBe(1);
+                expect(row.style.clipPath).toBe('');
+            });
+        });
     });
 });
