@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Fragment, startTransition, useEffect, useRef, useState } from 'react';
+import { Fragment, startTransition, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -27,6 +27,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     const [editingTeam, setEditingTeam] = useState(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
     const duplicatePlayerErrorTimer = useRef(null);
+    const diffLabelRef = useRef(null);
+    const [arrowHalfWidth, setArrowHalfWidth] = useState(null);
 
     // Sync teams whenever the parent's initialTeams reference changes (data loaded or game changed)
     useEffect(() => {
@@ -60,6 +62,15 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
             ),
         );
     }, [scoreUpdate]);
+
+    // Measure the "Difference" label width when both teams become available so the
+    // arrowhead clip-path can be sized exactly to the label text + 1rem each side.
+    useLayoutEffect(() => {
+        if (diffLabelRef.current) {
+            const w = diffLabelRef.current.getBoundingClientRect().width;
+            setArrowHalfWidth(Math.round(w / 2) + 16);
+        }
+    }, [teams.length === 2]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const resetModal = () => {
         clearTimeout(duplicatePlayerErrorTimer.current);
@@ -328,6 +339,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     /** Trim and collapse inner whitespace so '  Team  Alpha  ' → 'Team Alpha'. */
     const normalizeName = (str) => str.trim().replace(/\s+/g, ' ');
 
+    const triangleWidth = arrowHalfWidth !== null ? `${arrowHalfWidth * 2}px` : null;
+
     return (
         <>
             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
@@ -385,6 +398,12 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                             const team = teams[slot];
                             const scoreDiff = teams.length === 2
                                 ? Math.abs(teams[0].current_score - teams[1].current_score)
+                                : null;
+
+                            const arrowDir = teams.length === 2
+                                ? (teams[0].current_score > teams[1].current_score ? 'up'
+                                    : teams[1].current_score > teams[0].current_score ? 'down'
+                                    : 'none')
                                 : null;
 
                             return (
@@ -494,16 +513,46 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                     )}
                                 </div>
                                 {slot === 0 && scoreDiff !== null && (
-                                    <div
-                                        aria-label="Score difference"
-                                        className="bg-slate-50 px-6 py-3 text-center"
-                                    >
-                                        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                                            Difference
-                                        </p>
-                                        <p className="text-lg font-bold text-slate-700">
-                                            {scoreDiff}
-                                        </p>
+                                    <div aria-label="Score difference">
+                                        {arrowDir === 'up' && triangleWidth !== null && (
+                                            <div className="flex justify-center">
+                                                <div
+                                                    className="bg-indigo-50"
+                                                    style={{
+                                                        width: triangleWidth,
+                                                        height: '1.5rem',
+                                                        clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                        <div className={`px-6 py-3 text-center ${arrowDir !== 'none' ? 'bg-indigo-50' : 'bg-slate-50'}`}>
+                                            <p
+                                                ref={diffLabelRef}
+                                                className={`w-fit mx-auto text-xs font-semibold uppercase tracking-[0.25em] ${
+                                                    arrowDir !== 'none' ? 'text-indigo-400' : 'text-slate-400'
+                                                }`}
+                                            >
+                                                Difference
+                                            </p>
+                                            <p className={`text-lg font-bold ${
+                                                arrowDir !== 'none' ? 'text-indigo-700' : 'text-slate-700'
+                                            }`}>
+                                                {scoreDiff}
+                                            </p>
+                                        </div>
+                                        {arrowDir === 'down' && triangleWidth !== null && (
+                                            <div className="flex justify-center">
+                                                <div
+                                                    className="bg-indigo-50"
+                                                    style={{
+                                                        width: triangleWidth,
+                                                        height: '1.5rem',
+                                                        clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)',
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 </Fragment>
