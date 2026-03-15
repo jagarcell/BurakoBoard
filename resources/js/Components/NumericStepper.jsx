@@ -6,7 +6,7 @@
  * @param {number|string} value     - Controlled value passed to the underlying input.
  * @param {Function}      onChange  - Called with the new value as a string on every change.
  * @param {boolean}       disabled  - Disables all controls when true.
- * @param {boolean}       readOnly  - Makes all controls read-only when true.
+ * @param {boolean}       readOnly  - When true the − and + buttons are hidden and the input becomes read-only; only the value is shown.
  * @param {number}        min       - Minimum allowed value (default 0). Decrement is blocked at this limit.
  * @param {number}        step      - Amount added or subtracted on each button click (default 1).
  * @param {string}        variant   - Colour scheme for borders and focus ring: 'default' | 'rose' | 'emerald'.
@@ -14,7 +14,9 @@
  *
  * @return {JSX.Element}
  *
- * Logic: Renders a flex row: [− button][number input][+ button]. The native browser spin-button
+ * Logic: Renders a flex row: [− button][number input][+ button]. When `readOnly` is true the two
+ * buttons are not rendered and the input gets a full border with rounded corners so it stands alone
+ * as a plain display value. The native browser spin-button
  * arrows are suppressed via Tailwind `[appearance:textfield]` and webkit pseudo-element overrides.
  * Clicking − decrements the current value by `step`, clamped at `min`. Clicking + increments by
  * `step`. Both buttons are disabled when `disabled` or `readOnly` is true; the decrement button is
@@ -69,19 +71,25 @@ export default function NumericStepper({
 
     return (
         <div className={`flex items-center ${className}`}>
-            <button
-                aria-label="Decrease"
-                className={`${sharedBtn} rounded-l-lg border-r-0`}
-                disabled={inactive || current <= min}
-                onClick={decrement}
-                tabIndex={-1}
-                type="button"
-            >
-                −
-            </button>
+            {!readOnly && (
+                <button
+                    aria-label="Decrease"
+                    className={`${sharedBtn} rounded-l-lg border-r-0`}
+                    disabled={inactive || current <= min}
+                    onClick={decrement}
+                    tabIndex={-1}
+                    type="button"
+                >
+                    −
+                </button>
+            )}
 
             <input
-                className={`h-7 w-10 border-y ${v.border} bg-white px-0 py-1 text-center text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 ${v.focus} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none${disabled ? ' cursor-not-allowed opacity-60' : ''}`}
+                className={`h-7 w-10 bg-white px-0 py-1 text-center text-sm text-slate-900 shadow-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none${
+                    readOnly
+                        ? ` border ${v.border} rounded-lg`
+                        : ` border-y ${v.border} focus:outline-none focus:ring-2 ${v.focus}`
+                }${disabled ? ' cursor-not-allowed opacity-60' : ''}`}
                 disabled={disabled}
                 id={id}
                 min={min}
@@ -92,16 +100,18 @@ export default function NumericStepper({
                 value={value}
             />
 
-            <button
-                aria-label="Increase"
-                className={`${sharedBtn} rounded-r-lg border-l-0`}
-                disabled={inactive}
-                onClick={increment}
-                tabIndex={-1}
-                type="button"
-            >
-                +
-            </button>
+            {!readOnly && (
+                <button
+                    aria-label="Increase"
+                    className={`${sharedBtn} rounded-r-lg border-l-0`}
+                    disabled={inactive}
+                    onClick={increment}
+                    tabIndex={-1}
+                    type="button"
+                >
+                    +
+                </button>
+            )}
         </div>
     );
 }

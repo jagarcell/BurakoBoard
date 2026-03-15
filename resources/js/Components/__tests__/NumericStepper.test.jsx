@@ -135,4 +135,31 @@ describe('NumericStepper', () => {
 
         expect(onChange).toHaveBeenLastCalledWith('7');
     });
+
+    describe('readOnly mode', () => {
+        it('hides the decrease and increase buttons when readOnly is true', () => {
+            render(<NumericStepper id="test-input" onChange={() => {}} readOnly value={3} />);
+
+            expect(screen.queryByRole('button', { name: /decrease/i })).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /increase/i })).not.toBeInTheDocument();
+        });
+
+        it('still renders the input with the correct value when readOnly is true', () => {
+            render(<NumericStepper id="test-input" onChange={() => {}} readOnly value={7} />);
+
+            expect(screen.getByRole('spinbutton')).toBeInTheDocument();
+            expect(screen.getByRole('spinbutton')).toHaveValue(7);
+        });
+
+        it('does not call onChange when the input is changed while readOnly', async () => {
+            const onChange = vi.fn();
+
+            render(<NumericStepper id="test-input" onChange={onChange} readOnly value={3} />);
+
+            // readOnly input ignores user typing
+            await userEvent.type(screen.getByRole('spinbutton'), '9');
+
+            expect(onChange).not.toHaveBeenCalled();
+        });
+    });
 });
