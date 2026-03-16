@@ -224,6 +224,7 @@ class BurakoGameService
         $player = $this->resolvePlayerForPayload($payload);
 
         $this->repository->attachPlayerToTeam($team->id, $player->id);
+        $this->repository->assignPlayerSeat($gameId, $team->id, $player->id);
 
         return $this->repository->getGameSummary($gameId);
     }
@@ -250,6 +251,7 @@ class BurakoGameService
 
         $this->repository->findTeamInGameOrFail($gameId, $teamId);
 
+        $this->repository->removePlayerSeatForTeam($teamId, $playerId);
         $this->repository->detachPlayerFromTeam($teamId, $playerId);
 
         return $this->repository->getGameSummary($gameId);

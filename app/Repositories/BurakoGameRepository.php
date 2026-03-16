@@ -523,13 +523,19 @@ class BurakoGameRepository
 
         $playersByTeam = DB::table('team_player')
             ->join('players', 'players.id', '=', 'team_player.player_id')
+            ->leftJoin('game_player_seat', function ($join) use ($gameId): void {
+                $join->on('game_player_seat.player_id', '=', 'players.id')
+                    ->where('game_player_seat.game_id', '=', $gameId);
+            })
             ->whereIn('team_player.team_id', $teams->pluck('id')->all())
+            ->orderByRaw('COALESCE(game_player_seat.seat_number, 999999)')
             ->orderBy('players.id')
             ->get([
                 'team_player.team_id',
                 'players.id as player_id',
                 'players.user_id',
                 'players.display_name',
+                'game_player_seat.seat_number',
             ])
             ->groupBy('team_id');
 
@@ -567,6 +573,7 @@ class BurakoGameRepository
                     'id' => (int) $player->player_id,
                     'user_id' => $player->user_id === null ? null : (int) $player->user_id,
                     'display_name' => $player->display_name,
+                    'seat_number' => $player->seat_number !== null ? (int) $player->seat_number : null,
                 ])
                 ->values()
                 ->all();
@@ -677,6 +684,76 @@ class BurakoGameRepository
         RoundDraft::query()
             ->where('game_id', $gameId)
             ->where('round_number', 0)
+            ->delete();
+    }
+
+    /**
+     * Compute and persist the seat number for a player joining a team in a game.
+     *
+     * @param  int  $gameId    Identifier of the game.
+     * @param  int  $teamId    Identifier of the team the player is joining.
+     * @param  int  $playerId  Identifier of the player being seated.
+     * @return void Inserts or replaces the player's seat assignment for this game.
+     * Logic:
+     *   1. Determine the team's slot (0 = first team by id, 1 = second team by id) within the game
+     *      by ordering game_team rows by teams.id ascending.
+     *   2. Count how many players from this team already have a seat in this game to establish
+     *      the next position.
+     *   3. Compute: slot 0 → position * 2 + 1 (odd, 1 3 5…); slot 1 → position * 2 + 2 (even, 2 4 6…).
+     *   4. Insert the row, ignoring duplicates to keep the operation idempotent.
+     */
+    public function assignPlayerSeat(int $gameId, int $teamId, int $playerId): void
+    {
+        $teamIds = DB::table('game_team')
+            ->join('teams', 'teams.id', '=', 'game_team.team_id')
+            ->where('game_team.game_id', $gameId)
+            ->orderBy('teams.id')
+            ->pluck('teams.id');
+
+        $slot = $teamIds->search($teamId);
+
+        // If the team is not part of this game, skip silently.
+        if ($slot === false) {
+            return;
+        }
+
+        // Count already-seated players for this team in this game.
+        $existingCount = DB::table('game_player_seat')
+            ->join('team_player', 'team_player.player_id', '=', 'game_player_seat.player_id')
+            ->where('game_player_seat.game_id', $gameId)
+            ->where('team_player.team_id', $teamId)
+            ->count();
+
+        $seatNumber = $slot === 0
+            ? $existingCount * 2 + 1
+            : $existingCount * 2 + 2;
+
+        DB::table('game_player_seat')->insertOrIgnore([
+            'game_id'     => $gameId,
+            'player_id'   => $playerId,
+            'seat_number' => $seatNumber,
+        ]);
+    }
+
+    /**
+     * Remove the seat assignment for a player across all games where the given team participates.
+     *
+     * @param  int  $teamId    Identifier of the team the player is being removed from.
+     * @param  int  $playerId  Identifier of the player whose seats should be cleared.
+     * @return void Deletes seat rows for every game that includes this team.
+     * Logic: since team_player membership is not game-scoped, removing a player from a team
+     * implies removing them from every game where that team plays; deleting all matching
+     * game_player_seat rows keeps seat data consistent with the team roster.
+     */
+    public function removePlayerSeatForTeam(int $teamId, int $playerId): void
+    {
+        $gameIds = DB::table('game_team')
+            ->where('team_id', $teamId)
+            ->pluck('game_id');
+
+        DB::table('game_player_seat')
+            ->whereIn('game_id', $gameIds)
+            ->where('player_id', $playerId)
             ->delete();
     }
 }
