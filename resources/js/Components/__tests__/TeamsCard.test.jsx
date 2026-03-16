@@ -1568,4 +1568,79 @@ describe('TeamsCard', () => {
             expect(within(dialog).getByRole('button', { name: 'Remove Carlos' })).toBeInTheDocument();
         });
     });
+
+    describe('seat numbers', () => {
+        it('shows the seat number badge to the left of the player name', async () => {
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Diana', seat_number: 2 },
+                ]),
+            ];
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Carlos');
+
+            expect(screen.getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
+            expect(screen.getByRole('generic', { name: 'Seat 2' })).toBeInTheDocument();
+        });
+
+        it('shows seat number 1 before the player name and seat 2 before the other player name', async () => {
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Diana', seat_number: 2 },
+                ]),
+            ];
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Carlos');
+
+            const seatOne = screen.getByRole('generic', { name: 'Seat 1' });
+            expect(seatOne).toHaveTextContent('Seat 1');
+            expect(seatOne.nextSibling).toHaveTextContent('Carlos');
+
+            const seatTwo = screen.getByRole('generic', { name: 'Seat 2' });
+            expect(seatTwo).toHaveTextContent('Seat 2');
+            expect(seatTwo.nextSibling).toHaveTextContent('Diana');
+        });
+
+        it('does not render a seat badge when seat_number is null', async () => {
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: null },
+                ]),
+            ];
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Carlos');
+
+            expect(screen.queryByRole('generic', { name: /^Seat/ })).not.toBeInTheDocument();
+        });
+
+        it('does not render a seat badge when seat_number is undefined', async () => {
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos' },
+                ]),
+            ];
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Carlos');
+
+            expect(screen.queryByRole('generic', { name: /^Seat/ })).not.toBeInTheDocument();
+        });
+    });
 });
