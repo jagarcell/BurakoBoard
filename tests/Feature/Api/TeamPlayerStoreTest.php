@@ -205,7 +205,7 @@ class TeamPlayerStoreTest extends TestCase
     }
 
     /**
-     * Ensure adding a player to a team in a finished game is rejected with 422.
+     * Ensure removing a player from a finished game is rejected with 422.
      *
      * @return void Verifies that players cannot be added to teams in a finished game.
      * Logic: create a finished game with a team, attempt to add a player, and assert an unprocessable response.
@@ -220,5 +220,89 @@ class TeamPlayerStoreTest extends TestCase
         ]);
 
         $response->assertUnprocessable();
+    }
+
+    /**
+     * Ensure the first player added to team 1 receives seat number 1.
+     *
+     * @param  none
+     * @return void Verifies that seat_number = 1 is assigned to the first player of the first game team.
+     * Logic: create a game with one team, add one player, and assert seat_number 1 in the API summary
+     * and in the game_player_seat table.
+     */
+    public function test_first_player_of_first_team_gets_seat_one(): void
+    {
+        $game = $this->makeGame();
+        $team = $this->makeTeam($game);
+
+        $response = $this->postJson("/api/v1/games/{$game->id}/teams/{$team->id}/players", [
+            'name' => 'Carlos',
+        ]);
+
+        $response->assertStatus(201);
+
+        $player = $response->json('data.game.teams.0.players.0');
+        $this->assertSame(1, $player['seat_number']);
+
+        $this->assertDatabaseHas('game_player_seat', [
+            'game_id'     => $game->id,
+            'seat_number' => 1,
+        ]);
+    }
+
+    /**
+     * Ensure seat numbers follow the odd/even pattern for two teams.
+     *
+     * @param  none
+     * @return void Verifies team 1 players get odd seats and team 2 players get even seats.
+     * Logic: create a game with two teams, add one player to each, and assert seat numbers 1 and 2 respectively.
+     */
+    public function test_seat_numbers_follow_odd_even_team_pattern(): void
+    {
+        $game  = $this->makeGame();
+        $teamA = $this->makeTeam($game, 'Team Alpha');
+        $teamB = $this->makeTeam($game, 'Team Beta');
+
+        $this->postJson("/api/v1/games/{$game->id}/teams/{$teamA->id}/players", ['name' => 'Alice'])
+            ->assertStatus(201);
+
+        $this->postJson("/api/v1/games/{$game->id}/teams/{$teamB->id}/players", ['name' => 'Bob'])
+            ->assertStatus(201);
+
+        // Fetch the game summary for the final state.
+        $summary = $this->getJson("/api/v1/games/{$game->id}")->json('data.game');
+        $team1Players = $summary['teams'][0]['players'];
+        $team2Players = $summary['teams'][1]['players'];
+
+        $this->assertSame(1, $team1Players[0]['seat_number'], 'First team, first player should have seat 1.');
+        $this->assertSame(2, $team2Players[0]['seat_number'], 'Second team, first player should have seat 2.');
+    }
+
+    /**
+     * Ensure second players in each team get the next odd and even seat numbers.
+     *
+     * @param  none
+     * @return void Verifies seats 3 and 4 for the second player of each team.
+     * Logic: add two players per team and assert seats 1, 3 for team 1 and 2, 4 for team 2.
+     */
+    public function test_second_players_get_seats_three_and_four(): void
+    {
+        $game  = $this->makeGame();
+        $teamA = $this->makeTeam($game, 'Team Alpha');
+        $teamB = $this->makeTeam($game, 'Team Beta');
+
+        $this->postJson("/api/v1/games/{$game->id}/teams/{$teamA->id}/players", ['name' => 'Alice']);
+        $this->postJson("/api/v1/games/{$game->id}/teams/{$teamA->id}/players", ['name' => 'Anna']);
+        $this->postJson("/api/v1/games/{$game->id}/teams/{$teamB->id}/players", ['name' => 'Bob']);
+        $this->postJson("/api/v1/games/{$game->id}/teams/{$teamB->id}/players", ['name' => 'Ben']);
+
+        $summary = $this->getJson("/api/v1/games/{$game->id}")->json('data.game');
+        $t1 = $summary['teams'][0]['players'];
+        $t2 = $summary['teams'][1]['players'];
+
+        $this->assertSame(1, $t1[0]['seat_number']);
+        $this->assertSame(3, $t1[1]['seat_number']);
+        $this->assertSame(2, $t2[0]['seat_number']);
+        $this->assertSame(4, $t2[1]['seat_number']);
     }
 }

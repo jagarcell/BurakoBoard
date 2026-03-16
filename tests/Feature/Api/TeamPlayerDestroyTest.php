@@ -173,4 +173,39 @@ class TeamPlayerDestroyTest extends TestCase
             'player_id' => $roberto->id,
         ]);
     }
+
+    /**
+     * Ensure the seat assignment is removed when a player is deleted from a team.
+     *
+     * @param  none
+     * @return void Verifies the game_player_seat row is deleted alongside the team_player pivot row.
+     * Logic: add a player via the API (which creates a seat), then remove the player and assert the
+     * game_player_seat row for that game and player no longer exists.
+     */
+    public function test_seat_assignment_is_removed_when_player_is_deleted(): void
+    {
+        $game = $this->makeGame();
+        $team = $this->makeTeam($game);
+
+        $addResponse = $this->postJson(
+            "/api/v1/games/{$game->id}/teams/{$team->id}/players",
+            ['name' => 'Carlos'],
+        )->assertStatus(201);
+
+        $playerId = $addResponse->json('data.game.teams.0.players.0.id');
+
+        $this->assertDatabaseHas('game_player_seat', [
+            'game_id'   => $game->id,
+            'player_id' => $playerId,
+        ]);
+
+        $this->deleteJson(
+            "/api/v1/games/{$game->id}/teams/{$team->id}/players/{$playerId}"
+        )->assertStatus(200);
+
+        $this->assertDatabaseMissing('game_player_seat', [
+            'game_id'   => $game->id,
+            'player_id' => $playerId,
+        ]);
+    }
 }
