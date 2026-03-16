@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axios from 'axios';
 import RoundsCard from '@/Components/RoundsCard';
@@ -954,6 +954,256 @@ describe('RoundsCard', () => {
             expect(
                 screen.queryByText('Add both teams before recording rounds.'),
             ).not.toBeInTheDocument();
+        });
+    });
+
+    describe('team card collapse control (mobile)', () => {
+        const mockDraftAndElements = (url) =>
+            url.includes('round-draft')
+                ? Promise.resolve({ data: { data: { round_draft: null } } })
+                : Promise.resolve(elementsResponse);
+
+        it('renders a collapse button for each team card', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            expect(
+                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+            ).toBeInTheDocument();
+            expect(
+                screen.getByRole('button', { name: 'Collapse Team Beta score inputs' }),
+            ).toBeInTheDocument();
+        });
+
+        it('clicking the collapse button hides that team\'s score inputs', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+            expect(burakoCheckboxes).toHaveLength(2);
+
+            await userEvent.click(
+                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+            );
+
+            // Team Alpha's inputs should be hidden; Team Beta's should remain visible
+            const remaining = screen.getAllByLabelText('Burako');
+            expect(remaining).toHaveLength(1);
+        });
+
+        it('clicking the button again expands the team\'s score inputs', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            const collapseBtn = screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' });
+            await userEvent.click(collapseBtn);
+
+            // Now collapsed — button label should flip to "Expand"
+            const expandBtn = screen.getByRole('button', { name: 'Expand Team Alpha score inputs' });
+            expect(expandBtn).toBeInTheDocument();
+
+            await userEvent.click(expandBtn);
+
+            // Inputs should be visible again
+            const burakoCheckboxes = screen.getAllByLabelText('Burako');
+            expect(burakoCheckboxes).toHaveLength(2);
+        });
+
+        it('collapsing one team does not hide the other team\'s inputs', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            await userEvent.click(
+                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+            );
+
+            // Team Beta's inputs must still be accessible
+            expect(screen.getByRole('button', { name: 'Collapse Team Beta score inputs' })).toBeInTheDocument();
+            const canInputs = screen.getAllByLabelText('Clean Canastra');
+            expect(canInputs).toHaveLength(1);
+        });
+
+        it('collapse button has aria-expanded=false when collapsed and true when expanded', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            const collapseBtn = screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' });
+            expect(collapseBtn).toHaveAttribute('aria-expanded', 'true');
+
+            await userEvent.click(collapseBtn);
+
+            const expandBtn = screen.getByRole('button', { name: 'Expand Team Alpha score inputs' });
+            expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
+        });
+    });
+
+    describe('viewport layout transition (stacked ↔ non-stacked)', () => {
+        const mockDraftAndElements = (url) =>
+            url.includes('round-draft')
+                ? Promise.resolve({ data: { data: { round_draft: null } } })
+                : Promise.resolve(elementsResponse);
+
+        let mqListeners;
+        let mockMq;
+
+        const setupMatchMedia = (initialMatches) => {
+            mqListeners = [];
+            mockMq = {
+                matches: initialMatches,
+                addEventListener: (_event, listener) => mqListeners.push(listener),
+                removeEventListener: (_event, listener) => {
+                    mqListeners = mqListeners.filter((l) => l !== listener);
+                },
+            };
+            Object.defineProperty(window, 'matchMedia', {
+                writable: true,
+                configurable: true,
+                value: () => mockMq,
+            });
+        };
+
+        const triggerBreakpoint = (matches) => {
+            mockMq.matches = matches;
+            mqListeners.forEach((l) => l({ matches }));
+        };
+
+        afterEach(() => {
+            Object.defineProperty(window, 'matchMedia', {
+                writable: true,
+                configurable: true,
+                value: undefined,
+            });
+        });
+
+        it('when starting at non-stacked width, both team cards are expanded', async () => {
+            setupMatchMedia(true);
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+            expect(burakoCheckboxes).toHaveLength(2);
+        });
+
+        it('transitioning to non-stacked expands both team cards regardless of prior collapse state', async () => {
+            setupMatchMedia(false);
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            // Collapse Team Alpha while in stacked layout
+            await userEvent.click(screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }));
+            expect(screen.getAllByLabelText('Burako')).toHaveLength(1);
+
+            // Transition to non-stacked (sm+): both cards should expand
+            act(() => triggerBreakpoint(true));
+            await waitFor(() => expect(screen.getAllByLabelText('Burako')).toHaveLength(2));
+        });
+
+        it('transitioning back to stacked restores the previous collapse state', async () => {
+            setupMatchMedia(false);
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            // Collapse Team Alpha while stacked
+            await userEvent.click(screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }));
+            expect(screen.getAllByLabelText('Burako')).toHaveLength(1);
+
+            // Go non-stacked: both expand
+            act(() => triggerBreakpoint(true));
+            await waitFor(() => expect(screen.getAllByLabelText('Burako')).toHaveLength(2));
+
+            // Return to stacked: Team Alpha should be collapsed again
+            act(() => triggerBreakpoint(false));
+            await waitFor(() => expect(screen.getAllByLabelText('Burako')).toHaveLength(1));
+        });
+
+        it('transitioning back to stacked keeps all cards expanded when none were collapsed before', async () => {
+            setupMatchMedia(false);
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            // Go non-stacked without collapsing anything, then return to stacked
+            act(() => triggerBreakpoint(true));
+            act(() => triggerBreakpoint(false));
+
+            // Both should still be expanded
+            await waitFor(() => expect(screen.getAllByLabelText('Burako')).toHaveLength(2));
         });
     });
 
