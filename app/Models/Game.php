@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Game extends Model
@@ -35,15 +36,17 @@ class Game extends Model
     ];
 
     /**
-     * Get the teams that belong to the game.
+     * Get the teams that participate in this game.
      *
      * @param  none
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\Team, $this> Teams associated with the game.
-     * Logic: expose the one-to-many link from games.id to teams.game_id so team rosters can be loaded through the game model.
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<\App\Models\Team, $this> Teams associated with the game.
+     * Logic: expose the many-to-many link via game_team so one team entity can be reused across multiple games;
+     * each game-team pair tracks its own current_score on the pivot.
      */
-    public function teams(): HasMany
+    public function teams(): BelongsToMany
     {
-        return $this->hasMany(Team::class, 'game_id');
+        return $this->belongsToMany(Team::class, 'game_team')
+            ->withPivot('current_score');
     }
 
     /**

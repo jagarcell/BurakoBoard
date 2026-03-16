@@ -7,6 +7,7 @@ use App\Models\Player;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class TeamPlayerStoreTest extends TestCase
@@ -26,11 +27,14 @@ class TeamPlayerStoreTest extends TestCase
 
     private function makeTeam(Game $game, string $name = 'Team Alpha'): Team
     {
-        return Team::query()->create([
+        $team = Team::query()->create(['name' => $name]);
+        DB::table('game_team')->insert([
             'game_id'       => $game->id,
-            'name'          => $name,
+            'team_id'       => $team->id,
             'current_score' => 0,
         ]);
+
+        return $team;
     }
 
     private function attachPlayerByName(Team $team, string $name): Player

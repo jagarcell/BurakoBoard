@@ -27,6 +27,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/games/{gameId}/has-two-teams', [GameController::class, 'hasTwoTeams']);
     Route::post('/games/{gameId}/teams', [TeamController::class, 'store']);
     Route::put('/games/{gameId}/teams/{teamId}', [TeamController::class, 'update']);
+    Route::post('/games/{gameId}/teams/{teamId}/attach', [TeamController::class, 'attach']);
     Route::post('/games/{gameId}/teams/{teamId}/players', [TeamPlayerController::class, 'store']);
     Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);
     Route::get('/games/{gameId}/round-draft', [RoundDraftController::class, 'show']);

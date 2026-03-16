@@ -130,6 +130,25 @@ describe('TeamsCard', () => {
         expect(within(selectors[0]).getByRole('option', { name: 'Old Team B' })).toBeInTheDocument();
     });
 
+    it('excludes a team selected in one slot from the other slot dropdown', async () => {
+        setupGetMocks(mockAllTeams);
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+        const selectors = await screen.findAllByRole('combobox');
+        await waitFor(() =>
+            within(selectors[0]).getByRole('option', { name: 'Old Team A' }),
+        );
+
+        // Select "Old Team A" (id 100) in slot 0
+        await userEvent.selectOptions(selectors[0], '100');
+
+        // Slot 1 should no longer offer "Old Team A"
+        expect(within(selectors[1]).queryByRole('option', { name: 'Old Team A' })).not.toBeInTheDocument();
+        // But "Old Team B" should still be available in slot 1
+        expect(within(selectors[1]).getByRole('option', { name: 'Old Team B' })).toBeInTheDocument();
+    });
+
     it('shows Add team button when an existing team is selected in the dropdown', async () => {
         setupGetMocks(mockAllTeams);
 
@@ -148,8 +167,8 @@ describe('TeamsCard', () => {
     it('adds an existing team to the game when Add team is clicked', async () => {
         setupGetMocks(mockAllTeams);
 
-        const copiedTeam = makeTeam(20, 'Old Team A', []);
-        axios.post.mockResolvedValueOnce(makeGameSummary([copiedTeam]));
+        const attachedTeam = makeTeam(100, 'Old Team A', []);
+        axios.post.mockResolvedValueOnce(makeGameSummary([attachedTeam]));
 
         render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
@@ -160,21 +179,18 @@ describe('TeamsCard', () => {
 
         await waitFor(() =>
             expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams',
-                { name: 'Old Team A' },
+                '/api/v1/games/5/teams/100/attach',
             ),
         );
 
         await screen.findByRole('button', { name: 'Edit team' });
     });
 
-    it('copies player data when adding an existing team with players', async () => {
+    it('attaches an existing team with players without re-posting players', async () => {
         setupGetMocks(mockAllTeams);
 
-        const copiedTeam = makeTeam(21, 'Old Team B', [{ id: 11, user_id: null, display_name: 'Carlos' }]);
-        axios.post
-            .mockResolvedValueOnce(makeGameSummary([copiedTeam]))
-            .mockResolvedValueOnce(makeGameSummary([copiedTeam]));
+        const attachedTeam = makeTeam(101, 'Old Team B', [{ id: 11, user_id: null, display_name: 'Carlos' }]);
+        axios.post.mockResolvedValueOnce(makeGameSummary([attachedTeam]));
 
         render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
@@ -185,10 +201,12 @@ describe('TeamsCard', () => {
 
         await waitFor(() =>
             expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams/21/players',
-                { name: 'Carlos' },
+                '/api/v1/games/5/teams/101/attach',
             ),
         );
+
+        // Only one POST call — the attach endpoint, no separate player calls.
+        expect(axios.post).toHaveBeenCalledTimes(1);
     });
 
     it('shows registered users in the player dropdown after opening the create modal', async () => {
@@ -403,7 +421,7 @@ describe('TeamsCard', () => {
         await userEvent.type(screen.getByLabelText('Team name'), 'Team Alpha');
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
-        expect(screen.getByText('A team with this name already exists in this game.')).toBeInTheDocument();
+        expect(screen.getByText('A team with this name already exists.')).toBeInTheDocument();
         expect(axios.post).not.toHaveBeenCalled();
     });
 
@@ -418,7 +436,28 @@ describe('TeamsCard', () => {
         await userEvent.type(screen.getByLabelText('Team name'), '  Team  Alpha  ');
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
-        expect(screen.getByText('A team with this name already exists in this game.')).toBeInTheDocument();
+        expect(screen.getByText('A team with this name already exists.')).toBeInTheDocument();
+        expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    it('rejects a globally-existing team name even when that team is not yet in the current game', async () => {
+        // allTeams contains 'Old Team A' (id 100) which is not in initialTeams (game has no teams yet).
+        setupGetMocks(mockAllTeams);
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+        await waitFor(() =>
+            expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+        );
+        await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+
+        await waitFor(() =>
+            expect(screen.getByLabelText('Team name')).toBeInTheDocument(),
+        );
+        await userEvent.type(screen.getByLabelText('Team name'), 'Old Team A');
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
+
+        expect(screen.getByText('A team with this name already exists.')).toBeInTheDocument();
         expect(axios.post).not.toHaveBeenCalled();
     });
 
@@ -433,7 +472,7 @@ describe('TeamsCard', () => {
         await userEvent.type(screen.getByLabelText('Team name'), 'TEAM ALPHA');
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
-        expect(screen.getByText('A team with this name already exists in this game.')).toBeInTheDocument();
+        expect(screen.getByText('A team with this name already exists.')).toBeInTheDocument();
         expect(axios.post).not.toHaveBeenCalled();
     });
 
@@ -1174,6 +1213,58 @@ describe('TeamsCard', () => {
                 expect(row.childElementCount).toBe(1);
                 expect(row.style.clipPath).toBe('');
             });
+        });
+    });
+
+    describe('allTeams refresh', () => {
+        it('re-fetches the global team list after a new team is created so other teams appear in remaining slots', async () => {
+            // A team that exists in the DB but was added by another session after this component mounted.
+            const teamFromOtherSession = { id: 103, name: 'External Team', players: [] };
+            const preExistingTeam = { id: 100, name: 'Old Team A', players: [] };
+
+            let teamsCallCount = 0;
+            axios.get.mockImplementation((url) => {
+                if (url === '/api/v1/users') {
+                    return Promise.resolve({ data: { data: { users: mockUsers } } });
+                }
+                if (url === '/api/v1/teams') {
+                    teamsCallCount += 1;
+                    // First call (on mount): teamFromOtherSession does not exist yet.
+                    // Subsequent calls (post-create refresh): it does.
+                    const teams = teamsCallCount === 1
+                        ? [preExistingTeam]
+                        : [teamFromOtherSession, preExistingTeam];
+
+                    return Promise.resolve({ data: { data: { teams } } });
+                }
+                return Promise.reject(new Error(`Unexpected GET: ${url}`));
+            });
+
+            // The create endpoint returns a game with 'Brand New Team' (id 102) attached.
+            axios.post.mockResolvedValueOnce(makeGameSummary([makeTeam(102, 'Brand New Team')]));
+
+            render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+            // Wait for the initial mount fetch — 'External Team' must not be visible yet.
+            const initialSelectors = await screen.findAllByRole('combobox');
+            await waitFor(() =>
+                within(initialSelectors[0]).getByRole('option', { name: 'Old Team A' }),
+            );
+            expect(within(initialSelectors[0]).queryByRole('option', { name: 'External Team' })).not.toBeInTheDocument();
+
+            // Create a team via the modal, which fills slot 0.
+            await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+            await userEvent.type(screen.getByLabelText('Team name'), 'Brand New Team');
+            await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
+
+            // After creation: slot 0 is now filled, slot 1 still has a combobox.
+            // The refresh should have happened, so 'External Team' now appears in the slot-1 dropdown.
+            const remainingSelectors = await screen.findAllByRole('combobox');
+            await waitFor(() =>
+                expect(
+                    within(remainingSelectors[0]).getByRole('option', { name: 'External Team' }),
+                ).toBeInTheDocument(),
+            );
         });
     });
 });
