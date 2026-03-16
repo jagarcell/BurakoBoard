@@ -202,8 +202,9 @@ class BurakoGameMvpTest extends TestCase
             ->assertJsonPath('data.game.game.initial_shuffler_seat_number', 1)
             ->assertJsonPath('data.game.round_roles.0.round_number', 1)
             ->assertJsonPath('data.game.round_roles.0.shuffler.display_name', 'Carlos')
-            ->assertJsonPath('data.game.round_roles.0.dealer.display_name', 'Bruno')
-            ->assertJsonPath('data.game.round_roles.0.first_draw.display_name', 'Diana');
+            ->assertJsonPath('data.game.round_roles.0.cutter.display_name', 'Bruno')
+            ->assertJsonPath('data.game.round_roles.0.dealer.display_name', 'Diana')
+            ->assertJsonPath('data.game.round_roles.0.first_draw.display_name', 'Elisa');
 
         $this->postJson("/api/v1/games/{$gameId}/rounds", [
             'scores' => [
@@ -216,8 +217,9 @@ class BurakoGameMvpTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.game.round_roles.1.round_number', 2)
             ->assertJsonPath('data.game.round_roles.1.shuffler.display_name', 'Bruno')
-            ->assertJsonPath('data.game.round_roles.1.dealer.display_name', 'Diana')
-            ->assertJsonPath('data.game.round_roles.1.first_draw.display_name', 'Elisa');
+            ->assertJsonPath('data.game.round_roles.1.cutter.display_name', 'Diana')
+            ->assertJsonPath('data.game.round_roles.1.dealer.display_name', 'Elisa')
+            ->assertJsonPath('data.game.round_roles.1.first_draw.display_name', 'Carlos');
     }
 
     /**

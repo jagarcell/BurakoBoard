@@ -356,6 +356,10 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
             return 'Shuffler';
         }
 
+        if (currentRoundRoles.cutter?.player_id === playerId) {
+            return 'Cutter';
+        }
+
         if (currentRoundRoles.dealer?.player_id === playerId) {
             return 'Dealer';
         }
@@ -656,7 +660,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                             </p>
                             <p className="mt-1 text-sm text-indigo-700">
                                 {isFirstRound
-                                    ? 'Choose who shuffles in round 1. Dealer and first draw are assigned to the next sequential seats.'
+                                    ? 'Choose who shuffles in round 1. Cutter, dealer, and first draw are assigned to the next sequential seats.'
                                     : 'These are the players roles for this round.'}
                             </p>
 

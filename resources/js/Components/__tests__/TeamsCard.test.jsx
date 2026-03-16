@@ -1701,8 +1701,9 @@ describe('TeamsCard', () => {
                         {
                             round_number: 1,
                             shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                            dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                            first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                            cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                            dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                            first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
                         },
                     ],
                 }),
@@ -1747,8 +1748,9 @@ describe('TeamsCard', () => {
                     {
                         round_number: 1,
                         shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                        dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                        first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
                     },
                 ],
             }).data.data.game;
@@ -1758,8 +1760,9 @@ describe('TeamsCard', () => {
             await screen.findByText('Round 1 shuffler');
 
             expect(screen.getByRole('button', { name: 'Seat 1 · Carlos · Shuffler' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Dealer' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Seat 3 · Diana · First Draw' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Cutter' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Seat 3 · Diana · Dealer' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Seat 4 · Elisa · First Draw' })).toBeInTheDocument();
         });
 
         it('shows only the next round role badge for each player after a round is recorded', async () => {
@@ -1782,14 +1785,16 @@ describe('TeamsCard', () => {
                     {
                         round_number: 1,
                         shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                        dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                        first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
                     },
                     {
                         round_number: 2,
                         shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                        dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                        first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                        cutter: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        dealer: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                        first_draw: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
                     },
                 ],
             }).data.data.game;
@@ -1799,6 +1804,7 @@ describe('TeamsCard', () => {
             await screen.findByText('Carlos');
             expect(screen.getByText('Round 2 player order')).toBeInTheDocument();
             expect(screen.getByText('Shuffler')).toBeInTheDocument();
+            expect(screen.getByText('Cutter')).toBeInTheDocument();
             expect(screen.getByText('Dealer')).toBeInTheDocument();
             expect(screen.getByText('First Draw')).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Shuffler' })).toBeInTheDocument();
@@ -1827,14 +1833,16 @@ describe('TeamsCard', () => {
                     {
                         round_number: 1,
                         shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                        dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                        first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
                     },
                     {
                         round_number: 2,
                         shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                        dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                        first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                        cutter: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        dealer: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                        first_draw: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
                     },
                 ],
             }).data.data.game;
@@ -1845,15 +1853,18 @@ describe('TeamsCard', () => {
             expect(screen.getByText('These are the players roles for this round.')).toBeInTheDocument();
 
             const brunoChip = screen.getByRole('button', { name: 'Seat 2 · Bruno · Shuffler' });
-            const dianaChip = screen.getByRole('button', { name: 'Seat 3 · Diana · Dealer' });
-            const elisaChip = screen.getByRole('button', { name: 'Seat 4 · Elisa · First Draw' });
+            const dianaChip = screen.getByRole('button', { name: 'Seat 3 · Diana · Cutter' });
+            const elisaChip = screen.getByRole('button', { name: 'Seat 4 · Elisa · Dealer' });
+            const carlosChip = screen.getByRole('button', { name: 'Seat 1 · Carlos · First Draw' });
 
             expect(brunoChip).toBeDisabled();
             expect(dianaChip).toBeDisabled();
             expect(elisaChip).toBeDisabled();
+            expect(carlosChip).toBeDisabled();
             expect(brunoChip).toHaveClass('bg-indigo-600');
             expect(dianaChip).toHaveClass('bg-white');
             expect(elisaChip).toHaveClass('bg-white');
+            expect(carlosChip).toHaveClass('bg-white');
 
             await userEvent.click(brunoChip);
             expect(axios.put).not.toHaveBeenCalled();
