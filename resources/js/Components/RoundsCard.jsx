@@ -19,6 +19,51 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const { unlock: unlockWinnerSound, play: playWinnerSound } = useWinnerSound();
 
     const [expandedRound, setExpandedRound] = useState(null);
+    const [collapsedTeams, setCollapsedTeams] = useState(new Set());
+
+    // Always-current ref so the matchMedia handler below can read collapsedTeams
+    // without needing to re-register the listener on every state change.
+    const collapsedTeamsRef = useRef(collapsedTeams);
+    useEffect(() => { collapsedTeamsRef.current = collapsedTeams; }, [collapsedTeams]);
+
+    // Holds the stacked-layout collapse state so it can be restored when the
+    // viewport transitions back from a non-stacked (sm+) width.
+    const savedCollapsedTeamsRef = useRef(new Set());
+
+    // Expand all team score cards when the viewport is non-stacked (sm+) so
+    // both inputs are always visible side-by-side.  When the viewport returns
+    // to a stacked layout the per-team collapse state is restored.
+    useEffect(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+
+        const mq = window.matchMedia('(min-width: 640px)');
+
+        if (mq.matches) {
+            savedCollapsedTeamsRef.current = new Set(collapsedTeamsRef.current);
+            setCollapsedTeams(new Set());
+        }
+
+        const handleChange = (e) => {
+            if (e.matches) {
+                savedCollapsedTeamsRef.current = new Set(collapsedTeamsRef.current);
+                setCollapsedTeams(new Set());
+            } else {
+                setCollapsedTeams(new Set(savedCollapsedTeamsRef.current));
+            }
+        };
+
+        mq.addEventListener('change', handleChange);
+        return () => mq.removeEventListener('change', handleChange);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const toggleTeamCollapse = (teamId) =>
+        setCollapsedTeams((prev) => {
+            const next = new Set(prev);
+            if (next.has(teamId)) next.delete(teamId);
+            else next.add(teamId);
+            return next;
+        });
     // Cache of per-round draft data keyed by round_number.
     const [roundDraftCache, setRoundDraftCache] = useState({});
     const [loadingDraftRound, setLoadingDraftRound] = useState(null);
@@ -439,10 +484,30 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                     >
                                                         {getAccruedScore(team.id) + computeTeamScore(team.id)}
                                                     </span>
+                                                    <button
+                                                        aria-expanded={!collapsedTeams.has(team.id)}
+                                                        aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name} score inputs`}
+                                                        className="sm:hidden inline-flex items-center justify-center rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                                                        onClick={() => toggleTeamCollapse(team.id)}
+                                                        type="button"
+                                                    >
+                                                        <svg
+                                                            aria-hidden="true"
+                                                            className={`h-4 w-4 transition-transform duration-200 ${collapsedTeams.has(team.id) ? '-rotate-90' : 'rotate-0'}`}
+                                                            fill="currentColor"
+                                                            viewBox="0 0 20 20"
+                                                        >
+                                                            <path
+                                                                clipRule="evenodd"
+                                                                d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                                                                fillRule="evenodd"
+                                                            />
+                                                        </svg>
+                                                    </button>
                                                 </div>
                                             </div>
 
-                                            {elements.length === 0 ? (
+                                            {!collapsedTeams.has(team.id) && (elements.length === 0 ? (
                                                 <p className="text-xs text-slate-400">
                                                     Loading elements…
                                                 </p>
@@ -483,7 +548,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                     teamId={team.id}
                                                     values={baseInputs[team.id] ?? {}}
                                                 />
-                                            )}
+                                            ))}
                                         </div>
                                     ))}
                                 </div>
