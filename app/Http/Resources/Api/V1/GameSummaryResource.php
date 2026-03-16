@@ -20,6 +20,7 @@ class GameSummaryResource extends JsonResource
             'game' => $this->resource['game'],
             'teams' => $this->resource['teams'],
             'rounds' => $this->resource['rounds'],
+            'round_roles' => $this->resource['round_roles'] ?? [],
         ];
     }
 }

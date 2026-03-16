@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\SetInitialShufflerRequest;
 use App\Http\Requests\Api\V1\StoreGameRequest;
 use App\Http\Requests\Api\V1\UpdateGameRequest;
 use App\Http\Resources\Api\V1\GameListItemResource;
@@ -100,6 +101,23 @@ class GameController extends Controller
 
         return response()->json([
             'has_two_teams' => $hasTwoTeams,
+        ]);
+    }
+
+    /**
+     * Set the initial shuffler player before round 1 starts.
+     *
+     * @param  \App\Http\Requests\Api\V1\SetInitialShufflerRequest  $request  Validated request with selected player id.
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Http\JsonResponse Updated game summary response.
+     * Logic: delegate shuffler selection rules to the service and return the refreshed summary payload.
+     */
+    public function setInitialShuffler(SetInitialShufflerRequest $request, int $gameId): JsonResponse
+    {
+        $summary = $this->service->setInitialShuffler($gameId, (int) $request->validated('player_id'));
+
+        return response()->json([
+            'game' => new GameSummaryResource($summary),
         ]);
     }
 }
