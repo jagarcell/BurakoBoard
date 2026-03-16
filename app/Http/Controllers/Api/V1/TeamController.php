@@ -71,4 +71,22 @@ class TeamController extends Controller
             'game' => new GameSummaryResource($summary),
         ]);
     }
+
+    /**
+     * Attach an existing global team to a game without creating a new team entity.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $teamId  Identifier of the existing team to attach.
+     * @return \Illuminate\Http\JsonResponse Updated game summary response.
+     * Logic: delegate the attach operation to the service (which validates game status and prevents
+     * duplicate pivot rows), then return the refreshed game summary with the team included.
+     */
+    public function attach(int $gameId, int $teamId): JsonResponse
+    {
+        $summary = $this->service->attachExistingTeam($gameId, $teamId);
+
+        return response()->json([
+            'game' => new GameSummaryResource($summary),
+        ], 201);
+    }
 }

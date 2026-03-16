@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\RoundDraft;
-use App\Models\Team;
 use App\Repositories\BurakoGameRepository;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -111,7 +110,8 @@ class BurakoGameService
      * @param  int  $gameId  Identifier of the game.
      * @param  array<string, mixed>  $payload  Validated team data.
      * @return array<string, mixed> Game summary payload after team creation.
-     * Logic: enforce that only in-progress games can receive teams, create the team, then return refreshed summary data.
+     * Logic: enforce that only in-progress games can receive teams, create the global team record,
+     * attach it to the game via the pivot, then return the refreshed summary.
      */
     public function addTeam(int $gameId, array $payload): array
     {
@@ -123,9 +123,45 @@ class BurakoGameService
             ]);
         }
 
-        $this->repository->createTeam($gameId, [
+        $team = $this->repository->createTeam([
             'name' => $payload['name'],
         ]);
+
+        $this->repository->attachTeamToGame($gameId, $team->id);
+
+        return $this->repository->getGameSummary($gameId);
+    }
+
+    /**
+     * Attach an existing global team to a game without creating a new team entity.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $teamId  Identifier of the existing team to attach.
+     * @return array<string, mixed> Game summary payload after attaching the team.
+     * Logic: enforce in-progress guard, verify the team exists globally, reject if already attached
+     * to this game (to prevent duplicate pivot rows), then insert the pivot row and return summary.
+     */
+    public function attachExistingTeam(int $gameId, int $teamId): array
+    {
+        $game = $this->repository->findGameOrFail($gameId);
+
+        if ($game->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'game' => 'Cannot add teams to a finished game.',
+            ]);
+        }
+
+        $team = $this->repository->findTeamOrFail($teamId);
+
+        $alreadyAttached = $this->repository->isTeamAttachedToGame($gameId, $team->id);
+
+        if ($alreadyAttached) {
+            throw ValidationException::withMessages([
+                'team' => 'This team is already part of this game.',
+            ]);
+        }
+
+        $this->repository->attachTeamToGame($gameId, $team->id);
 
         return $this->repository->getGameSummary($gameId);
     }
@@ -243,7 +279,7 @@ class BurakoGameService
                 $points = (int) $score['points'];
 
                 $this->repository->createRoundScore($round->id, $team->id, $points);
-                $updatedTeam = $this->repository->incrementTeamScore($team, $points);
+                $updatedTeam = $this->repository->incrementTeamScore($gameId, $team->id, $points);
                 $updatedTeams->push($updatedTeam);
             }
 
@@ -391,15 +427,15 @@ class BurakoGameService
     /**
      * Resolve the winner based on target points and highest current score.
      *
-     * @param  \Illuminate\Support\Collection<int, \App\Models\Team>  $teams  Teams updated after the round.
+     * @param  \Illuminate\Support\Collection<int, object>  $teams  Score rows updated after the round (stdClass with id, name, current_score).
      * @param  int  $targetPoints  Winning threshold configured for the game.
-     * @return \App\Models\Team|null The winning team or null when no team reached target.
+     * @return object|null The winning team row or null when no team reached target.
      * Logic: filter teams that reached target, rank by highest score with deterministic id tiebreaker, and return first match.
      */
-    private function resolveWinner(Collection $teams, int $targetPoints): ?Team
+    private function resolveWinner(Collection $teams, int $targetPoints): ?object
     {
         return $teams
-            ->filter(fn (Team $team): bool => $team->current_score >= $targetPoints)
+            ->filter(fn (object $team): bool => $team->current_score >= $targetPoints)
             ->sortBy([
                 ['current_score', 'desc'],
                 ['id', 'asc'],

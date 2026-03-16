@@ -39,14 +39,13 @@ class StoreTeamRequest extends FormRequest
      * Get validation rules for creating or updating a team.
      *
      * @return array<string, mixed> Validation constraints for team payload.
-     * Logic: require a bounded team name that is unique within the game using a case-insensitive
-     * LOWER() comparison so 'Team Alpha' and 'TEAM ALPHA' are treated as the same name;
-     * for updates the current team row is excluded so renaming to the same name (any casing) is allowed;
-     * the original casing supplied by the caller is preserved for storage.
+     * Logic: require a bounded team name that is globally unique using a case-insensitive
+     * LOWER() comparison so 'Team Alpha' and 'TEAM ALPHA' are treated as the same name across
+     * all games; for updates the current team row is excluded so renaming to the same name
+     * (any casing) is allowed; the original casing supplied by the caller is preserved for storage.
      */
     public function rules(): array
     {
-        $gameId = $this->route('gameId');
         $teamId = $this->route('teamId');
 
         return [
@@ -54,15 +53,14 @@ class StoreTeamRequest extends FormRequest
                 'required',
                 'string',
                 'max:120',
-                function (string $attribute, mixed $value, \Closure $fail) use ($gameId, $teamId): void {
+                function (string $attribute, mixed $value, \Closure $fail) use ($teamId): void {
                     $exists = DB::table('teams')
-                        ->where('game_id', $gameId)
                         ->whereRaw('LOWER(name) = ?', [strtolower($value)])
                         ->when($teamId, fn ($q) => $q->where('id', '!=', $teamId))
                         ->exists();
 
                     if ($exists) {
-                        $fail('A team with this name already exists in this game.');
+                        $fail('A team with this name already exists.');
                     }
                 },
             ],
