@@ -885,6 +885,75 @@ describe('RoundsCard', () => {
         });
     });
 
+    describe('player count mismatch', () => {
+        it('hides the scoring form and shows a mismatch message when teams have different player counts', async () => {
+            const teamWithPlayer = {
+                ...teamA,
+                players: [{ id: 1, display_name: 'Alice' }],
+            };
+            const teamWithoutPlayer = { ...teamB, players: [] };
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamWithPlayer, teamWithoutPlayer]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText(
+                'Both teams must have the same number of players to record rounds.',
+            );
+            expect(screen.queryByRole('button', { name: 'Record Round' })).not.toBeInTheDocument();
+        });
+
+        it('shows the scoring form once both teams have equal player counts', async () => {
+            axios.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+
+            const teamWithPlayer = {
+                ...teamA,
+                players: [{ id: 1, display_name: 'Alice' }],
+            };
+            const teamWithoutPlayer = { ...teamB, players: [] };
+
+            const { rerender } = render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamWithPlayer, teamWithoutPlayer]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText(
+                'Both teams must have the same number of players to record rounds.',
+            );
+
+            const teamBWithPlayer = {
+                ...teamB,
+                players: [{ id: 2, display_name: 'Bob' }],
+            };
+
+            rerender(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamWithPlayer, teamBWithPlayer]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Round 1');
+            expect(
+                screen.queryByText(
+                    'Both teams must have the same number of players to record rounds.',
+                ),
+            ).not.toBeInTheDocument();
+        });
+    });
+
     describe('hasTwoTeams prop', () => {
         it('shows the scoring form when hasTwoTeams is true even with no local teams', async () => {
             axios.get.mockImplementation((url) =>
