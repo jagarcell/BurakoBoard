@@ -1267,4 +1267,305 @@ describe('TeamsCard', () => {
             );
         });
     });
+
+    describe('player count mismatch warning', () => {
+        it('shows a mismatch warning when both teams have different player counts', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos' },
+                    { id: 2, user_id: null, display_name: 'Diana' },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 3, user_id: null, display_name: 'Eve' },
+                ]),
+            ];
+
+            render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(
+                screen.getByRole('alert'),
+            ).toBeInTheDocument();
+
+            expect(
+                screen.getByText(/Player count mismatch/i),
+            ).toBeInTheDocument();
+
+            expect(
+                screen.getByText(/Team Alpha has 2 players, Team Beta has 1 player/i),
+            ).toBeInTheDocument();
+        });
+
+        it('does not show a mismatch warning when both teams have the same player count', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos' },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Diana' },
+                ]),
+            ];
+
+            render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        });
+
+        it('does not show a mismatch warning when both teams have zero players', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', []),
+                makeTeam(11, 'Team Beta', []),
+            ];
+
+            render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        });
+
+        it('does not show a mismatch warning when only one team is present', async () => {
+            setupGetMocks();
+
+            render(
+                <TeamsCard
+                    initialTeams={[
+                        makeTeam(10, 'Team Alpha', [
+                            { id: 1, user_id: null, display_name: 'Carlos' },
+                        ]),
+                    ]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        });
+
+        it('uses singular "player" label when a team has exactly one player', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos' },
+                ]),
+                makeTeam(11, 'Team Beta', []),
+            ];
+
+            render(<TeamsCard initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(
+                screen.getByText(/Team Alpha has 1 player, Team Beta has 0 players/i),
+            ).toBeInTheDocument();
+        });
+    });
+
+    describe('remove existing player in edit modal', () => {
+        it('shows a remove button next to each existing player in edit mode', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+                { id: 2, user_id: null, display_name: 'Diana' },
+            ]);
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            expect(screen.getByRole('button', { name: 'Remove Carlos' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Remove Diana' })).toBeInTheDocument();
+        });
+
+        it('hides a player row when their remove button is clicked', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+            ]);
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog = screen.getByRole('dialog');
+            expect(within(dialog).getByText('Carlos')).toBeInTheDocument();
+
+            await userEvent.click(within(dialog).getByRole('button', { name: 'Remove Carlos' }));
+
+            expect(within(dialog).queryByText('Carlos')).not.toBeInTheDocument();
+        });
+
+        it('hides the Current players section when all existing players are removed', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+            ]);
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            expect(screen.getByText('Current players')).toBeInTheDocument();
+
+            await userEvent.click(screen.getByRole('button', { name: 'Remove Carlos' }));
+
+            expect(screen.queryByText('Current players')).not.toBeInTheDocument();
+        });
+
+        it('calls DELETE for each removed player when the edit form is submitted', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+                { id: 2, user_id: null, display_name: 'Diana' },
+            ]);
+            setupGetMocks();
+
+            const updatedTeam = makeTeam(10, 'Team Alpha', []);
+            axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+            axios.delete
+                .mockResolvedValueOnce(makeGameSummary([updatedTeam]))
+                .mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            await userEvent.click(screen.getByRole('button', { name: 'Remove Carlos' }));
+            await userEvent.click(screen.getByRole('button', { name: 'Remove Diana' }));
+
+            await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+            await waitFor(() =>
+                expect(axios.delete).toHaveBeenCalledWith(
+                    '/api/v1/games/5/teams/10/players/1',
+                ),
+            );
+
+            await waitFor(() =>
+                expect(axios.delete).toHaveBeenCalledWith(
+                    '/api/v1/games/5/teams/10/players/2',
+                ),
+            );
+
+            expect(axios.delete).toHaveBeenCalledTimes(2);
+        });
+
+        it('calls DELETE for removed players before adding new ones on submit', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+            ]);
+            setupGetMocks();
+
+            const interimTeam = makeTeam(10, 'Team Alpha', []);
+            const finalTeam   = makeTeam(10, 'Team Alpha', [{ id: 3, user_id: null, display_name: 'Elena' }]);
+            axios.put.mockResolvedValueOnce(makeGameSummary([interimTeam]));
+            axios.delete.mockResolvedValueOnce(makeGameSummary([interimTeam]));
+            axios.post.mockResolvedValueOnce(makeGameSummary([finalTeam]));
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            await userEvent.click(screen.getByRole('button', { name: 'Remove Carlos' }));
+            await userEvent.type(screen.getByLabelText('Player name'), 'Elena');
+            await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+            await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+            await waitFor(() => expect(axios.delete).toHaveBeenCalledTimes(1));
+            await waitFor(() => expect(axios.post).toHaveBeenCalledWith(
+                '/api/v1/games/5/teams/10/players',
+                { name: 'Elena' },
+            ));
+        });
+
+        it('does not call DELETE when no existing players are removed on submit', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+            ]);
+            setupGetMocks();
+
+            const updatedTeam = makeTeam(10, 'Team Alpha Updated', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+            ]);
+            axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const nameInput = screen.getByLabelText('Team name');
+            await userEvent.clear(nameInput);
+            await userEvent.type(nameInput, 'Team Alpha Updated');
+
+            await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+            await waitFor(() => expect(screen.getByText('Team Alpha Updated')).toBeInTheDocument());
+            expect(axios.delete).not.toHaveBeenCalled();
+        });
+
+        it('allows adding an existing player name again once they have been removed', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+            ]);
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog = screen.getByRole('dialog');
+
+            // Removing Carlos means his name is no longer a duplicate in the pending list.
+            await userEvent.click(within(dialog).getByRole('button', { name: 'Remove Carlos' }));
+
+            await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+            await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+            expect(screen.queryByText('A player with this name already exists in this team.')).not.toBeInTheDocument();
+            expect(within(dialog).getAllByText('Carlos').length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('resets removed player state when the modal is closed and reopened', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos' },
+            ]);
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            let dialog = screen.getByRole('dialog');
+            await userEvent.click(within(dialog).getByRole('button', { name: 'Remove Carlos' }));
+            expect(within(dialog).queryByText('Carlos')).not.toBeInTheDocument();
+
+            // Close and reopen the modal.
+            await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            // Carlos should be visible again with its remove button.
+            dialog = screen.getByRole('dialog');
+            expect(within(dialog).getByText('Carlos')).toBeInTheDocument();
+            expect(within(dialog).getByRole('button', { name: 'Remove Carlos' })).toBeInTheDocument();
+        });
+    });
 });

@@ -417,7 +417,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         }, 0);
 
     const nextRound = rounds.length + 1;
-    const showScoringForm = hasTwoTeams || teams.length >= 2;
+    const playerCountMismatch =
+        teams.length === 2 && teams[0].players.length !== teams[1].players.length;
+    const showScoringForm = !playerCountMismatch && (hasTwoTeams || teams.length >= 2);
 
     return (
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
@@ -444,6 +446,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             ) : isFetching && ! showScoringForm ? (
                 <p className="px-6 py-5 text-sm text-slate-400">
                     Loading rounds…
+                </p>
+            ) : playerCountMismatch ? (
+                <p className="px-6 py-5 text-sm text-slate-400">
+                    Both teams must have the same number of players to record rounds.
                 </p>
             ) : ! showScoringForm ? (
                 <p className="px-6 py-5 text-sm text-slate-400">

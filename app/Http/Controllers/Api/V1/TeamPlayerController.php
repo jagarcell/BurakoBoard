@@ -38,4 +38,22 @@ class TeamPlayerController extends Controller
             'game' => new GameSummaryResource($summary),
         ], 201);
     }
+
+    /**
+     * Remove a player from a game team.
+     *
+     * @param  int  $gameId   Identifier of the game.
+     * @param  int  $teamId   Identifier of the team.
+     * @param  int  $playerId Identifier of the player to remove.
+     * @return \Illuminate\Http\JsonResponse Updated game summary after the player is detached.
+     * Logic: delegate removal to the service and return the refreshed game summary so the client can react to the updated roster.
+     */
+    public function destroy(int $gameId, int $teamId, int $playerId): JsonResponse
+    {
+        $summary = $this->service->removePlayerFromTeam($gameId, $teamId, $playerId);
+
+        return response()->json([
+            'game' => new GameSummaryResource($summary),
+        ], 200);
+    }
 }
