@@ -431,8 +431,16 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                                         {team.players.map((player) => (
                                                             <li
                                                                 key={player.id}
-                                                                className="text-sm text-slate-600"
+                                                                className="flex items-center gap-2 text-sm text-slate-600"
                                                             >
+                                                                {player.seat_number != null ? (
+                                                                    <span
+                                                                        aria-label={`Seat ${player.seat_number}`}
+                                                                        className="flex flex-shrink-0 items-center justify-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500"
+                                                                    >
+                                                                        Seat {player.seat_number}
+                                                                    </span>
+                                                                ) : null}
                                                                 {player.display_name}
                                                             </li>
                                                         ))}
