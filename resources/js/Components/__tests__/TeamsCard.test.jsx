@@ -1727,6 +1727,41 @@ describe('TeamsCard', () => {
             );
         });
 
+        it('shows round 1 role labels in selector chips when roles are available', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                    { id: 3, user_id: null, display_name: 'Diana', seat_number: 3 },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                    { id: 4, user_id: null, display_name: 'Elisa', seat_number: 4 },
+                ]),
+            ];
+
+            const gameSummary = makeGameSummary(teams, {
+                game: { current_round_number: 0, initial_shuffler_seat_number: 1 },
+                round_roles: [
+                    {
+                        round_number: 1,
+                        shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                        dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                    },
+                ],
+            }).data.data.game;
+
+            render(<TeamsCard gameSummary={gameSummary} initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Round 1 shuffler');
+
+            expect(screen.getByRole('button', { name: 'Seat 1 · Carlos · Shuffler' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Dealer' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Seat 3 · Diana · First Draw' })).toBeInTheDocument();
+        });
+
         it('shows only the next round role badge for each player after a round is recorded', async () => {
             setupGetMocks();
 
