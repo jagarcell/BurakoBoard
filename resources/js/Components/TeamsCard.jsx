@@ -664,8 +664,9 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                 <div className="mt-3 flex flex-wrap gap-2">
                                     {shufflerCandidates.map((player) => {
                                         const currentRole = getCurrentRoundRoleForPlayer(player.id);
+                                        const chipRole = currentRole;
                                         const isHighlightedPlayer = isFirstRound
-                                            ? initialShufflerPlayer?.id === player.id
+                                            ? chipRole === 'Shuffler' || initialShufflerPlayer?.id === player.id
                                             : currentRole === 'Shuffler';
 
                                         return (
@@ -681,8 +682,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                                 {player.seat_number != null
                                                     ? `Seat ${player.seat_number} · ${player.display_name}`
                                                     : player.display_name}
-                                                {! isFirstRound && currentRole
-                                                    ? ` · ${currentRole}`
+                                                {chipRole
+                                                    ? ` · ${chipRole}`
                                                     : ''}
                                             </button>
                                         );
