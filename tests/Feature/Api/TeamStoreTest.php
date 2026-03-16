@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Game;
 use App\Models\Team;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class TeamStoreTest extends TestCase
@@ -24,11 +25,14 @@ class TeamStoreTest extends TestCase
 
     private function makeTeam(Game $game, string $name): Team
     {
-        return Team::query()->create([
+        $team = Team::query()->create(['name' => $name]);
+        DB::table('game_team')->insert([
             'game_id'       => $game->id,
-            'name'          => $name,
+            'team_id'       => $team->id,
             'current_score' => 0,
         ]);
+
+        return $team;
     }
 
     /**
@@ -87,12 +91,12 @@ class TeamStoreTest extends TestCase
     }
 
     /**
-     * Ensure a team name that duplicates a team in a different game is allowed.
+     * Ensure a duplicate team name across different games is rejected on store.
      *
-     * @return void Verifies uniqueness is scoped to the game, not global.
-     * Logic: create a team named 'Team Alpha' in game A, then create 'Team Alpha' in game B and assert 201.
+     * @return void Verifies global name uniqueness on create.
+     * Logic: add a team named 'Team Alpha' in game A, then attempt to add 'Team Alpha' in game B and assert 422.
      */
-    public function test_team_store_allows_same_name_in_different_game(): void
+    public function test_team_store_rejects_duplicate_name_across_different_games(): void
     {
         $gameA = $this->makeGame();
         $gameB = $this->makeGame();
@@ -102,7 +106,7 @@ class TeamStoreTest extends TestCase
             'name' => 'Team Alpha',
         ]);
 
-        $response->assertStatus(201);
+        $response->assertUnprocessable();
     }
 
     /**
@@ -194,5 +198,45 @@ class TeamStoreTest extends TestCase
         $response
             ->assertStatus(201)
             ->assertJsonPath('data.game.teams.0.name', 'Team Alpha');
+    }
+
+    /**
+     * Ensure an existing global team can be attached to a game without creating a new entity.
+     *
+     * @return void Verifies the attach endpoint returns 201 with the team included in the summary.
+     * Logic: create a team in game A, then call the attach endpoint on game B and assert the same
+     * team id appears in the returned summary without extra rows in the teams table.
+     */
+    public function test_attach_adds_existing_team_to_game_without_creating_new_record(): void
+    {
+        $gameA = $this->makeGame();
+        $gameB = $this->makeGame();
+        $team  = $this->makeTeam($gameA, 'Shared Team');
+
+        $response = $this->postJson("/api/v1/games/{$gameB->id}/teams/{$team->id}/attach");
+
+        $response
+            ->assertStatus(201)
+            ->assertJsonPath('status', 'success')
+            ->assertJsonPath('data.game.teams.0.id', $team->id);
+
+        // Only one team row should exist globally (no duplicate created).
+        $this->assertDatabaseCount('teams', 1);
+    }
+
+    /**
+     * Ensure the attach endpoint returns 422 when the team is already part of the game.
+     *
+     * @return void Verifies duplicate attach attempts are rejected.
+     * Logic: attach a team to a game, then attempt to attach the same team again and assert 422.
+     */
+    public function test_attach_rejects_team_already_in_game(): void
+    {
+        $game = $this->makeGame();
+        $team = $this->makeTeam($game, 'Alpha');
+
+        $response = $this->postJson("/api/v1/games/{$game->id}/teams/{$team->id}/attach");
+
+        $response->assertUnprocessable();
     }
 }

@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Game;
 use App\Models\Team;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class GameHasTwoTeamsTest extends TestCase
@@ -24,11 +25,14 @@ class GameHasTwoTeamsTest extends TestCase
 
     private function addTeam(Game $game, string $name): Team
     {
-        return Team::query()->create([
+        $team = Team::query()->create(['name' => $name]);
+        DB::table('game_team')->insert([
             'game_id'       => $game->id,
-            'name'          => $name,
+            'team_id'       => $team->id,
             'current_score' => 0,
         ]);
+
+        return $team;
     }
 
     /**

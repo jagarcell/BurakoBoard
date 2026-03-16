@@ -90,8 +90,8 @@ class BurakoGameMvpTest extends TestCase
             ->assertJsonPath('data.game.game.current_round_number', 1)
             ->assertJsonPath('data.game.game.status', 'in_progress');
 
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 800]);
-        $this->assertDatabaseHas('teams', ['id' => $teamBId, 'current_score' => 500]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 800]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamBId, 'current_score' => 500]);
 
         $roundTwo = $this->postJson("/api/v1/games/{$gameId}/rounds", [
             'scores' => [
@@ -108,8 +108,8 @@ class BurakoGameMvpTest extends TestCase
             ->assertJsonPath('data.game.game.current_round_number', 2)
             ->assertJsonCount(2, 'data.game.rounds');
 
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 1700]);
-        $this->assertDatabaseHas('teams', ['id' => $teamBId, 'current_score' => 1100]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 1700]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamBId, 'current_score' => 1100]);
     }
 
     /**

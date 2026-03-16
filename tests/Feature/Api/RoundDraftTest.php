@@ -41,8 +41,10 @@ class RoundDraftTest extends TestCase
             'current_round_number' => 0,
         ]);
 
-        $this->teamA = $this->repository->createTeam($this->game->id, ['name' => 'Alpha']);
-        $this->teamB = $this->repository->createTeam($this->game->id, ['name' => 'Beta']);
+        $this->teamA = $this->repository->createTeam(['name' => 'Alpha']);
+        $this->repository->attachTeamToGame($this->game->id, $this->teamA->id);
+        $this->teamB = $this->repository->createTeam(['name' => 'Beta']);
+        $this->repository->attachTeamToGame($this->game->id, $this->teamB->id);
     }
 
     /**

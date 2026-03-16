@@ -7,6 +7,7 @@ use App\Models\Team;
 use App\Repositories\BurakoGameRepository;
 use App\Services\BurakoGameService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ScorePersistenceTest extends TestCase
@@ -48,8 +49,8 @@ class ScorePersistenceTest extends TestCase
             ],
         ])->assertOk();
 
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 350]);
-        $this->assertDatabaseHas('teams', ['id' => $teamBId, 'current_score' => 200]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 350]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamBId, 'current_score' => 200]);
     }
 
     /**
@@ -77,8 +78,8 @@ class ScorePersistenceTest extends TestCase
         }
 
         // Alpha: 300 + 400 + (−50) = 650  |  Beta: 100 + 200 + 150 = 450
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 650]);
-        $this->assertDatabaseHas('teams', ['id' => $teamBId, 'current_score' => 450]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 650]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamBId, 'current_score' => 450]);
     }
 
     /**
@@ -100,13 +101,13 @@ class ScorePersistenceTest extends TestCase
         ])->assertOk();
 
         // Simulate drift by directly corrupting the stored score.
-        Team::query()->where('id', $teamAId)->update(['current_score' => 9999]);
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 9999]);
+        DB::table('game_team')->where('team_id', $teamAId)->where('game_id', $gameId)->update(['current_score' => 9999]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 9999]);
 
-        $recomputed = $this->repository->recomputeTeamScoreFromHistory($teamAId);
+        $recomputed = $this->repository->recomputeTeamScoreFromHistory($gameId, $teamAId);
 
         $this->assertSame(600, $recomputed);
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 600]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 600]);
     }
 
     /**
@@ -128,12 +129,12 @@ class ScorePersistenceTest extends TestCase
         ])->assertOk();
 
         // Corrupt both scores.
-        Team::query()->whereIn('id', [$teamAId, $teamBId])->update(['current_score' => 0]);
+        DB::table('game_team')->where('game_id', $gameId)->whereIn('team_id', [$teamAId, $teamBId])->update(['current_score' => 0]);
 
         $this->repository->syncTeamScoresForGame($gameId);
 
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 700]);
-        $this->assertDatabaseHas('teams', ['id' => $teamBId, 'current_score' => 300]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 700]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamBId, 'current_score' => 300]);
     }
 
     /**
@@ -155,12 +156,12 @@ class ScorePersistenceTest extends TestCase
         ])->assertOk();
 
         // Corrupt scores.
-        Team::query()->whereIn('id', [$teamAId, $teamBId])->update(['current_score' => -1]);
+        DB::table('game_team')->where('game_id', $gameId)->whereIn('team_id', [$teamAId, $teamBId])->update(['current_score' => -1]);
 
         $this->service->syncGameScores($gameId);
 
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 250]);
-        $this->assertDatabaseHas('teams', ['id' => $teamBId, 'current_score' => 750]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 250]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamBId, 'current_score' => 750]);
     }
 
     /**
@@ -175,12 +176,12 @@ class ScorePersistenceTest extends TestCase
         $this->addTeamAndGetId($gameId, 'Beta');
 
         // No rounds recorded yet; manually set a non-zero value to prove overwrite.
-        Team::query()->where('id', $teamAId)->update(['current_score' => 500]);
+        DB::table('game_team')->where('team_id', $teamAId)->where('game_id', $gameId)->update(['current_score' => 500]);
 
-        $recomputed = $this->repository->recomputeTeamScoreFromHistory($teamAId);
+        $recomputed = $this->repository->recomputeTeamScoreFromHistory($gameId, $teamAId);
 
         $this->assertSame(0, $recomputed);
-        $this->assertDatabaseHas('teams', ['id' => $teamAId, 'current_score' => 0]);
+        $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 0]);
     }
 
     /**
@@ -261,8 +262,10 @@ class ScorePersistenceTest extends TestCase
             'current_round_number' => 5,
         ]);
 
-        $teamA = Team::query()->create(['game_id' => $game->id, 'name' => 'Alpha', 'current_score' => 1200]);
-        $teamB = Team::query()->create(['game_id' => $game->id, 'name' => 'Beta',  'current_score' => 800]);
+        $teamA = Team::query()->create(['name' => 'Alpha']);
+        DB::table('game_team')->insert(['game_id' => $game->id, 'team_id' => $teamA->id, 'current_score' => 1200]);
+        $teamB = Team::query()->create(['name' => 'Beta']);
+        DB::table('game_team')->insert(['game_id' => $game->id, 'team_id' => $teamB->id, 'current_score' => 800]);
 
         $response = $this->postJson("/api/v1/games/{$game->id}/rounds", [
             'scores' => [

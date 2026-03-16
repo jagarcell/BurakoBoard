@@ -17,10 +17,10 @@ class ModelRelationshipTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Ensure a game loads the teams that belong to it.
+     * Ensure a game loads the teams attached to it.
      *
-     * @return void Verifies the has-many game to teams relationship.
-     * Logic: create teams under one game and assert only those related records are returned from the game model.
+     * @return void Verifies the belongs-to-many game to teams relationship.
+     * Logic: create two teams, attach them to a game via the pivot, and assert only those related records are returned from the game model.
      */
     public function test_game_has_many_teams(): void
     {
@@ -32,29 +32,22 @@ class ModelRelationshipTest extends TestCase
             'current_round_number' => 0,
         ]);
 
-        Team::query()->create([
-            'game_id' => $game->id,
-            'name' => 'North',
-            'current_score' => 0,
-        ]);
+        $north = Team::query()->create(['name' => 'North']);
+        $south = Team::query()->create(['name' => 'South']);
 
-        Team::query()->create([
-            'game_id' => $game->id,
-            'name' => 'South',
-            'current_score' => 0,
-        ]);
+        $game->teams()->attach([$north->id, $south->id]);
 
         $loadedGame = Game::query()->with('teams')->findOrFail($game->id);
 
         $this->assertCount(2, $loadedGame->teams);
-        $this->assertSame(['North', 'South'], $loadedGame->teams->pluck('name')->all());
+        $this->assertSame(['North', 'South'], $loadedGame->teams->pluck('name')->sort()->values()->all());
     }
 
     /**
-     * Ensure a team resolves its parent game.
+     * Ensure a team resolves its associated games.
      *
-     * @return void Verifies the inverse belongs-to team to game relationship.
-     * Logic: create a team with a game_id and assert the related game can be loaded from the team model.
+     * @return void Verifies the belongs-to-many team to games relationship.
+     * Logic: create a team, attach it to a game via the pivot, and assert the game can be loaded from the team model.
      */
     public function test_team_belongs_to_game(): void
     {
@@ -66,14 +59,13 @@ class ModelRelationshipTest extends TestCase
             'current_round_number' => 0,
         ]);
 
-        $team = Team::query()->create([
-            'game_id' => $game->id,
-            'name' => 'East',
-            'current_score' => 0,
-        ]);
+        $team = Team::query()->create(['name' => 'East']);
+        $game->teams()->attach($team->id);
 
-        $this->assertSame($game->id, $team->game->id);
-        $this->assertSame('Saturday Match', $team->game->name);
+        $loadedTeam = Team::query()->with('games')->findOrFail($team->id);
+
+        $this->assertSame($game->id, $loadedTeam->games->first()->id);
+        $this->assertSame('Saturday Match', $loadedTeam->games->first()->name);
     }
 
     /**
@@ -94,11 +86,8 @@ class ModelRelationshipTest extends TestCase
             'current_round_number' => 0,
         ]);
 
-        $team = Team::query()->create([
-            'game_id' => $game->id,
-            'name' => 'West',
-            'current_score' => 0,
-        ]);
+        $team = Team::query()->create(['name' => 'West']);
+        $game->teams()->attach($team->id);
 
         $player = Player::query()->create([
             'user_id' => $user->id,
@@ -307,31 +296,34 @@ class ModelRelationshipTest extends TestCase
             'current_round_number' => 0,
         ]);
 
-        $teamA = Team::query()->create(['game_id' => $gameA->id, 'name' => 'Alpha', 'current_score' => 0]);
-        $teamB = Team::query()->create(['game_id' => $gameB->id, 'name' => 'Alpha', 'current_score' => 0]);
+        $alpha = Team::query()->create(['name' => 'Alpha']);
+        $gameA->teams()->attach($alpha->id);
+        $gameB->teams()->attach($alpha->id);
 
         $roundA = Round::query()->create(['game_id' => $gameA->id, 'round_number' => 1]);
         $roundB = Round::query()->create(['game_id' => $gameB->id, 'round_number' => 1]);
 
         // Dummy second teams so rounds have the required ≥2 team coverage.
-        $filler1 = Team::query()->create(['game_id' => $gameA->id, 'name' => 'Filler1', 'current_score' => 0]);
-        $filler2 = Team::query()->create(['game_id' => $gameB->id, 'name' => 'Filler2', 'current_score' => 0]);
+        $filler1 = Team::query()->create(['name' => 'Filler1']);
+        $gameA->teams()->attach($filler1->id);
+        $filler2 = Team::query()->create(['name' => 'Filler2']);
+        $gameB->teams()->attach($filler2->id);
 
-        RoundScore::query()->create(['round_id' => $roundA->id, 'team_id' => $teamA->id, 'points' => 600]);
+        RoundScore::query()->create(['round_id' => $roundA->id, 'team_id' => $alpha->id, 'points' => 600]);
         RoundScore::query()->create(['round_id' => $roundA->id, 'team_id' => $filler1->id, 'points' => 100]);
-        RoundScore::query()->create(['round_id' => $roundB->id, 'team_id' => $teamB->id, 'points' => 900]);
+        RoundScore::query()->create(['round_id' => $roundB->id, 'team_id' => $alpha->id, 'points' => 900]);
         RoundScore::query()->create(['round_id' => $roundB->id, 'team_id' => $filler2->id, 'points' => 200]);
 
-        // Score for teamA (game A) must be 600, not 600+900.
-        $scoreA = $teamA->roundScores()
+        // Score for alpha in game A must be 600, not 600+900.
+        $scoreA = $alpha->roundScores()
             ->join('rounds', 'rounds.id', '=', 'round_scores.round_id')
-            ->where('rounds.game_id', $teamA->game_id)
+            ->where('rounds.game_id', $gameA->id)
             ->sum('round_scores.points');
 
-        // Score for teamB (game B) must be 900, not 600+900.
-        $scoreB = $teamB->roundScores()
+        // Score for alpha in game B must be 900, not 600+900.
+        $scoreB = $alpha->roundScores()
             ->join('rounds', 'rounds.id', '=', 'round_scores.round_id')
-            ->where('rounds.game_id', $teamB->game_id)
+            ->where('rounds.game_id', $gameB->id)
             ->sum('round_scores.points');
 
         $this->assertSame(600, (int) $scoreA);
