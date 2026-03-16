@@ -13,7 +13,6 @@ export default function Dashboard() {
     const [gameSummary, setGameSummary] = useState(null);
     const [scoreUpdate, setScoreUpdate] = useState(null);
     const [isFetching, setIsFetching] = useState(false);
-    const [hasTwoTeams, setHasTwoTeams] = useState(false);
 
     const { unlock: unlockBadgeSound, play: playBadgeSound } = useWinnerSound();
     const { fire: fireConfetti, burst: burstConfetti } = useConfetti();
@@ -38,21 +37,11 @@ export default function Dashboard() {
         }
     };
 
-    const handleTeamCreated = () => {
-        if (! selectedGame?.id) return;
-
-        axios
-            .get(`/api/v1/games/${selectedGame.id}/has-two-teams`)
-            .then((response) => setHasTwoTeams(response.data?.data?.has_two_teams ?? false))
-            .catch(() => {});
-    };
-
     useEffect(() => {
         if (! selectedGame) {
             setGameSummary(null);
             setScoreUpdate(null);
             setIsFetching(false);
-            setHasTwoTeams(false);
 
             return;
         }
@@ -72,7 +61,6 @@ export default function Dashboard() {
                     teams,
                     rounds: summary.rounds ?? [],
                 });
-                setHasTwoTeams(teams.length >= 2);
                 setIsFetching(false);
                 setScoreUpdate(null);
             })
@@ -80,7 +68,6 @@ export default function Dashboard() {
                 if (! isActive) return;
 
                 setGameSummary({ teams: [], rounds: [] });
-                setHasTwoTeams(false);
                 setIsFetching(false);
             });
 
@@ -91,6 +78,12 @@ export default function Dashboard() {
 
     const initialTeams = useMemo(() => gameSummary?.teams ?? [], [gameSummary]);
     const initialRounds = useMemo(() => gameSummary?.rounds ?? [], [gameSummary]);
+
+    const hasTwoTeams = useMemo(() => {
+        if (initialTeams.length < 2) return false;
+
+        return initialTeams[0].players.length === initialTeams[1].players.length;
+    }, [initialTeams]);
 
     return (
         <AuthenticatedLayout
@@ -109,7 +102,6 @@ export default function Dashboard() {
                     <TeamsCard
                         initialTeams={initialTeams}
                         isFetching={isFetching}
-                        onTeamCreated={handleTeamCreated}
                         onTeamsChange={handleTeamsChange}
                         onWinnerBadgeClick={handleWinnerBadgeClick}
                         scoreUpdate={scoreUpdate}

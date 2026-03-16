@@ -25,6 +25,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     const [playerInput, setPlayerInput] = useState(defaultPlayerInput);
     const [errors, setErrors] = useState({});
     const [editingTeam, setEditingTeam] = useState(null);
+    const [removedExistingPlayerIds, setRemovedExistingPlayerIds] = useState([]);
     const [isCollapsed, setIsCollapsed] = useState(false);
     const duplicatePlayerErrorTimer = useRef(null);
     const diffLabelRef = useRef(null);
@@ -84,6 +85,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
         setPlayerInput(defaultPlayerInput);
         setErrors({});
         setEditingTeam(null);
+        setRemovedExistingPlayerIds([]);
     };
 
     const openModal = () => {
@@ -96,6 +98,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
         setTeamForm({ name: team.name, players: [] });
         setPlayerInput(defaultPlayerInput);
         setErrors({});
+        setRemovedExistingPlayerIds([]);
         setIsModalOpen(true);
     };
 
@@ -130,7 +133,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
         }
 
         const allCurrentPlayers = [
-            ...(editingTeam?.existingPlayers ?? []),
+            ...(editingTeam?.existingPlayers ?? []).filter((p) => ! removedExistingPlayerIds.includes(p.id)),
             ...teamForm.players,
         ];
 
@@ -237,6 +240,12 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                     { name },
                 );
 
+                for (const playerId of removedExistingPlayerIds) {
+                    lastResponse = await axios.delete(
+                        `/api/v1/games/${selectedGame.id}/teams/${editingTeam.id}/players/${playerId}`,
+                    );
+                }
+
                 for (const player of teamForm.players) {
                     const payload = player.userId
                         ? { user_id: Number(player.userId), name: player.name }
@@ -313,6 +322,9 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
             : null;
 
     const bothPositive = teams.length === 2 && teams[0].current_score > 0 && teams[1].current_score > 0;
+
+    const playerCountMismatch =
+        teams.length === 2 && teams[0].players.length !== teams[1].players.length;
 
     /** Trim and collapse inner whitespace so '  Team  Alpha  ' → 'Team Alpha'. */
     const normalizeName = (str) => str.trim().replace(/\s+/g, ' ');
@@ -540,6 +552,20 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                             );
                         })
                     )}
+
+                    {playerCountMismatch ? (
+                        <div className="mx-6 mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" role="alert">
+                            <p className="text-sm font-semibold text-amber-800">
+                                Player count mismatch — the game cannot proceed until both teams have the same number of players.
+                            </p>
+                            <p className="mt-1 text-sm text-amber-700">
+                                {teams[0].name} has {teams[0].players.length}{' '}
+                                {teams[0].players.length === 1 ? 'player' : 'players'},{' '}
+                                {teams[1].name} has {teams[1].players.length}{' '}
+                                {teams[1].players.length === 1 ? 'player' : 'players'}.
+                            </p>
+                        </div>
+                    ) : null}
                 </div>
             </section>
 
@@ -574,20 +600,30 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                         <InputError message={errors.teamName} />
                     </div>
 
-                    {editingTeam && editingTeam.existingPlayers.length > 0 ? (
+                    {editingTeam && editingTeam.existingPlayers.filter((p) => ! removedExistingPlayerIds.includes(p.id)).length > 0 ? (
                         <div className="space-y-2">
                             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
                                 Current players
                             </p>
                             <ul className="space-y-1">
-                                {editingTeam.existingPlayers.map((player) => (
-                                    <li
-                                        key={player.id}
-                                        className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                                    >
-                                        {player.display_name}
-                                    </li>
-                                ))}
+                                {editingTeam.existingPlayers
+                                    .filter((p) => ! removedExistingPlayerIds.includes(p.id))
+                                    .map((player) => (
+                                        <li
+                                            key={player.id}
+                                            className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                                        >
+                                            <span>{player.display_name}</span>
+                                            <button
+                                                aria-label={`Remove ${player.display_name}`}
+                                                className="ml-2 text-slate-400 hover:text-red-500"
+                                                onClick={() => setRemovedExistingPlayerIds((ids) => [...ids, player.id])}
+                                                type="button"
+                                            >
+                                                ×
+                                            </button>
+                                        </li>
+                                    ))}
                             </ul>
                         </div>
                     ) : null}
