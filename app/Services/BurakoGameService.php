@@ -229,6 +229,33 @@ class BurakoGameService
     }
 
     /**
+     * Remove a player from a team within a game.
+     *
+     * @param  int  $gameId   Identifier of the game.
+     * @param  int  $teamId   Identifier of the team.
+     * @param  int  $playerId Identifier of the player to remove.
+     * @return array<string, mixed> Game summary payload after the player is removed.
+     * Logic: block removal on finished games, verify the team belongs to the game,
+     * detach the pivot row, then reload and return the updated game summary.
+     */
+    public function removePlayerFromTeam(int $gameId, int $teamId, int $playerId): array
+    {
+        $game = $this->repository->findGameOrFail($gameId);
+
+        if ($game->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'game' => 'Cannot remove players from a finished game.',
+            ]);
+        }
+
+        $this->repository->findTeamInGameOrFail($gameId, $teamId);
+
+        $this->repository->detachPlayerFromTeam($teamId, $playerId);
+
+        return $this->repository->getGameSummary($gameId);
+    }
+
+    /**
      * Record scores for one game round and update running totals.
      *
      * @param  int  $gameId  Identifier of the game.

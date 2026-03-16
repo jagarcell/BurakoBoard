@@ -29,6 +29,7 @@ Route::prefix('v1')->group(function () {
     Route::put('/games/{gameId}/teams/{teamId}', [TeamController::class, 'update']);
     Route::post('/games/{gameId}/teams/{teamId}/attach', [TeamController::class, 'attach']);
     Route::post('/games/{gameId}/teams/{teamId}/players', [TeamPlayerController::class, 'store']);
+    Route::delete('/games/{gameId}/teams/{teamId}/players/{playerId}', [TeamPlayerController::class, 'destroy']);
     Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);
     Route::get('/games/{gameId}/round-draft', [RoundDraftController::class, 'show']);
     Route::put('/games/{gameId}/round-draft', [RoundDraftController::class, 'upsert']);

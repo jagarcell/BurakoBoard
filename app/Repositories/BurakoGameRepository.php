@@ -227,6 +227,22 @@ class BurakoGameRepository
     }
 
     /**
+     * Remove a player from a team by deleting the team_player pivot row.
+     *
+     * @param  int  $teamId   Identifier of the team.
+     * @param  int  $playerId Identifier of the player to remove.
+     * @return void Deletes the pivot row; no-op if the association does not exist.
+     * Logic: delete the team_player row for the given pair so the player no longer appears on the team roster.
+     */
+    public function detachPlayerFromTeam(int $teamId, int $playerId): void
+    {
+        DB::table('team_player')
+            ->where('team_id', $teamId)
+            ->where('player_id', $playerId)
+            ->delete();
+    }
+
+    /**
      * Get all teams for a game ordered by team id, with current_score from the game_team pivot.
      *
      * @param  int  $gameId  Identifier of the game.
