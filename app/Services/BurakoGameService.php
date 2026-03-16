@@ -49,6 +49,7 @@ class BurakoGameService
             'status' => 'in_progress',
             'winning_team_id' => null,
             'current_round_number' => 0,
+            'initial_shuffler_seat_number' => null,
         ]);
 
         return $this->repository->getGameSummary($game->id);
@@ -139,7 +140,8 @@ class BurakoGameService
      * @param  int  $teamId  Identifier of the existing team to attach.
      * @return array<string, mixed> Game summary payload after attaching the team.
      * Logic: enforce in-progress guard, verify the team exists globally, reject if already attached
-     * to this game (to prevent duplicate pivot rows), then insert the pivot row and return summary.
+     * to this game (to prevent duplicate pivot rows), insert the pivot row, then assign seats for
+     * all players already linked to that team so the game immediately has complete seat data.
      */
     public function attachExistingTeam(int $gameId, int $teamId): array
     {
@@ -162,6 +164,12 @@ class BurakoGameService
         }
 
         $this->repository->attachTeamToGame($gameId, $team->id);
+
+        $playerIds = $this->repository->getTeamPlayerIds($team->id);
+
+        foreach ($playerIds as $playerId) {
+            $this->repository->assignPlayerSeat($gameId, $team->id, (int) $playerId);
+        }
 
         return $this->repository->getGameSummary($gameId);
     }
@@ -253,6 +261,44 @@ class BurakoGameService
 
         $this->repository->removePlayerSeatForTeam($teamId, $playerId);
         $this->repository->detachPlayerFromTeam($teamId, $playerId);
+
+        return $this->repository->getGameSummary($gameId);
+    }
+
+    /**
+     * Set the initial shuffler by selecting one seated player in the game.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $playerId  Identifier of the selected shuffler player.
+     * @return array<string, mixed> Updated game summary payload.
+     * Logic: enforce in-progress and pre-round constraints, validate the selected player is seated
+     * in the game, persist that player's seat as the initial shuffler reference, then return summary.
+     */
+    public function setInitialShuffler(int $gameId, int $playerId): array
+    {
+        $game = $this->repository->findGameOrFail($gameId);
+
+        if ($game->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'game' => 'Cannot set shuffler for a finished game.',
+            ]);
+        }
+
+        if ((int) $game->current_round_number > 0) {
+            throw ValidationException::withMessages([
+                'game' => 'Initial shuffler can only be set before recording the first round.',
+            ]);
+        }
+
+        $seatedPlayer = $this->repository->findSeatedPlayerInGame($gameId, $playerId);
+
+        if ($seatedPlayer === null) {
+            throw ValidationException::withMessages([
+                'player_id' => 'Selected player must belong to this game and have a seat.',
+            ]);
+        }
+
+        $this->repository->updateGameInitialShufflerSeat($game, (int) $seatedPlayer->seat_number);
 
         return $this->repository->getGameSummary($gameId);
     }

@@ -19,13 +19,22 @@ const mockAllTeams = [
 const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress' };
 const finishedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'finished' };
 
-const makeGameSummary = (teams = []) => ({
+const makeGameSummary = (teams = [], overrides = {}) => ({
     data: {
         data: {
             game: {
-                game: { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress' },
+                game: {
+                    id: 5,
+                    name: 'Friday Table',
+                    target_points: 2000,
+                    status: 'in_progress',
+                    current_round_number: 0,
+                    initial_shuffler_seat_number: null,
+                    ...(overrides.game ?? {}),
+                },
                 teams,
-                rounds: [],
+                rounds: overrides.rounds ?? [],
+                round_roles: overrides.round_roles ?? [],
             },
         },
     },
@@ -1641,6 +1650,213 @@ describe('TeamsCard', () => {
             await screen.findByText('Carlos');
 
             expect(screen.queryByRole('generic', { name: /^Seat/ })).not.toBeInTheDocument();
+        });
+    });
+
+    describe('round role workflow', () => {
+        it('shows shuffler selector buttons even when players do not have seat numbers', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos' },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Bruno' },
+                ]),
+            ];
+
+            render(
+                <TeamsCard
+                    gameSummary={makeGameSummary(teams).data.data.game}
+                    initialTeams={teams}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Round 1 shuffler');
+
+            expect(screen.getByRole('button', { name: 'Carlos' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Bruno' })).toBeInTheDocument();
+        });
+
+        it('sets the initial shuffler from the UI', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                    { id: 3, user_id: null, display_name: 'Diana', seat_number: 3 },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                    { id: 4, user_id: null, display_name: 'Elisa', seat_number: 4 },
+                ]),
+            ];
+
+            axios.put.mockResolvedValueOnce(
+                makeGameSummary(teams, {
+                    game: { initial_shuffler_seat_number: 1 },
+                    round_roles: [
+                        {
+                            round_number: 1,
+                            shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                            dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                            first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        },
+                    ],
+                }),
+            );
+
+            render(
+                <TeamsCard
+                    gameSummary={makeGameSummary(teams).data.data.game}
+                    initialTeams={teams}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Round 1 shuffler');
+
+            await userEvent.click(screen.getByRole('button', { name: 'Seat 1 · Carlos' }));
+
+            await waitFor(() =>
+                expect(axios.put).toHaveBeenCalledWith('/api/v1/games/5/shuffler', {
+                    player_id: 1,
+                }),
+            );
+        });
+
+        it('shows round 1 role labels in selector chips when roles are available', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                    { id: 3, user_id: null, display_name: 'Diana', seat_number: 3 },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                    { id: 4, user_id: null, display_name: 'Elisa', seat_number: 4 },
+                ]),
+            ];
+
+            const gameSummary = makeGameSummary(teams, {
+                game: { current_round_number: 0, initial_shuffler_seat_number: 1 },
+                round_roles: [
+                    {
+                        round_number: 1,
+                        shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                        dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                    },
+                ],
+            }).data.data.game;
+
+            render(<TeamsCard gameSummary={gameSummary} initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Round 1 shuffler');
+
+            expect(screen.getByRole('button', { name: 'Seat 1 · Carlos · Shuffler' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Dealer' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Seat 3 · Diana · First Draw' })).toBeInTheDocument();
+        });
+
+        it('shows only the next round role badge for each player after a round is recorded', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                    { id: 3, user_id: null, display_name: 'Diana', seat_number: 3 },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                    { id: 4, user_id: null, display_name: 'Elisa', seat_number: 4 },
+                ]),
+            ];
+
+            const gameSummary = makeGameSummary(teams, {
+                game: { current_round_number: 1, initial_shuffler_seat_number: 1 },
+                round_roles: [
+                    {
+                        round_number: 1,
+                        shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                        dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                    },
+                    {
+                        round_number: 2,
+                        shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                    },
+                ],
+            }).data.data.game;
+
+            render(<TeamsCard gameSummary={gameSummary} initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Carlos');
+            expect(screen.getByText('Round 2 player order')).toBeInTheDocument();
+            expect(screen.getByText('Shuffler')).toBeInTheDocument();
+            expect(screen.getByText('Dealer')).toBeInTheDocument();
+            expect(screen.getByText('First Draw')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Shuffler' })).toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: 'Seat 1 · Carlos · Shuffler' })).not.toBeInTheDocument();
+            expect(screen.queryByText('R1 Shuffler')).not.toBeInTheDocument();
+            expect(screen.queryByText('R2 Dealer')).not.toBeInTheDocument();
+        });
+
+        it('shows read-only player order selector for the next round and does not allow clicks', async () => {
+            setupGetMocks();
+
+            const teams = [
+                makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                    { id: 3, user_id: null, display_name: 'Diana', seat_number: 3 },
+                ]),
+                makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                    { id: 4, user_id: null, display_name: 'Elisa', seat_number: 4 },
+                ]),
+            ];
+
+            const gameSummary = makeGameSummary(teams, {
+                game: { current_round_number: 1, initial_shuffler_seat_number: 1 },
+                round_roles: [
+                    {
+                        round_number: 1,
+                        shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                        dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                    },
+                    {
+                        round_number: 2,
+                        shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                        dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                        first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                    },
+                ],
+            }).data.data.game;
+
+            render(<TeamsCard gameSummary={gameSummary} initialTeams={teams} selectedGame={selectedGame} />);
+
+            await screen.findByText('Round 2 player order');
+            expect(screen.getByText('These are the players roles for this round.')).toBeInTheDocument();
+
+            const brunoChip = screen.getByRole('button', { name: 'Seat 2 · Bruno · Shuffler' });
+            const dianaChip = screen.getByRole('button', { name: 'Seat 3 · Diana · Dealer' });
+            const elisaChip = screen.getByRole('button', { name: 'Seat 4 · Elisa · First Draw' });
+
+            expect(brunoChip).toBeDisabled();
+            expect(dianaChip).toBeDisabled();
+            expect(elisaChip).toBeDisabled();
+            expect(brunoChip).toHaveClass('bg-indigo-600');
+            expect(dianaChip).toHaveClass('bg-white');
+            expect(elisaChip).toHaveClass('bg-white');
+
+            await userEvent.click(brunoChip);
+            expect(axios.put).not.toHaveBeenCalled();
         });
     });
 });

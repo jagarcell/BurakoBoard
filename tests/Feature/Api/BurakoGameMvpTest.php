@@ -168,6 +168,59 @@ class BurakoGameMvpTest extends TestCase
     }
 
     /**
+     * Ensure setting the initial shuffler computes seat-based round roles in order.
+     *
+     * @return void Verifies shuffler/dealer/first-draw rotation by sequential seat across rounds.
+     */
+    public function test_initial_shuffler_selection_computes_round_roles_from_seats(): void
+    {
+        $gameId = $this->createGameAndGetId(5000);
+
+        $teamAId = $this->addTeamAndGetId($gameId, 'Team Alpha');
+        $teamBId = $this->addTeamAndGetId($gameId, 'Team Beta');
+
+        $carlos = $this->postJson("/api/v1/games/{$gameId}/teams/{$teamAId}/players", [
+            'name' => 'Carlos',
+        ])->assertCreated()->json('data.game.teams.0.players.0.id');
+
+        $this->postJson("/api/v1/games/{$gameId}/teams/{$teamBId}/players", [
+            'name' => 'Bruno',
+        ])->assertCreated();
+
+        $this->postJson("/api/v1/games/{$gameId}/teams/{$teamAId}/players", [
+            'name' => 'Diana',
+        ])->assertCreated();
+
+        $this->postJson("/api/v1/games/{$gameId}/teams/{$teamBId}/players", [
+            'name' => 'Elisa',
+        ])->assertCreated();
+
+        $this->putJson("/api/v1/games/{$gameId}/shuffler", [
+            'player_id' => (int) $carlos,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.game.game.initial_shuffler_seat_number', 1)
+            ->assertJsonPath('data.game.round_roles.0.round_number', 1)
+            ->assertJsonPath('data.game.round_roles.0.shuffler.display_name', 'Carlos')
+            ->assertJsonPath('data.game.round_roles.0.dealer.display_name', 'Bruno')
+            ->assertJsonPath('data.game.round_roles.0.first_draw.display_name', 'Diana');
+
+        $this->postJson("/api/v1/games/{$gameId}/rounds", [
+            'scores' => [
+                ['team_id' => $teamAId, 'points' => 200],
+                ['team_id' => $teamBId, 'points' => 100],
+            ],
+        ])->assertOk();
+
+        $this->getJson("/api/v1/games/{$gameId}")
+            ->assertOk()
+            ->assertJsonPath('data.game.round_roles.1.round_number', 2)
+            ->assertJsonPath('data.game.round_roles.1.shuffler.display_name', 'Bruno')
+            ->assertJsonPath('data.game.round_roles.1.dealer.display_name', 'Diana')
+            ->assertJsonPath('data.game.round_roles.1.first_draw.display_name', 'Elisa');
+    }
+
+    /**
      * Create a game and return its id for test setup.
      *
      * @param  int  $targetPoints  Winning threshold for the created game.

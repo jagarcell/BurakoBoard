@@ -33,6 +33,7 @@ class Game extends Model
         'status',
         'winning_team_id',
         'current_round_number',
+        'initial_shuffler_seat_number',
     ];
 
     /**

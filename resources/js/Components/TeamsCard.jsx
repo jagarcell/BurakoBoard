@@ -12,7 +12,7 @@ import TextInput from '@/Components/TextInput';
 const defaultTeamForm = { name: '', players: [] };
 const defaultPlayerInput = { userId: '', name: '' };
 
-export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate = null, isFetching = false, onTeamsChange, onTeamCreated, onWinnerBadgeClick = null }) {
+export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary = null, scoreUpdate = null, isFetching = false, onTeamsChange, onTeamCreated, onWinnerBadgeClick = null }) {
     const [teams, setTeams] = useState(initialTeams);
     const [users, setUsers] = useState([]);
     const [allTeams, setAllTeams] = useState([]);
@@ -326,6 +326,69 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
     const playerCountMismatch =
         teams.length === 2 && teams[0].players.length !== teams[1].players.length;
 
+    const roundRoles = gameSummary?.round_roles ?? [];
+    const lastCompletedRoundNumber = Number(gameSummary?.game?.current_round_number ?? selectedGame?.current_round_number ?? 0);
+    const initialShufflerSeatNumber = gameSummary?.game?.initial_shuffler_seat_number ?? null;
+    const isFirstRound = lastCompletedRoundNumber === 0;
+    const activeRoundNumber = selectedGame?.status === 'in_progress'
+        ? lastCompletedRoundNumber + 1
+        : lastCompletedRoundNumber;
+    const allSeatedPlayers = teams
+        .flatMap((team) => team.players)
+        .filter((player) => player.seat_number != null)
+        .sort((a, b) => a.seat_number - b.seat_number);
+    const allPlayers = teams
+        .flatMap((team) => team.players)
+        .sort((a, b) => a.id - b.id);
+    const shufflerCandidates = allSeatedPlayers.length > 0 ? allSeatedPlayers : allPlayers;
+    const initialShufflerPlayer = allSeatedPlayers.find((player) => player.seat_number === initialShufflerSeatNumber) ?? null;
+    const currentRoundRoles = roundRoles.find(
+        (roundRole) => Number(roundRole.round_number) === activeRoundNumber,
+    ) ?? null;
+    const canShowShufflerSelector = isGameEditable && teams.length === 2 && !playerCountMismatch && (isFirstRound || activeRoundNumber > 1);
+
+    const getCurrentRoundRoleForPlayer = (playerId) => {
+        if (! currentRoundRoles || activeRoundNumber <= 0) {
+            return null;
+        }
+
+        if (currentRoundRoles.shuffler?.player_id === playerId) {
+            return 'Shuffler';
+        }
+
+        if (currentRoundRoles.dealer?.player_id === playerId) {
+            return 'Dealer';
+        }
+
+        if (currentRoundRoles.first_draw?.player_id === playerId) {
+            return 'First Draw';
+        }
+
+        return null;
+    };
+
+    const handleSetInitialShuffler = async (playerId) => {
+        try {
+            const response = await axios.put(`/api/v1/games/${selectedGame.id}/shuffler`, {
+                player_id: playerId,
+            });
+
+            const summary = response.data?.data?.game ?? {};
+            const newTeams = summary.teams ?? [];
+            startTransition(() => {
+                setTeams(newTeams);
+            });
+            onTeamsChange?.(newTeams, summary);
+        } catch (error) {
+            const apiErrors = error.response?.data?.data?.errors ?? {};
+            const firstApiError = Object.values(apiErrors).flat()[0];
+            setErrors((current) => ({
+                ...current,
+                shuffler: firstApiError || 'Unable to set the initial shuffler right now.',
+            }));
+        }
+    };
+
     /** Trim and collapse inner whitespace so '  Team  Alpha  ' → 'Team Alpha'. */
     const normalizeName = (str) => str.trim().replace(/\s+/g, ' ');
 
@@ -431,17 +494,28 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                                         {team.players.map((player) => (
                                                             <li
                                                                 key={player.id}
-                                                                className="flex items-center gap-2 text-sm text-slate-600"
+                                                                className="flex items-center justify-between gap-2 text-sm text-slate-600"
                                                             >
-                                                                {player.seat_number != null ? (
-                                                                    <span
-                                                                        aria-label={`Seat ${player.seat_number}`}
-                                                                        className="flex flex-shrink-0 items-center justify-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500"
-                                                                    >
-                                                                        Seat {player.seat_number}
-                                                                    </span>
+                                                                <div className="flex min-w-0 items-center gap-2">
+                                                                    {player.seat_number != null ? (
+                                                                        <span
+                                                                            aria-label={`Seat ${player.seat_number}`}
+                                                                            className="flex flex-shrink-0 items-center justify-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500"
+                                                                        >
+                                                                            Seat {player.seat_number}
+                                                                        </span>
+                                                                    ) : null}
+                                                                    <span className="truncate">{player.display_name}</span>
+                                                                </div>
+                                                                {getCurrentRoundRoleForPlayer(player.id) ? (
+                                                                    <div className="flex flex-wrap justify-end gap-1">
+                                                                        <span
+                                                                            className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700"
+                                                                        >
+                                                                            {getCurrentRoundRoleForPlayer(player.id)}
+                                                                        </span>
+                                                                    </div>
                                                                 ) : null}
-                                                                {player.display_name}
                                                             </li>
                                                         ))}
                                                     </ul>
@@ -572,6 +646,58 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                 {teams[1].name} has {teams[1].players.length}{' '}
                                 {teams[1].players.length === 1 ? 'player' : 'players'}.
                             </p>
+                        </div>
+                    ) : null}
+
+                    {canShowShufflerSelector ? (
+                        <div className="mx-6 mb-5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+                            <p className="text-sm font-semibold text-indigo-900">
+                                {isFirstRound ? 'Round 1 shuffler' : `Round ${activeRoundNumber} player order`}
+                            </p>
+                            <p className="mt-1 text-sm text-indigo-700">
+                                {isFirstRound
+                                    ? 'Choose who shuffles in round 1. Dealer and first draw are assigned to the next sequential seats.'
+                                    : 'These are the players roles for this round.'}
+                            </p>
+
+                            {shufflerCandidates.length > 0 ? (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {shufflerCandidates.map((player) => {
+                                        const currentRole = getCurrentRoundRoleForPlayer(player.id);
+                                        const chipRole = currentRole;
+                                        const isHighlightedPlayer = isFirstRound
+                                            ? chipRole === 'Shuffler' || initialShufflerPlayer?.id === player.id
+                                            : currentRole === 'Shuffler';
+
+                                        return (
+                                            <button
+                                                key={player.id}
+                                                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${isHighlightedPlayer
+                                                    ? 'border-indigo-300 bg-indigo-600 text-white'
+                                                    : 'border-indigo-200 bg-white text-indigo-700'} ${isFirstRound ? 'hover:border-indigo-300 hover:bg-indigo-100' : 'cursor-default opacity-80'}`}
+                                                disabled={! isFirstRound}
+                                                onClick={isFirstRound ? () => handleSetInitialShuffler(player.id) : undefined}
+                                                type="button"
+                                            >
+                                                {player.seat_number != null
+                                                    ? `Seat ${player.seat_number} · ${player.display_name}`
+                                                    : player.display_name}
+                                                {chipRole
+                                                    ? ` · ${chipRole}`
+                                                    : ''}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="mt-2 text-sm text-indigo-700">
+                                    Add at least one player to assign the initial shuffler.
+                                </p>
+                            )}
+
+                            {isFirstRound && errors.shuffler ? (
+                                <p className="mt-2 text-sm text-red-600">{errors.shuffler}</p>
+                            ) : null}
                         </div>
                     ) : null}
                 </div>

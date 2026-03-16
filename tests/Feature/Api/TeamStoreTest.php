@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Game;
+use App\Models\Player;
 use App\Models\Team;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +34,23 @@ class TeamStoreTest extends TestCase
         ]);
 
         return $team;
+    }
+
+    /**
+     * Attach a named player to an existing team for test setup.
+     *
+     * @param  \App\Models\Team  $team  Team that should receive the player.
+     * @param  string  $name  Player display name.
+     * @return \App\Models\Player Newly created player linked to the team.
+     * Logic: create a standalone player record and attach it through the team_player pivot
+     * so attach-team tests can verify seat assignment for pre-existing rosters.
+     */
+    private function attachPlayerByName(Team $team, string $name): Player
+    {
+        $player = Player::query()->create(['user_id' => null, 'display_name' => $name]);
+        $team->players()->attach($player->id);
+
+        return $player;
     }
 
     /**
@@ -222,6 +240,45 @@ class TeamStoreTest extends TestCase
 
         // Only one team row should exist globally (no duplicate created).
         $this->assertDatabaseCount('teams', 1);
+    }
+
+    /**
+     * Ensure attaching an existing team seats its already-linked players immediately.
+     *
+     * @return void Verifies seat assignment is created during attach, without waiting for add-player calls.
+     * Logic: create team A with one player and team B with one player in source game, attach both teams
+     * to a new game, and assert odd/even seats are present in the attach response and game_player_seat table.
+     */
+    public function test_attach_assigns_seats_for_existing_team_players_immediately(): void
+    {
+        $sourceGame = $this->makeGame();
+        $targetGame = $this->makeGame();
+
+        $teamA = $this->makeTeam($sourceGame, 'Team Alpha');
+        $alice = $this->attachPlayerByName($teamA, 'Alice');
+
+        $teamB = $this->makeTeam($sourceGame, 'Team Beta');
+        $bob = $this->attachPlayerByName($teamB, 'Bob');
+
+        $this->postJson("/api/v1/games/{$targetGame->id}/teams/{$teamA->id}/attach")
+            ->assertStatus(201)
+            ->assertJsonPath('data.game.teams.0.players.0.seat_number', 1);
+
+        $this->postJson("/api/v1/games/{$targetGame->id}/teams/{$teamB->id}/attach")
+            ->assertStatus(201)
+            ->assertJsonPath('data.game.teams.1.players.0.seat_number', 2);
+
+        $this->assertDatabaseHas('game_player_seat', [
+            'game_id' => $targetGame->id,
+            'player_id' => $alice->id,
+            'seat_number' => 1,
+        ]);
+
+        $this->assertDatabaseHas('game_player_seat', [
+            'game_id' => $targetGame->id,
+            'player_id' => $bob->id,
+            'seat_number' => 2,
+        ]);
     }
 
     /**

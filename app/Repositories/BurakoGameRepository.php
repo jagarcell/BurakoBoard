@@ -227,6 +227,22 @@ class BurakoGameRepository
     }
 
     /**
+     * Return all player ids currently linked to a team.
+     *
+     * @param  int  $teamId  Identifier of the team.
+     * @return \Illuminate\Support\Collection<int, int> Player ids in the team.
+     * Logic: read team_player rows for the team and pluck player_id values so callers can perform
+     * follow-up operations (such as seat assignment) without querying inside the service layer.
+     */
+    public function getTeamPlayerIds(int $teamId): Collection
+    {
+        return DB::table('team_player')
+            ->where('team_id', $teamId)
+            ->pluck('player_id')
+            ->map(fn ($playerId): int => (int) $playerId);
+    }
+
+    /**
      * Remove a player from a team by deleting the team_player pivot row.
      *
      * @param  int  $teamId   Identifier of the team.
@@ -428,6 +444,23 @@ class BurakoGameRepository
     }
 
     /**
+     * Update the initial shuffler seat used to derive round roles.
+     *
+     * @param  \App\Models\Game  $game  Game to update.
+     * @param  int  $seatNumber  Seat number of the initial shuffler.
+     * @return \App\Models\Game The refreshed game model after persistence.
+     * Logic: persist one seat reference on the game so round role rotation can be computed
+     * deterministically from seat order without storing role rows per round.
+     */
+    public function updateGameInitialShufflerSeat(Game $game, int $seatNumber): Game
+    {
+        $game->initial_shuffler_seat_number = $seatNumber;
+        $game->save();
+
+        return $game->fresh();
+    }
+
+    /**
      * Update only the game's current round counter.
      *
      * @param  \App\Models\Game  $game  Game to update.
@@ -455,6 +488,34 @@ class BurakoGameRepository
             ->select(['id', 'name'])
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * Find a seated player in the context of a specific game.
+     *
+     * @param  int  $gameId    Identifier of the game.
+     * @param  int  $playerId  Identifier of the player.
+     * @return object|null A row containing player identity and seat info, or null when missing.
+     * Logic: join game_team, team_player, players, and game_player_seat to ensure the player
+     * belongs to one of the game's teams and has a concrete seat assignment in that game.
+     */
+    public function findSeatedPlayerInGame(int $gameId, int $playerId): ?object
+    {
+        return DB::table('game_team')
+            ->join('team_player', 'team_player.team_id', '=', 'game_team.team_id')
+            ->join('players', 'players.id', '=', 'team_player.player_id')
+            ->join('game_player_seat', function ($join) use ($gameId): void {
+                $join->on('game_player_seat.player_id', '=', 'players.id')
+                    ->where('game_player_seat.game_id', '=', $gameId);
+            })
+            ->where('game_team.game_id', $gameId)
+            ->where('players.id', $playerId)
+            ->select([
+                'players.id as player_id',
+                'players.display_name',
+                'game_player_seat.seat_number',
+            ])
+            ->first();
     }
 
     /**
@@ -586,6 +647,12 @@ class BurakoGameRepository
             ];
         })->values()->all();
 
+        $roundRoles = $this->buildRoundRoles(
+            $teamPayload,
+            (int) $game->current_round_number,
+            $game->initial_shuffler_seat_number !== null ? (int) $game->initial_shuffler_seat_number : null,
+        );
+
         return [
             'game' => [
                 'id' => $game->id,
@@ -594,10 +661,74 @@ class BurakoGameRepository
                 'status' => $game->status,
                 'winning_team_id' => $game->winning_team_id,
                 'current_round_number' => $game->current_round_number,
+                'initial_shuffler_seat_number' => $game->initial_shuffler_seat_number,
             ],
             'teams' => $teamPayload,
             'rounds' => $rounds,
+            'round_roles' => $roundRoles,
         ];
+    }
+
+    /**
+     * Compute seat-based round roles (shuffler, dealer, first draw) for each played and upcoming round.
+     *
+     * @param  array<int, array<string, mixed>>  $teams  Team payload with players that include seat numbers.
+     * @param  int  $currentRoundNumber  Last completed round number from the game row.
+     * @param  int|null  $initialShufflerSeatNumber  Seat number selected as the initial shuffler.
+     * @return array<int, array<string, mixed>> Round role assignments ordered by round number.
+     * Logic: flatten seated players ordered by seat, locate the initial shuffler index, then rotate
+     * indices by one seat each round so dealer is next seat and first draw is the seat after dealer.
+     */
+    private function buildRoundRoles(array $teams, int $currentRoundNumber, ?int $initialShufflerSeatNumber): array
+    {
+        $seatedPlayers = collect($teams)
+            ->flatMap(fn (array $team): array => $team['players'] ?? [])
+            ->filter(fn (array $player): bool => $player['seat_number'] !== null)
+            ->sortBy('seat_number')
+            ->values();
+
+        if ($initialShufflerSeatNumber === null || $seatedPlayers->count() < 3) {
+            return [];
+        }
+
+        $initialIndex = $seatedPlayers->search(
+            fn (array $player): bool => (int) $player['seat_number'] === $initialShufflerSeatNumber,
+        );
+
+        if ($initialIndex === false) {
+            return [];
+        }
+
+        $roundCount = max(1, $currentRoundNumber + 1);
+        $totalPlayers = $seatedPlayers->count();
+        $roundRoles = [];
+
+        for ($roundOffset = 0; $roundOffset < $roundCount; $roundOffset++) {
+            $shuffler = $seatedPlayers[($initialIndex + $roundOffset) % $totalPlayers];
+            $dealer = $seatedPlayers[($initialIndex + $roundOffset + 1) % $totalPlayers];
+            $firstDraw = $seatedPlayers[($initialIndex + $roundOffset + 2) % $totalPlayers];
+
+            $roundRoles[] = [
+                'round_number' => $roundOffset + 1,
+                'shuffler' => [
+                    'player_id' => (int) $shuffler['id'],
+                    'display_name' => $shuffler['display_name'],
+                    'seat_number' => (int) $shuffler['seat_number'],
+                ],
+                'dealer' => [
+                    'player_id' => (int) $dealer['id'],
+                    'display_name' => $dealer['display_name'],
+                    'seat_number' => (int) $dealer['seat_number'],
+                ],
+                'first_draw' => [
+                    'player_id' => (int) $firstDraw['id'],
+                    'display_name' => $firstDraw['display_name'],
+                    'seat_number' => (int) $firstDraw['seat_number'],
+                ],
+            ];
+        }
+
+        return $roundRoles;
     }
 
     /**

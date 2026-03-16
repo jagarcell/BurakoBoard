@@ -24,6 +24,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/games', [GameController::class, 'store']);
     Route::get('/games/{gameId}', [GameController::class, 'show']);
     Route::put('/games/{gameId}', [GameController::class, 'update']);
+    Route::put('/games/{gameId}/shuffler', [GameController::class, 'setInitialShuffler']);
     Route::get('/games/{gameId}/has-two-teams', [GameController::class, 'hasTwoTeams']);
     Route::post('/games/{gameId}/teams', [TeamController::class, 'store']);
     Route::put('/games/{gameId}/teams/{teamId}', [TeamController::class, 'update']);

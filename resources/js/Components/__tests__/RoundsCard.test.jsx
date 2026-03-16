@@ -181,7 +181,14 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(onRoundRecorded).toHaveBeenCalledWith([updatedTeamA, updatedTeamB], 'in_progress'),
+            expect(onRoundRecorded).toHaveBeenCalledWith(
+                [updatedTeamA, updatedTeamB],
+                'in_progress',
+                expect.objectContaining({
+                    teams: [updatedTeamA, updatedTeamB],
+                    rounds: [round1],
+                }),
+            ),
         );
     });
 
@@ -207,7 +214,14 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(onRoundRecorded).toHaveBeenCalledWith([updatedTeamA, updatedTeamB], 'finished'),
+            expect(onRoundRecorded).toHaveBeenCalledWith(
+                [updatedTeamA, updatedTeamB],
+                'finished',
+                expect.objectContaining({
+                    teams: [updatedTeamA, updatedTeamB],
+                    rounds: [round1],
+                }),
+            ),
         );
     });
 

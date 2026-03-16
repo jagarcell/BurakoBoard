@@ -402,7 +402,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             skipNextDraftSave.current = true;
             setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
             setCardInputs(buildDefaultCardInputs(updatedTeams));
-            onRoundRecorded?.(updatedTeams, newGameStatus);
+            onRoundRecorded?.(updatedTeams, newGameStatus, gameSummary);
         } catch {
             setSaveError('Unable to record the round right now.');
         } finally {
