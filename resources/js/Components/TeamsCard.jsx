@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Fragment, startTransition, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -35,6 +35,12 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
         startTransition(() => setTeams(initialTeams));
     }, [initialTeams]);
 
+    const fetchAllTeams = useCallback(() => {
+        axios.get('/api/v1/teams').then((response) => {
+            setAllTeams(response.data?.data?.teams ?? []);
+        });
+    }, []);
+
     useEffect(() => {
         let isActive = true;
 
@@ -47,7 +53,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
         });
 
         return () => { isActive = false; };
-    }, []);
+    }, [fetchAllTeams]);
 
     useEffect(() => {
         if (! scoreUpdate?.length) return;
@@ -169,60 +175,28 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
 
         if (! selectedTeam) return;
 
-        const duplicate = teams.some(
-            (t) => normalizeName(t.name).toLowerCase() === normalizeName(selectedTeam.name).toLowerCase(),
-        );
-
-        if (duplicate) {
-            setSlotAddErrors((s) => ({
-                ...s,
-                [slot]: 'A team with this name already exists in this game.',
-            }));
-
-            return;
-        }
-
         setSlotAdding((s) => ({ ...s, [slot]: true }));
         setSlotAddErrors((s) => ({ ...s, [slot]: '' }));
 
         try {
-            const teamResponse = await axios.post(
-                `/api/v1/games/${selectedGame.id}/teams`,
-                { name: selectedTeam.name },
+            const response = await axios.post(
+                `/api/v1/games/${selectedGame.id}/teams/${selectedTeam.id}/attach`,
             );
 
-            const summaryTeams = teamResponse.data?.data?.game?.teams ?? [];
-            const createdTeam =
-                summaryTeams.find((t) => t.name === selectedTeam.name) ??
-                summaryTeams[summaryTeams.length - 1];
-
-            if (! createdTeam) throw new Error('Created team not found in response.');
-
-            let lastResponse = teamResponse;
-
-            for (const player of selectedTeam.players) {
-                const payload = player.user_id
-                    ? { user_id: player.user_id, name: player.display_name }
-                    : { name: player.display_name };
-
-                lastResponse = await axios.post(
-                    `/api/v1/games/${selectedGame.id}/teams/${createdTeam.id}/players`,
-                    payload,
-                );
-            }
-
-            const newTeamsFromSlot = lastResponse.data?.data?.game?.teams ?? summaryTeams;
+            const newTeams = response.data?.data?.game?.teams ?? [];
             startTransition(() => {
-                setTeams(newTeamsFromSlot);
+                setTeams(newTeams);
             });
-            onTeamsChange?.(newTeamsFromSlot);
+            onTeamsChange?.(newTeams);
             onTeamCreated?.();
 
             setSlotSelections((s) => ({ ...s, [slot]: '' }));
-        } catch {
+        } catch (error) {
+            const apiErrors = error.response?.data?.data?.errors ?? {};
+            const firstApiError = Object.values(apiErrors).flat()[0];
             setSlotAddErrors((s) => ({
                 ...s,
-                [slot]: 'Unable to add the team right now.',
+                [slot]: firstApiError || 'Unable to add the team right now.',
             }));
         } finally {
             setSlotAdding((s) => ({ ...s, [slot]: false }));
@@ -241,12 +215,15 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
             return;
         }
 
-        const duplicate = teams.some(
+        // When creating: reject if a team with this name already exists globally.
+        // When editing: allow the same name as the team being edited (exclude by id).
+        // Also check teams already on this game (they are global entities too).
+        const globalDuplicate = [...allTeams, ...teams].some(
             (t) => normalizeName(t.name).toLowerCase() === name.toLowerCase() && t.id !== editingTeam?.id,
         );
 
-        if (duplicate) {
-            setErrors({ teamName: 'A team with this name already exists in this game.' });
+        if (globalDuplicate) {
+            setErrors({ teamName: 'A team with this name already exists.' });
 
             return;
         }
@@ -314,6 +291,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
 
             setIsModalOpen(false);
             resetModal();
+            fetchAllTeams();
         } catch (error) {
             const apiErrors = error.response?.data?.data?.errors ?? {};
             const firstApiError = Object.values(apiErrors).flat()[0];
@@ -384,7 +362,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                     </div>
                 </div>
 
-                <div className="divide-y divide-slate-100">
+                <div>
                     {! selectedGame ? (
                         <p className="px-6 py-5 text-sm text-slate-400">
                             Select a game above to manage its teams.
@@ -489,7 +467,10 @@ export default function TeamsCard({ selectedGame, initialTeams = [], scoreUpdate
                                                     <TeamSlotSelector
                                                         allTeams={allTeams}
                                                         disabled={slotAdding[slot]}
-                                                        excludedTeamIds={teams.map((t) => t.id)}
+                                                        excludedTeamIds={[
+                                                            ...teams.map((t) => t.id),
+                                                            ...(slotSelections[1 - slot] ? [Number(slotSelections[1 - slot])] : []),
+                                                        ]}
                                                         onAddTeam={() => handleAddExistingTeam(slot)}
                                                         onCreateTeam={openModal}
                                                         onSelect={(val) =>
