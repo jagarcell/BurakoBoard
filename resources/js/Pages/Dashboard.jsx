@@ -23,12 +23,23 @@ export default function Dashboard() {
         burstConfetti();
     }, [unlockBadgeSound, playBadgeSound, burstConfetti]);
 
-    const handleTeamsChange = (newTeams) => {
+    const handleTeamsChange = (newTeams, nextSummary = null) => {
+        if (nextSummary) {
+            setGameSummary(nextSummary);
+
+            return;
+        }
+
         setGameSummary((prev) => (prev ? { ...prev, teams: newTeams } : prev));
     };
 
-    const handleRoundRecorded = (updatedTeams, gameStatus) => {
+    const handleRoundRecorded = (updatedTeams, gameStatus, nextSummary = null) => {
         setScoreUpdate(updatedTeams);
+
+        if (nextSummary) {
+            setGameSummary(nextSummary);
+        }
+
         if (gameStatus) {
             setSelectedGame((prev) => (prev ? { ...prev, status: gameStatus } : prev));
         }
@@ -58,8 +69,10 @@ export default function Dashboard() {
                 const teams = summary.teams ?? [];
 
                 setGameSummary({
+                    game: summary.game ?? null,
                     teams,
                     rounds: summary.rounds ?? [],
+                    round_roles: summary.round_roles ?? [],
                 });
                 setIsFetching(false);
                 setScoreUpdate(null);
@@ -67,7 +80,7 @@ export default function Dashboard() {
             .catch(() => {
                 if (! isActive) return;
 
-                setGameSummary({ teams: [], rounds: [] });
+                setGameSummary({ game: null, teams: [], rounds: [], round_roles: [] });
                 setIsFetching(false);
             });
 
@@ -100,6 +113,7 @@ export default function Dashboard() {
                     <GameCard onGameSelect={setSelectedGame} />
 
                     <TeamsCard
+                        gameSummary={gameSummary}
                         initialTeams={initialTeams}
                         isFetching={isFetching}
                         onTeamsChange={handleTeamsChange}
