@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -30,21 +29,21 @@ class Team extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'game_id',
         'name',
-        'current_score',
     ];
 
     /**
-     * Get the game that owns the team.
+     * Get all games this team participates in.
      *
      * @param  none
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\App\Models\Game, $this> Parent game for the team.
-     * Logic: expose the inverse side of the teams.game_id foreign key so each team can resolve its game.
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<\App\Models\Game, $this> Games for this team.
+     * Logic: expose the many-to-many link via game_team so a single team entity can play across multiple games,
+     * each with its own per-game current_score stored on the pivot.
      */
-    public function game(): BelongsTo
+    public function games(): BelongsToMany
     {
-        return $this->belongsTo(Game::class, 'game_id');
+        return $this->belongsToMany(Game::class, 'game_team')
+            ->withPivot('current_score');
     }
 
     /**
