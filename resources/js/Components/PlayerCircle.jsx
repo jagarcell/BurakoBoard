@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 
 /**
  * Visual labels for each round role.
@@ -61,14 +61,20 @@ function buildRoleMap(roundRoles) {
  * @param {boolean}     [props.isOpen=true] - When true plays the genie-open animation;
  *   when false plays the genie-close animation so the caller can keep the element
  *   mounted until the collapse finishes before unmounting it.
+ * @param {DOMRect|null} [props.buttonRect=null] - The bounding rect of the toggle
+ *   button that opened the circle. When provided, `--genie-dx` and `--genie-dy`
+ *   CSS custom properties are computed as the offset from the wrapper's centre to
+ *   the button's centre so the genie animation visually originates from the button.
  * @return {JSX.Element}
  * Logic: sort seated players by seat number, compute an angular position for
  * each one (counter-clockwise, seat 1 at top-right), draw an SVG dashed ring,
  * then absolutely-position each chip at its computed (x, y) coordinate.
- * The outermost wrapper applies a CSS genie animation driven by `isOpen` —
- * stretching out from the top-center origin on open and squishing back on close.
+ * The outermost wrapper applies a CSS genie animation driven by `isOpen`.
+ * A useLayoutEffect runs synchronously before paint to set --genie-dx/dy from
+ * the measured offset between the button and the wrapper's centre, ensuring the
+ * translate in the keyframes originates from the correct screen position.
  */
-export default function PlayerCircle({ players, roundRoles, roundNumber, isOpen = true }) {
+export default function PlayerCircle({ players, roundRoles, roundNumber, isOpen = true, buttonRect = null }) {
     const SIZE = 280;
     const CENTER = SIZE / 2;
     const RADIUS = 98;
@@ -82,6 +88,35 @@ export default function PlayerCircle({ players, roundRoles, roundNumber, isOpen 
     );
 
     const roleMap = useMemo(() => buildRoleMap(roundRoles), [roundRoles]);
+
+    const wrapperRef = useRef(null);
+
+    /**
+     * Compute the (dx, dy) pixel offset from the wrapper's centre to the
+     * toggle button's centre and store it as CSS custom properties so the
+     * genie keyframes can translate from the button position.
+     *
+     * @return {void}
+     * Logic: runs synchronously after the DOM commit (useLayoutEffect) so the
+     * CSS vars are applied before the browser paints the first animation frame.
+     * Falls back to 0 when no buttonRect is available.
+     */
+    useLayoutEffect(() => {
+        const el = wrapperRef.current;
+        if (!el) return;
+        if (!buttonRect) {
+            el.style.setProperty('--genie-dx', '0px');
+            el.style.setProperty('--genie-dy', '0px');
+            return;
+        }
+        const r = el.getBoundingClientRect();
+        const bx = buttonRect.left + buttonRect.width / 2;
+        const by = buttonRect.top + buttonRect.height / 2;
+        const wx = r.left + r.width / 2;
+        const wy = r.top + r.height / 2;
+        el.style.setProperty('--genie-dx', `${bx - wx}px`);
+        el.style.setProperty('--genie-dy', `${by - wy}px`);
+    }, [buttonRect]);
 
     /**
      * Compute the (x, y) position and role for every seated player.
@@ -104,7 +139,10 @@ export default function PlayerCircle({ players, roundRoles, roundNumber, isOpen 
     }, [seatedPlayers, roleMap]);
 
     return (
-        <div className={`flex flex-col items-center gap-3 px-5 pb-5 pt-4 ${isOpen ? 'animate-genie-open' : 'animate-genie-close'}`}>
+        <div
+            ref={wrapperRef}
+            className={`flex flex-col items-center gap-3 px-5 pb-5 pt-4 ${isOpen ? 'animate-genie-open' : 'animate-genie-close'}`}
+        >
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-400">
                 Round {roundNumber ?? '—'} — Seating &amp; Roles
             </p>
@@ -121,6 +159,24 @@ export default function PlayerCircle({ players, roundRoles, roundNumber, isOpen 
                     viewBox={`0 0 ${SIZE} ${SIZE}`}
                     width={SIZE}
                 >
+                    <defs>
+                        {/* Arrowhead marker pointing in the counter-clockwise direction */}
+                        <marker
+                            id="ccw-arrow"
+                            markerHeight="6"
+                            markerWidth="6"
+                            orient="auto"
+                            refX="0"
+                            refY="3"
+                            viewBox="0 0 6 6"
+                        >
+                            <path
+                                d="M0,0 L6,3 L0,6 Z"
+                                fill="rgba(99,102,241,0.45)"
+                            />
+                        </marker>
+                    </defs>
+
                     <circle
                         cx={CENTER}
                         cy={CENTER}
@@ -128,6 +184,41 @@ export default function PlayerCircle({ players, roundRoles, roundNumber, isOpen 
                         r={RADIUS}
                         stroke="rgba(99,102,241,0.18)"
                         strokeDasharray="5 7"
+                        strokeWidth="1.5"
+                    />
+
+                    {/*
+                      * Two demi-circular counter-clockwise arrows drawn 20 px outside
+                      * the centre badge (badge r=32 → arrow r=52).
+                      * Each arc spans ~120°, leaving ~60° gaps on the left and right sides.
+                      *
+                      * SVG angle convention: 0°=right, 90°=down, 180°=left, 270°=up.
+                      * sweep-flag=0 → counter-clockwise arc (as seen on screen, y-down).
+                      *
+                      * Arc 1 (top half, CCW): from 330° to 210° passing through 270° (top).
+                      *   start (330°): cx+r·cos(330°)=185.0, cy+r·sin(330°)=114.0
+                      *   end   (210°): cx+r·cos(210°)=95.0,  cy+r·sin(210°)=114.0
+                      *   sweep-flag=0, large-arc-flag=0 → 120° CCW arc over the top
+                      *
+                      * Arc 2 (bottom half, CCW): from 150° to 30° passing through 90° (bottom).
+                      *   start (150°): cx+r·cos(150°)=95.0,  cy+r·sin(150°)=166.0
+                      *   end   (30°):  cx+r·cos(30°)=185.0,  cy+r·sin(30°)=166.0
+                      *   sweep-flag=0, large-arc-flag=0 → 120° CCW arc over the bottom
+                      */}
+                    <path
+                        d="M 185.0,114.0 A 52,52 0 0,0 95.0,114.0"
+                        fill="none"
+                        markerEnd="url(#ccw-arrow)"
+                        stroke="rgba(99,102,241,0.45)"
+                        strokeLinecap="butt"
+                        strokeWidth="1.5"
+                    />
+                    <path
+                        d="M 95.0,166.0 A 52,52 0 0,0 185.0,166.0"
+                        fill="none"
+                        markerEnd="url(#ccw-arrow)"
+                        stroke="rgba(99,102,241,0.45)"
+                        strokeLinecap="butt"
                         strokeWidth="1.5"
                     />
                 </svg>
