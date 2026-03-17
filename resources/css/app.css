@@ -1,3 +1,34 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Genie-pop animation ─────────────────────────────────────────────────── */
+/* Open: element emerges from a bottle neck (top center), narrow & flat first,
+   then stretches to full size with a slight elastic overshoot. */
+@keyframes genie-open {
+    0%   { opacity: 0; transform: scaleX(0.12) scaleY(0); }
+    25%  { opacity: 1; transform: scaleX(0.55) scaleY(0.42); }
+    60%  { transform: scaleX(1.04) scaleY(1.07); }
+    80%  { transform: scaleX(0.98) scaleY(0.97); }
+    100% { opacity: 1; transform: scaleX(1)    scaleY(1); }
+}
+
+/* Close: the inverse — element squishes back into the bottle neck. */
+@keyframes genie-close {
+    0%   { opacity: 1; transform: scaleX(1)    scaleY(1); }
+    20%  { transform: scaleX(0.98) scaleY(1.03); }
+    40%  { transform: scaleX(1.04) scaleY(1.07); }
+    70%  { opacity: 1; transform: scaleX(0.55) scaleY(0.42); }
+    100% { opacity: 0; transform: scaleX(0.12) scaleY(0); }
+}
+
+@layer utilities {
+    .animate-genie-open {
+        transform-origin: top center;
+        animation: genie-open 480ms cubic-bezier(0.18, 1.4, 0.4, 1) both;
+    }
+    .animate-genie-close {
+        transform-origin: top center;
+        animation: genie-close 480ms cubic-bezier(0.55, 0, 0.7, 0.6) both;
+    }
+}
