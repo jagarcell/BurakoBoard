@@ -140,4 +140,33 @@ describe('PlayerCircle', () => {
 
         expect(container.firstChild).toHaveClass('animate-genie-open');
     });
+
+    it('sets --genie-dx and --genie-dy when buttonRect is provided', () => {
+        // JSDOM returns zeros from getBoundingClientRect(), so the offset from
+        // a non-zero buttonRect to a zero-positioned wrapper will be the button
+        // centre values themselves: (left + width/2) and (top + height/2).
+        const buttonRect = { left: 100, top: 50, width: 24, height: 24 };
+        const { container } = render(
+            <PlayerCircle
+                buttonRect={buttonRect}
+                players={players}
+                roundNumber={1}
+                roundRoles={roundRoles}
+            />,
+        );
+
+        const style = container.firstChild.style;
+        expect(style.getPropertyValue('--genie-dx')).toBe('112px'); // 100 + 24/2 - 0
+        expect(style.getPropertyValue('--genie-dy')).toBe('62px');  // 50 + 24/2 - 0
+    });
+
+    it('defaults genie CSS vars to 0px when buttonRect is omitted', () => {
+        const { container } = render(
+            <PlayerCircle players={players} roundNumber={1} roundRoles={roundRoles} />,
+        );
+
+        const style = container.firstChild.style;
+        expect(style.getPropertyValue('--genie-dx')).toBe('0px');
+        expect(style.getPropertyValue('--genie-dy')).toBe('0px');
+    });
 });
