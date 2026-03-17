@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import GameCard from '@/Components/GameCard';
+import PlayerOrderCard from '@/Components/PlayerOrderCard';
 import RoundsCard from '@/Components/RoundsCard';
 import TeamsCard from '@/Components/TeamsCard';
 import useConfetti from '@/hooks/useConfetti';
@@ -121,6 +122,13 @@ export default function Dashboard() {
                         onWinnerBadgeClick={handleWinnerBadgeClick}
                         scoreUpdate={scoreUpdate}
                         selectedGame={selectedGame}
+                    />
+
+                    <PlayerOrderCard
+                        gameSummary={gameSummary}
+                        onTeamsChange={handleTeamsChange}
+                        selectedGame={selectedGame}
+                        teams={initialTeams}
                     />
 
                     <RoundsCard
