@@ -1358,5 +1358,409 @@ describe('RoundsCard', () => {
             expect(totals[1]).toHaveTextContent('400');
         });
     });
+
+    describe('player circle toggle', () => {
+        beforeEach(() => {
+            axios.put = vi.fn().mockResolvedValue({});
+        });
+
+        const teamAWithPlayers = {
+            ...teamA,
+            players: [
+                { id: 1, user_id: null, display_name: 'Alice', seat_number: 1 },
+                { id: 3, user_id: null, display_name: 'Carlos', seat_number: 3 },
+            ],
+        };
+        const teamBWithPlayers = {
+            ...teamB,
+            players: [
+                { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                { id: 4, user_id: null, display_name: 'Diana', seat_number: 4 },
+            ],
+        };
+
+        const roundWithRoles = {
+            round_number: 1,
+            scores: [
+                { team_id: 10, team_name: 'Team Alpha', points: 100 },
+                { team_id: 11, team_name: 'Team Beta', points: 400 },
+            ],
+        };
+
+        const roundRoles = [
+            {
+                round_number: 1,
+                shuffler: { player_id: 1, display_name: 'Alice', seat_number: 1 },
+                cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                dealer: { player_id: 3, display_name: 'Carlos', seat_number: 3 },
+                first_draw: { player_id: 4, display_name: 'Diana', seat_number: 4 },
+            },
+        ];
+
+        it('renders a circle toggle button for each round in history', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[roundWithRoles]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    roundRoles={roundRoles}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            const circleBtn = await screen.findByRole('button', {
+                name: 'Show seating circle for round 1',
+            });
+            expect(circleBtn).toBeInTheDocument();
+        });
+
+        it('circle panel is not rendered before the button is clicked', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[roundWithRoles]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    roundRoles={roundRoles}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            // Ensure the history row rendered
+            await screen.findByRole('button', { name: 'Show seating circle for round 1' });
+
+            // Player display names from the circle should not be visible yet
+            expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+        });
+
+        it('shows player names after clicking the circle toggle button', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[roundWithRoles]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    roundRoles={roundRoles}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await user.click(
+                await screen.findByRole('button', { name: 'Show seating circle for round 1' }),
+            );
+
+            expect(screen.getByText('Alice')).toBeInTheDocument();
+            expect(screen.getByText('Bruno')).toBeInTheDocument();
+            expect(screen.getByText('Carlos')).toBeInTheDocument();
+            expect(screen.getByText('Diana')).toBeInTheDocument();
+        });
+
+        it('shows role badges inside the circle panel', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[roundWithRoles]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    roundRoles={roundRoles}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await user.click(
+                await screen.findByRole('button', { name: 'Show seating circle for round 1' }),
+            );
+
+            expect(screen.getByText('Shuffler')).toBeInTheDocument();
+            expect(screen.getByText('Cutter')).toBeInTheDocument();
+            expect(screen.getByText('Dealer')).toBeInTheDocument();
+            expect(screen.getByText('First Draw')).toBeInTheDocument();
+        });
+
+        it('circle toggle button label switches to "Hide" when circle is open', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[roundWithRoles]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    roundRoles={roundRoles}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await user.click(
+                await screen.findByRole('button', { name: 'Show seating circle for round 1' }),
+            );
+
+            expect(
+                screen.getByRole('button', { name: 'Hide seating circle for round 1' }),
+            ).toBeInTheDocument();
+        });
+
+        it('circle panel renders without role badges when no roundRoles provided', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[roundWithRoles]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await user.click(
+                await screen.findByRole('button', { name: 'Show seating circle for round 1' }),
+            );
+
+            // Players should appear
+            expect(screen.getByText('Alice')).toBeInTheDocument();
+            // But no role badges
+            expect(screen.queryByText('Shuffler')).not.toBeInTheDocument();
+        });
+
+        describe('current round (scoring form)', () => {
+            const roundRolesWithNext = [
+                ...roundRoles,
+                {
+                    round_number: 2,
+                    shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                    cutter: { player_id: 3, display_name: 'Carlos', seat_number: 3 },
+                    dealer: { player_id: 4, display_name: 'Diana', seat_number: 4 },
+                    first_draw: { player_id: 1, display_name: 'Alice', seat_number: 1 },
+                },
+            ];
+
+            it('renders a circle toggle button for the current (next) round', async () => {
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                // Round 2 is the next (current) round
+                const circleBtn = await screen.findByRole('button', {
+                    name: 'Show seating circle for round 2',
+                });
+                expect(circleBtn).toBeInTheDocument();
+            });
+
+            it('circle panel is not visible before the current-round button is clicked', async () => {
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                await screen.findByRole('button', { name: 'Show seating circle for round 2' });
+                // Bruno is in the next-round circle — should not be visible yet
+                expect(screen.queryByText('Bruno')).not.toBeInTheDocument();
+            });
+
+            it('shows player names after clicking the current-round circle button', async () => {
+                const user = userEvent.setup();
+
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                await user.click(
+                    await screen.findByRole('button', { name: 'Show seating circle for round 2' }),
+                );
+
+                expect(screen.getByText('Alice')).toBeInTheDocument();
+                expect(screen.getByText('Bruno')).toBeInTheDocument();
+                expect(screen.getByText('Carlos')).toBeInTheDocument();
+                expect(screen.getByText('Diana')).toBeInTheDocument();
+            });
+
+            it('shows role badges for the current round inside the role panel', async () => {
+                const user = userEvent.setup();
+
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                await user.click(
+                    await screen.findByRole('button', { name: 'Show seating circle for round 2' }),
+                );
+
+                expect(screen.getByText('Shuffler')).toBeInTheDocument();
+                expect(screen.getByText('Cutter')).toBeInTheDocument();
+                expect(screen.getByText('Dealer')).toBeInTheDocument();
+                expect(screen.getByText('First Draw')).toBeInTheDocument();
+            });
+
+            it('circle toggle button label switches to "Hide" when current-round circle is open', async () => {
+                const user = userEvent.setup();
+
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                await user.click(
+                    await screen.findByRole('button', { name: 'Show seating circle for round 2' }),
+                );
+
+                expect(
+                    screen.getByRole('button', { name: 'Hide seating circle for round 2' }),
+                ).toBeInTheDocument();
+            });
+
+            it('opening the current-round circle hides both teams score inputs', async () => {
+                const user = userEvent.setup();
+
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                // Both teams' Burako checkboxes should be visible before opening the circle.
+                const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+                expect(burakoCheckboxes).toHaveLength(2);
+
+                await user.click(
+                    await screen.findByRole('button', { name: 'Show seating circle for round 2' }),
+                );
+
+                // All team score inputs should be hidden once the circle is open.
+                expect(screen.queryAllByLabelText('Burako')).toHaveLength(0);
+            });
+
+            it('closing the current-round circle restores score inputs for teams that were visible', async () => {
+                const user = userEvent.setup();
+
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                await screen.findAllByLabelText('Burako');
+
+                // Open the circle, then close it.
+                await user.click(
+                    await screen.findByRole('button', { name: 'Show seating circle for round 2' }),
+                );
+                await user.click(
+                    screen.getByRole('button', { name: 'Hide seating circle for round 2' }),
+                );
+
+                // Both inputs should be visible again.
+                await waitFor(() =>
+                    expect(screen.getAllByLabelText('Burako')).toHaveLength(2),
+                );
+            });
+
+            it('a team that was already collapsed before opening the circle remains collapsed after closing', async () => {
+                axios.get.mockImplementation((url) =>
+                    url.includes('round-draft')
+                        ? Promise.resolve({ data: { data: { round_draft: null } } })
+                        : Promise.resolve(elementsResponse),
+                );
+                axios.put = vi.fn().mockResolvedValue({});
+
+                const user = userEvent.setup();
+
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                await screen.findAllByLabelText('Burako');
+
+                // Collapse Team Alpha before opening the circle.
+                await user.click(
+                    screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+                );
+                expect(screen.getAllByLabelText('Burako')).toHaveLength(1);
+
+                // Open then close the circle.
+                await user.click(
+                    screen.getByRole('button', { name: 'Show seating circle for round 2' }),
+                );
+                await user.click(
+                    screen.getByRole('button', { name: 'Hide seating circle for round 2' }),
+                );
+
+                // Team Alpha should still be collapsed; Team Beta should be visible.
+                await waitFor(() =>
+                    expect(screen.getAllByLabelText('Burako')).toHaveLength(1),
+                );
+            });
+
+            it('closing circle via outside click also restores team score inputs', async () => {
+                const user = userEvent.setup();
+
+                render(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[roundWithRoles]}
+                        initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                        roundRoles={roundRolesWithNext}
+                        selectedGame={selectedGame}
+                    />,
+                );
+
+                await screen.findAllByLabelText('Burako');
+
+                await user.click(
+                    await screen.findByRole('button', { name: 'Show seating circle for round 2' }),
+                );
+                expect(screen.queryAllByLabelText('Burako')).toHaveLength(0);
+
+                // Simulate outside click to dismiss.
+                fireEvent.click(document.body);
+
+                await waitFor(() =>
+                    expect(screen.getAllByLabelText('Burako')).toHaveLength(2),
+                );
+            });
+        });
+    });
+
 });
 

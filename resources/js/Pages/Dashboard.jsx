@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import GameCard from '@/Components/GameCard';
+import PlayerOrderCard from '@/Components/PlayerOrderCard';
 import RoundsCard from '@/Components/RoundsCard';
 import TeamsCard from '@/Components/TeamsCard';
 import useConfetti from '@/hooks/useConfetti';
@@ -91,6 +92,7 @@ export default function Dashboard() {
 
     const initialTeams = useMemo(() => gameSummary?.teams ?? [], [gameSummary]);
     const initialRounds = useMemo(() => gameSummary?.rounds ?? [], [gameSummary]);
+    const initialRoundRoles = useMemo(() => gameSummary?.round_roles ?? [], [gameSummary]);
 
     const hasTwoTeams = useMemo(() => {
         if (initialTeams.length < 2) return false;
@@ -122,9 +124,17 @@ export default function Dashboard() {
                         selectedGame={selectedGame}
                     />
 
+                    <PlayerOrderCard
+                        gameSummary={gameSummary}
+                        onTeamsChange={handleTeamsChange}
+                        selectedGame={selectedGame}
+                        teams={initialTeams}
+                    />
+
                     <RoundsCard
                         hasTwoTeams={hasTwoTeams}
                         initialRounds={initialRounds}
+                        roundRoles={initialRoundRoles}
                         initialTeams={initialTeams}
                         isFetching={isFetching}
                         onRoundRecorded={handleRoundRecorded}

@@ -1,11 +1,20 @@
 import axios from 'axios';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import BaseElementsInput from '@/Components/BaseElementsInput';
+
+/** Human-readable labels for each round role key, used in the player order reference strip. */
+const PLAYER_ROLE_LABEL_MAP = {
+    shuffler: 'Shuffler',
+    cutter: 'Cutter',
+    dealer: 'Dealer',
+    first_draw: 'First Draw',
+};
 import InputError from '@/Components/InputError';
+import PlayerCircle from '@/Components/PlayerCircle';
 import PrimaryButton from '@/Components/PrimaryButton';
 import useWinnerSound from '@/hooks/useWinnerSound';
 
-export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false, hasTwoTeams = false }) {
+export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false, hasTwoTeams = false, roundRoles = [] }) {
     const [teams, setTeams] = useState(initialTeams);
     const [rounds, setRounds] = useState(initialRounds);
     const [elements, setElements] = useState([]);
@@ -19,6 +28,13 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const { unlock: unlockWinnerSound, play: playWinnerSound } = useWinnerSound();
 
     const [expandedRound, setExpandedRound] = useState(null);
+    const [activeCircleRound, setActiveCircleRound] = useState(null);
+    const [closingCircleRound, setClosingCircleRound] = useState(null);
+    const [circleButtonRect, setCircleButtonRect] = useState(null);
+    const circleTimerRef = useRef(null);
+    const activeCircleRoundRef = useRef(activeCircleRound);
+    useEffect(() => { activeCircleRoundRef.current = activeCircleRound; }, [activeCircleRound]);
+
     const [collapsedTeams, setCollapsedTeams] = useState(new Set());
 
     // Always-current ref so the matchMedia handler below can read collapsedTeams
@@ -29,6 +45,14 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // Holds the stacked-layout collapse state so it can be restored when the
     // viewport transitions back from a non-stacked (sm+) width.
     const savedCollapsedTeamsRef = useRef(new Set());
+
+    // Snapshot of collapsedTeams taken when the scoring-form circle is opened.
+    // Allows per-team visibility to be restored exactly when the circle closes.
+    const circleOpenCollapseSnapshotRef = useRef(null);
+
+    // Saves the expandedRound value when a history-row circle is opened so the
+    // scoring detail can be restored after the circle's close animation ends.
+    const savedExpandedRoundRef = useRef(null);
 
     // Expand all team score cards when the viewport is non-stacked (sm+) so
     // both inputs are always visible side-by-side.  When the viewport returns
@@ -57,20 +81,42 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const toggleTeamCollapse = (teamId) =>
+    const teamRefs = useRef(new Map());
+
+    const toggleTeamCollapse = (teamId) => {
         setCollapsedTeams((prev) => {
             const next = new Set(prev);
-            if (next.has(teamId)) next.delete(teamId);
+            const isExpanding = next.has(teamId);
+            if (isExpanding) next.delete(teamId);
             else next.add(teamId);
+
+            if (isExpanding) {
+                requestAnimationFrame(() => {
+                    teamRefs.current.get(teamId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+
             return next;
         });
+    };
     // Cache of per-round draft data keyed by round_number.
     const [roundDraftCache, setRoundDraftCache] = useState({});
     const [loadingDraftRound, setLoadingDraftRound] = useState(null);
 
-    // Collapse any expanded round detail when the user clicks anywhere outside a round toggle.
+    // Collapse any expanded round detail and circle when the user clicks anywhere outside a round toggle.
     useEffect(() => {
-        const collapse = () => setExpandedRound(null);
+        const collapse = () => {
+            setExpandedRound(null);
+            savedExpandedRoundRef.current = null;
+            // Restore team collapse state if the circle was open over the scoring form.
+            if (circleOpenCollapseSnapshotRef.current !== null) {
+                setCollapsedTeams(circleOpenCollapseSnapshotRef.current);
+                circleOpenCollapseSnapshotRef.current = null;
+            }
+            setActiveCircleRound(null);
+            setClosingCircleRound(null);
+            if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
+        };
         document.addEventListener('click', collapse);
         return () => document.removeEventListener('click', collapse);
     }, []);
@@ -78,8 +124,16 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // Collapse any expanded round detail when the selected game changes.
     useEffect(() => {
         setExpandedRound(null);
+        savedExpandedRoundRef.current = null;
+        setActiveCircleRound(null);
+        setClosingCircleRound(null);
+        circleOpenCollapseSnapshotRef.current = null;
+        if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
         setRoundDraftCache((prev) => (Object.keys(prev).length > 0 ? {} : prev));
     }, [selectedGame?.id]);
+
+    // Clean up the closing-animation timer on unmount.
+    useEffect(() => () => { if (circleTimerRef.current) clearTimeout(circleTimerRef.current); }, []);
 
     // Fetch the archived draft for a round when it is expanded, using a cache
     // so each round is only fetched once per game session.
@@ -416,10 +470,93 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             return sum + (s ? s.points : 0);
         }, 0);
 
+    /**
+     * Toggles the player-circle overlay for a specific round.
+     * Opens with an animated scale-in; closing plays scale-out then removes the element.
+     * When opening for the current (scoring-form) round all team score-input sections
+     * are individually collapsed and their prior visibility is saved so closing the
+     * circle restores only the teams that were visible before.
+     *
+     * @param {Event}  e           - Click event — stopped so the document collapse handler is skipped.
+     * @param {number} roundNumber - The round number whose circle should be toggled.
+     * @return {void}
+     * Logic: If the round is currently open, restores the saved team-collapse snapshot
+     *        (if any), marks the circle as "closing" (keeps it in DOM for the CSS exit
+     *        transition), then clears it after 520 ms.
+     *        If a different round is being opened any in-progress closing is cancelled.
+     *        If the opened round equals the next (scoring) round, the current collapse
+     *        state is saved and all team cards are collapsed so the form is fully hidden.
+     */
+    const toggleCircle = (e, roundNumber) => {
+        e.stopPropagation();
+        if (activeCircleRoundRef.current === roundNumber) {
+            // Start closing animation; restore state only after the circle is fully gone.
+            // Keep circleButtonRect so the close animation can travel back to the button.
+            setActiveCircleRound(null);
+            setClosingCircleRound(roundNumber);
+            if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
+            const pendingExpanded = savedExpandedRoundRef.current;
+            const pendingCollapse = circleOpenCollapseSnapshotRef.current;
+            savedExpandedRoundRef.current = null;
+            circleOpenCollapseSnapshotRef.current = null;
+            circleTimerRef.current = setTimeout(() => {
+                // Restore per-team visibility and scoring detail after animation ends.
+                if (pendingCollapse !== null) setCollapsedTeams(pendingCollapse);
+                setClosingCircleRound(null);
+                if (pendingExpanded !== null) setExpandedRound(pendingExpanded);
+            }, 520);
+        } else {
+            if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
+            setClosingCircleRound(null);
+            // Capture the button's position so the genie animation can fly out from it.
+            setCircleButtonRect(e.currentTarget.getBoundingClientRect());
+            // For history rows: hide the scoring detail immediately before opening the circle.
+            if (roundNumber !== nextRound) {
+                setExpandedRound((prev) => {
+                    if (prev === roundNumber) {
+                        savedExpandedRoundRef.current = roundNumber;
+                        return null;
+                    }
+                    savedExpandedRoundRef.current = null;
+                    return prev;
+                });
+            }
+            setActiveCircleRound(roundNumber);
+            // Opening for the scoring form: save collapse state, then hide both team inputs.
+            if (roundNumber === nextRound) {
+                circleOpenCollapseSnapshotRef.current = new Set(collapsedTeamsRef.current);
+                setCollapsedTeams(new Set(teams.map((t) => t.id)));
+            }
+        }
+    };
+
     const nextRound = rounds.length + 1;
     const playerCountMismatch =
         teams.length === 2 && teams[0].players.length !== teams[1].players.length;
     const showScoringForm = !playerCountMismatch && (hasTwoTeams || teams.length >= 2);
+
+    const currentRoundRolesForPanel = roundRoles.find(
+        (r) => Number(r.round_number) === nextRound,
+    ) ?? null;
+
+    /**
+     * Map from player_id to role label for the next round.
+     * Computed from currentRoundRolesForPanel so chips in the reference strip
+     * can look up a player's role in O(1).
+     *
+     * @type {Record<number, string>}
+     */
+    const playerRoleForNextRound = (() => {
+        if (!currentRoundRolesForPanel) return {};
+        const map = {};
+        for (const key of Object.keys(PLAYER_ROLE_LABEL_MAP)) {
+            const entry = currentRoundRolesForPanel[key];
+            if (entry?.player_id != null) {
+                map[entry.player_id] = PLAYER_ROLE_LABEL_MAP[key];
+            }
+        }
+        return map;
+    })();
 
     return (
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
@@ -465,15 +602,58 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                         </div>
                     ) : (
                         <div className="border-b border-slate-100 px-6 py-5">
-                            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
-                                Round {nextRound}
-                            </p>
+                            <div className="mb-4 flex items-center justify-between">
+                                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                                    Round {nextRound}
+                                </p>
+                                <button
+                                    aria-expanded={activeCircleRound === nextRound}
+                                    aria-label={`${activeCircleRound === nextRound ? 'Hide' : 'Show'} seating circle for round ${nextRound}`}
+                                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+                                        activeCircleRound === nextRound
+                                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                            : 'text-slate-400 hover:bg-indigo-100 hover:text-indigo-600'
+                                    }`}
+                                    onClick={(e) => toggleCircle(e, nextRound)}
+                                    type="button"
+                                >
+                                    <svg
+                                        aria-hidden="true"
+                                        className="h-3.5 w-3.5"
+                                        fill="currentColor"
+                                        viewBox="0 0 24 24"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                        <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+                                    </svg>
+                                </button>
+                            </div>
 
+                            {/* Role panel — circular seating diagram (same as round history cards) */}
+                            {(activeCircleRound === nextRound || closingCircleRound === nextRound) && (
+                                <div className="mb-4 flex justify-center overflow-visible">
+                                    <PlayerCircle
+                                        buttonRect={circleButtonRect}
+                                        isOpen={activeCircleRound === nextRound}
+                                        players={teams.flatMap((t) => t.players)}
+                                        roundNumber={nextRound}
+                                        roundRoles={currentRoundRolesForPanel}
+                                    />
+                                </div>
+                            )}
+
+
+                            {/* Score form — hidden while circle is open or animating closed */}
+                            {activeCircleRound !== nextRound && closingCircleRound !== nextRound && (
                             <form onSubmit={handleSubmit}>
                                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                                     {teams.map((team) => (
                                         <div
                                             key={team.id}
+                                            ref={(el) => {
+                                                if (el) teamRefs.current.set(team.id, el);
+                                                else teamRefs.current.delete(team.id);
+                                            }}
                                             className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
                                         >
                                             <div className="mb-3 flex items-center justify-between gap-2">
@@ -484,12 +664,27 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                     <span className="text-xs font-medium text-slate-400">
                                                         Partial Score:
                                                     </span>
-                                                    <span
-                                                        className="text-sm font-semibold tabular-nums text-indigo-600"
-                                                        title="Accrued score + this round"
-                                                    >
-                                                        {getAccruedScore(team.id) + computeTeamScore(team.id)}
-                                                    </span>
+                                                    {(() => {
+                                                        const partialScore = getAccruedScore(team.id) + computeTeamScore(team.id);
+                                                        const other = teams.find((t) => t.id !== team.id);
+                                                        const otherPartial = other ? getAccruedScore(other.id) + computeTeamScore(other.id) : null;
+                                                        const bothPos = partialScore > 0 && otherPartial !== null && otherPartial > 0;
+                                                        const chipCls = partialScore < 0
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : partialScore === 0
+                                                                ? 'bg-[bisque] text-green-700'
+                                                                : bothPos && partialScore < otherPartial
+                                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                                    : 'bg-green-100 text-green-800';
+                                                        return (
+                                                            <span
+                                                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}
+                                                                title="Accrued score + this round"
+                                                            >
+                                                                {partialScore}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                     <button
                                                         aria-expanded={!collapsedTeams.has(team.id)}
                                                         aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name} score inputs`}
@@ -570,6 +765,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                     </PrimaryButton>
                                 </div>
                             </form>
+                            )}
                         </div>
                     )}
 
@@ -598,7 +794,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                     {t.name}
                                                 </th>
                                             ))}
-                                            <th className="pb-2 pl-3 w-8" />
+                                            <th className="pb-2 pl-3 w-16" />
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
@@ -609,51 +805,92 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                         {round.round_number}
                                                     </td>
                                                     {teams.map((t) => {
-                                                        const s = round.scores.find(
-                                                            (sc) => sc.team_id === t.id,
-                                                        );
+                                                        const s = round.scores.find((sc) => sc.team_id === t.id);
+                                                        const otherS = round.scores.find((sc) => sc.team_id !== t.id);
+                                                        const pts = s ? s.points : null;
+                                                        const otherPts = otherS ? otherS.points : null;
+                                                        const bothPos = pts !== null && pts > 0 && otherPts !== null && otherPts > 0;
+                                                        const chipCls = pts === null
+                                                            ? ''
+                                                            : pts < 0
+                                                                ? 'bg-red-100 text-red-800'
+                                                                : pts === 0
+                                                                    ? 'bg-[bisque] text-green-700'
+                                                                    : bothPos && pts < otherPts
+                                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                                        : 'bg-green-100 text-green-800';
 
                                                         return (
                                                             <td
                                                                 key={t.id}
-                                                                className="py-2 text-right text-slate-700"
+                                                                className="py-2 text-right"
                                                             >
-                                                                {s ? s.points : '—'}
+                                                                {pts !== null ? (
+                                                                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}>
+                                                                        {pts}
+                                                                    </span>
+                                                                ) : '—'}
                                                             </td>
                                                         );
                                                     })}
                                                     <td className="py-2 pl-3 text-right">
-                                                        <button
-                                                            aria-expanded={expandedRound === round.round_number}
-                                                            aria-label={`${expandedRound === round.round_number ? 'Collapse' : 'Expand'} round ${round.round_number} detail`}
-                                                            className="inline-flex items-center justify-center rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setExpandedRound((prev) =>
-                                                                    prev === round.round_number
-                                                                        ? null
-                                                                        : round.round_number,
-                                                                );
-                                                            }}
-                                                            type="button"
-                                                        >
-                                                            <svg
-                                                                aria-hidden="true"
-                                                                className={`h-4 w-4 transition-transform duration-200 ${
-                                                                    expandedRound === round.round_number
-                                                                        ? 'rotate-180'
-                                                                        : ''
+                                                        <div className="inline-flex items-center gap-1">
+                                                            {/* Players-circle toggle button */}
+                                                            <button
+                                                                aria-expanded={activeCircleRound === round.round_number}
+                                                                aria-label={`${activeCircleRound === round.round_number ? 'Hide' : 'Show'} seating circle for round ${round.round_number}`}
+                                                                className={`inline-flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+                                                                    activeCircleRound === round.round_number
+                                                                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                                        : 'text-slate-400 hover:bg-indigo-100 hover:text-indigo-600'
                                                                 }`}
-                                                                fill="currentColor"
-                                                                viewBox="0 0 20 20"
+                                                                onClick={(e) => toggleCircle(e, round.round_number)}
+                                                                type="button"
                                                             >
-                                                                <path
-                                                                    clipRule="evenodd"
-                                                                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                                                                    fillRule="evenodd"
-                                                                />
-                                                            </svg>
-                                                        </button>
+                                                                <svg
+                                                                    aria-hidden="true"
+                                                                    className="h-3.5 w-3.5"
+                                                                    fill="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                >
+                                                                    <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+                                                                </svg>
+                                                            </button>
+
+                                                            {/* Scoring-detail expand/collapse button */}
+                                                            <button
+                                                                aria-expanded={expandedRound === round.round_number}
+                                                                aria-label={`${expandedRound === round.round_number ? 'Collapse' : 'Expand'} round ${round.round_number} detail`}
+                                                                className="inline-flex items-center justify-center rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setExpandedRound((prev) =>
+                                                                        prev === round.round_number
+                                                                            ? null
+                                                                            : round.round_number,
+                                                                    );
+                                                                }}
+                                                                type="button"
+                                                            >
+                                                                <svg
+                                                                    aria-hidden="true"
+                                                                    className={`h-4 w-4 transition-transform duration-200 ${
+                                                                        expandedRound === round.round_number
+                                                                            ? 'rotate-180'
+                                                                            : ''
+                                                                    }`}
+                                                                    fill="currentColor"
+                                                                    viewBox="0 0 20 20"
+                                                                >
+                                                                    <path
+                                                                        clipRule="evenodd"
+                                                                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                                                                        fillRule="evenodd"
+                                                                    />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
 
@@ -682,9 +919,32 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                                                     key={t.id}
                                                                                     className="rounded-xl border border-indigo-100 bg-white px-4 py-3 shadow-sm"
                                                                                 >
-                                                                                    <p className="mb-3 text-xs font-semibold text-indigo-500">
-                                                                                        {t.name}
-                                                                                    </p>
+                                                                                    <div className="mb-3 flex items-center justify-between gap-2">
+                                                                                        <p className="text-xs font-semibold text-indigo-500">
+                                                                                            {t.name}
+                                                                                        </p>
+                                                                                        {(() => {
+                                                                                            const rs = round.scores.find((sc) => sc.team_id === t.id);
+                                                                                            const otherRs = round.scores.find((sc) => sc.team_id !== t.id);
+                                                                                            const pts = rs ? rs.points : null;
+                                                                                            const otherPts = otherRs ? otherRs.points : null;
+                                                                                            const bothPos = pts !== null && pts > 0 && otherPts !== null && otherPts > 0;
+                                                                                            const chipCls = pts === null
+                                                                                                ? ''
+                                                                                                : pts < 0
+                                                                                                    ? 'bg-red-100 text-red-800'
+                                                                                                    : pts === 0
+                                                                                                        ? 'bg-[bisque] text-green-700'
+                                                                                                        : bothPos && pts < otherPts
+                                                                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                                                                            : 'bg-green-100 text-green-800';
+                                                                                            return pts !== null ? (
+                                                                                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}>
+                                                                                                    {pts}
+                                                                                                </span>
+                                                                                            ) : null;
+                                                                                        })()}
+                                                                                    </div>
 
                                                                                     {draft === null || elements.length === 0 ? (
                                                                                         <p className="text-xs italic text-slate-400">
@@ -705,6 +965,30 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                                         })}
                                                                     </div>
                                                                 )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+
+                                                {/* Player-circle panel — rendered while open or animating closed */}
+                                                {(activeCircleRound === round.round_number || closingCircleRound === round.round_number) && (
+                                                    <tr>
+                                                        <td
+                                                            className="pb-4 pt-0"
+                                                            colSpan={teams.length + 2}
+                                                        >
+                                                            <div className="flex justify-center overflow-visible">
+                                                                <PlayerCircle
+                                                                    buttonRect={circleButtonRect}
+                                                                    isOpen={activeCircleRound === round.round_number}
+                                                                    players={teams.flatMap((t) => t.players)}
+                                                                    roundNumber={round.round_number}
+                                                                    roundRoles={
+                                                                        roundRoles.find(
+                                                                            (r) => Number(r.round_number) === round.round_number,
+                                                                        ) ?? null
+                                                                    }
+                                                                />
                                                             </div>
                                                         </td>
                                                     </tr>
