@@ -30,6 +30,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [expandedRound, setExpandedRound] = useState(null);
     const [activeCircleRound, setActiveCircleRound] = useState(null);
     const [closingCircleRound, setClosingCircleRound] = useState(null);
+    const [circleButtonRect, setCircleButtonRect] = useState(null);
     const circleTimerRef = useRef(null);
     const activeCircleRoundRef = useRef(activeCircleRound);
     useEffect(() => { activeCircleRoundRef.current = activeCircleRound; }, [activeCircleRound]);
@@ -490,6 +491,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         e.stopPropagation();
         if (activeCircleRoundRef.current === roundNumber) {
             // Start closing animation; restore state only after the circle is fully gone.
+            // Keep circleButtonRect so the close animation can travel back to the button.
             setActiveCircleRound(null);
             setClosingCircleRound(roundNumber);
             if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
@@ -506,6 +508,8 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         } else {
             if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
             setClosingCircleRound(null);
+            // Capture the button's position so the genie animation can fly out from it.
+            setCircleButtonRect(e.currentTarget.getBoundingClientRect());
             // For history rows: hide the scoring detail immediately before opening the circle.
             if (roundNumber !== nextRound) {
                 setExpandedRound((prev) => {
@@ -629,6 +633,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                             {(activeCircleRound === nextRound || closingCircleRound === nextRound) && (
                                 <div className="mb-4 flex justify-center overflow-visible">
                                     <PlayerCircle
+                                        buttonRect={circleButtonRect}
                                         isOpen={activeCircleRound === nextRound}
                                         players={teams.flatMap((t) => t.players)}
                                         roundNumber={nextRound}
@@ -659,12 +664,27 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                     <span className="text-xs font-medium text-slate-400">
                                                         Partial Score:
                                                     </span>
-                                                    <span
-                                                        className="text-sm font-semibold tabular-nums text-indigo-600"
-                                                        title="Accrued score + this round"
-                                                    >
-                                                        {getAccruedScore(team.id) + computeTeamScore(team.id)}
-                                                    </span>
+                                                    {(() => {
+                                                        const partialScore = getAccruedScore(team.id) + computeTeamScore(team.id);
+                                                        const other = teams.find((t) => t.id !== team.id);
+                                                        const otherPartial = other ? getAccruedScore(other.id) + computeTeamScore(other.id) : null;
+                                                        const bothPos = partialScore > 0 && otherPartial !== null && otherPartial > 0;
+                                                        const chipCls = partialScore < 0
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : partialScore === 0
+                                                                ? 'bg-[bisque] text-green-700'
+                                                                : bothPos && partialScore < otherPartial
+                                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                                    : 'bg-green-100 text-green-800';
+                                                        return (
+                                                            <span
+                                                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}
+                                                                title="Accrued score + this round"
+                                                            >
+                                                                {partialScore}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                     <button
                                                         aria-expanded={!collapsedTeams.has(team.id)}
                                                         aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name} score inputs`}
@@ -785,16 +805,31 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                         {round.round_number}
                                                     </td>
                                                     {teams.map((t) => {
-                                                        const s = round.scores.find(
-                                                            (sc) => sc.team_id === t.id,
-                                                        );
+                                                        const s = round.scores.find((sc) => sc.team_id === t.id);
+                                                        const otherS = round.scores.find((sc) => sc.team_id !== t.id);
+                                                        const pts = s ? s.points : null;
+                                                        const otherPts = otherS ? otherS.points : null;
+                                                        const bothPos = pts !== null && pts > 0 && otherPts !== null && otherPts > 0;
+                                                        const chipCls = pts === null
+                                                            ? ''
+                                                            : pts < 0
+                                                                ? 'bg-red-100 text-red-800'
+                                                                : pts === 0
+                                                                    ? 'bg-[bisque] text-green-700'
+                                                                    : bothPos && pts < otherPts
+                                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                                        : 'bg-green-100 text-green-800';
 
                                                         return (
                                                             <td
                                                                 key={t.id}
-                                                                className="py-2 text-right text-slate-700"
+                                                                className="py-2 text-right"
                                                             >
-                                                                {s ? s.points : '—'}
+                                                                {pts !== null ? (
+                                                                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}>
+                                                                        {pts}
+                                                                    </span>
+                                                                ) : '—'}
                                                             </td>
                                                         );
                                                     })}
@@ -884,9 +919,32 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                                                     key={t.id}
                                                                                     className="rounded-xl border border-indigo-100 bg-white px-4 py-3 shadow-sm"
                                                                                 >
-                                                                                    <p className="mb-3 text-xs font-semibold text-indigo-500">
-                                                                                        {t.name}
-                                                                                    </p>
+                                                                                    <div className="mb-3 flex items-center justify-between gap-2">
+                                                                                        <p className="text-xs font-semibold text-indigo-500">
+                                                                                            {t.name}
+                                                                                        </p>
+                                                                                        {(() => {
+                                                                                            const rs = round.scores.find((sc) => sc.team_id === t.id);
+                                                                                            const otherRs = round.scores.find((sc) => sc.team_id !== t.id);
+                                                                                            const pts = rs ? rs.points : null;
+                                                                                            const otherPts = otherRs ? otherRs.points : null;
+                                                                                            const bothPos = pts !== null && pts > 0 && otherPts !== null && otherPts > 0;
+                                                                                            const chipCls = pts === null
+                                                                                                ? ''
+                                                                                                : pts < 0
+                                                                                                    ? 'bg-red-100 text-red-800'
+                                                                                                    : pts === 0
+                                                                                                        ? 'bg-[bisque] text-green-700'
+                                                                                                        : bothPos && pts < otherPts
+                                                                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                                                                            : 'bg-green-100 text-green-800';
+                                                                                            return pts !== null ? (
+                                                                                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}>
+                                                                                                    {pts}
+                                                                                                </span>
+                                                                                            ) : null;
+                                                                                        })()}
+                                                                                    </div>
 
                                                                                     {draft === null || elements.length === 0 ? (
                                                                                         <p className="text-xs italic text-slate-400">
@@ -921,6 +979,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                         >
                                                             <div className="flex justify-center overflow-visible">
                                                                 <PlayerCircle
+                                                                    buttonRect={circleButtonRect}
                                                                     isOpen={activeCircleRound === round.round_number}
                                                                     players={teams.flatMap((t) => t.players)}
                                                                     roundNumber={round.round_number}
