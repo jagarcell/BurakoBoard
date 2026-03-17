@@ -328,25 +328,22 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
 
     const roundRoles = gameSummary?.round_roles ?? [];
     const lastCompletedRoundNumber = Number(gameSummary?.game?.current_round_number ?? selectedGame?.current_round_number ?? 0);
-    const initialShufflerSeatNumber = gameSummary?.game?.initial_shuffler_seat_number ?? null;
-    const isFirstRound = lastCompletedRoundNumber === 0;
     const activeRoundNumber = selectedGame?.status === 'in_progress'
         ? lastCompletedRoundNumber + 1
         : lastCompletedRoundNumber;
-    const allSeatedPlayers = teams
-        .flatMap((team) => team.players)
-        .filter((player) => player.seat_number != null)
-        .sort((a, b) => a.seat_number - b.seat_number);
-    const allPlayers = teams
-        .flatMap((team) => team.players)
-        .sort((a, b) => a.id - b.id);
-    const shufflerCandidates = allSeatedPlayers.length > 0 ? allSeatedPlayers : allPlayers;
-    const initialShufflerPlayer = allSeatedPlayers.find((player) => player.seat_number === initialShufflerSeatNumber) ?? null;
     const currentRoundRoles = roundRoles.find(
         (roundRole) => Number(roundRole.round_number) === activeRoundNumber,
     ) ?? null;
-    const canShowShufflerSelector = isGameEditable && teams.length === 2 && !playerCountMismatch && (isFirstRound || activeRoundNumber > 1);
 
+    /**
+     * Returns the role label for the given player in the active round.
+     *
+     * @param {number} playerId - The player's ID.
+     * @return {string|null} Role label string, or null if the player has no role.
+     *
+     * Logic: Checks each role key of the current round's role object in priority order and
+     * returns the matching human-readable label, or null when no match is found.
+     */
     const getCurrentRoundRoleForPlayer = (playerId) => {
         if (! currentRoundRoles || activeRoundNumber <= 0) {
             return null;
@@ -369,28 +366,6 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
         }
 
         return null;
-    };
-
-    const handleSetInitialShuffler = async (playerId) => {
-        try {
-            const response = await axios.put(`/api/v1/games/${selectedGame.id}/shuffler`, {
-                player_id: playerId,
-            });
-
-            const summary = response.data?.data?.game ?? {};
-            const newTeams = summary.teams ?? [];
-            startTransition(() => {
-                setTeams(newTeams);
-            });
-            onTeamsChange?.(newTeams, summary);
-        } catch (error) {
-            const apiErrors = error.response?.data?.data?.errors ?? {};
-            const firstApiError = Object.values(apiErrors).flat()[0];
-            setErrors((current) => ({
-                ...current,
-                shuffler: firstApiError || 'Unable to set the initial shuffler right now.',
-            }));
-        }
     };
 
     /** Trim and collapse inner whitespace so '  Team  Alpha  ' → 'Team Alpha'. */
@@ -653,65 +628,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                         </div>
                     ) : null}
 
-                    <div
-                        aria-hidden={!canShowShufflerSelector}
-                        className={[
-                            'overflow-hidden transition-all duration-300 ease-out',
-                            canShowShufflerSelector ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0',
-                        ].join(' ')}
-                    >
-                        {canShowShufflerSelector ? (
-                        <div className="mx-6 mb-5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
-                            <p className="text-sm font-semibold text-indigo-900">
-                                {isFirstRound ? 'Round 1 shuffler' : `Round ${activeRoundNumber} player order`}
-                            </p>
-                            <p className="mt-1 text-sm text-indigo-700">
-                                {isFirstRound
-                                    ? 'Choose who shuffles in round 1. Cutter, dealer, and first draw are assigned to the next sequential seats.'
-                                    : 'These are the players roles for this round.'}
-                            </p>
 
-                            {shufflerCandidates.length > 0 ? (
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                    {shufflerCandidates.map((player) => {
-                                        const currentRole = getCurrentRoundRoleForPlayer(player.id);
-                                        const chipRole = currentRole;
-                                        const isHighlightedPlayer = isFirstRound
-                                            ? chipRole === 'Shuffler' || initialShufflerPlayer?.id === player.id
-                                            : currentRole === 'Shuffler';
-
-                                        return (
-                                            <button
-                                                key={player.id}
-                                                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${isHighlightedPlayer
-                                                    ? 'border-indigo-300 bg-indigo-600 text-white'
-                                                    : 'border-indigo-200 bg-white text-indigo-700'} ${isFirstRound ? 'hover:border-indigo-300 hover:bg-indigo-100' : 'cursor-default opacity-80'}`}
-                                                disabled={! isFirstRound}
-                                                onClick={isFirstRound ? () => handleSetInitialShuffler(player.id) : undefined}
-                                                type="button"
-                                            >
-                                                {player.seat_number != null
-                                                    ? `Seat ${player.seat_number} · ${player.display_name}`
-                                                    : player.display_name}
-                                                {chipRole
-                                                    ? ` · ${chipRole}`
-                                                    : ''}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="mt-2 text-sm text-indigo-700">
-                                    Add at least one player to assign the initial shuffler.
-                                </p>
-                            )}
-
-                            {isFirstRound && errors.shuffler ? (
-                                <p className="mt-2 text-sm text-red-600">{errors.shuffler}</p>
-                            ) : null}
-                        </div>
-                        ) : null}
-                    </div>
                 </div>
             </section>
 
