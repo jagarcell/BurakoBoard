@@ -653,7 +653,14 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                         </div>
                     ) : null}
 
-                    {canShowShufflerSelector ? (
+                    <div
+                        aria-hidden={!canShowShufflerSelector}
+                        className={[
+                            'overflow-hidden transition-all duration-300 ease-out',
+                            canShowShufflerSelector ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0',
+                        ].join(' ')}
+                    >
+                        {canShowShufflerSelector ? (
                         <div className="mx-6 mb-5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
                             <p className="text-sm font-semibold text-indigo-900">
                                 {isFirstRound ? 'Round 1 shuffler' : `Round ${activeRoundNumber} player order`}
@@ -703,7 +710,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                 <p className="mt-2 text-sm text-red-600">{errors.shuffler}</p>
                             ) : null}
                         </div>
-                    ) : null}
+                        ) : null}
+                    </div>
                 </div>
             </section>
 
