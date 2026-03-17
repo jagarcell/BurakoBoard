@@ -91,6 +91,7 @@ export default function Dashboard() {
 
     const initialTeams = useMemo(() => gameSummary?.teams ?? [], [gameSummary]);
     const initialRounds = useMemo(() => gameSummary?.rounds ?? [], [gameSummary]);
+    const initialRoundRoles = useMemo(() => gameSummary?.round_roles ?? [], [gameSummary]);
 
     const hasTwoTeams = useMemo(() => {
         if (initialTeams.length < 2) return false;
@@ -125,6 +126,7 @@ export default function Dashboard() {
                     <RoundsCard
                         hasTwoTeams={hasTwoTeams}
                         initialRounds={initialRounds}
+                        roundRoles={initialRoundRoles}
                         initialTeams={initialTeams}
                         isFetching={isFetching}
                         onRoundRecorded={handleRoundRecorded}
