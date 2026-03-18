@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 
 class GoogleAuthController extends Controller
 {
@@ -37,10 +38,23 @@ class GoogleAuthController extends Controller
      *        new account with a random password (the user may set one later
      *        via the forgot-password flow). In all cases the session is
      *        regenerated before redirecting to the dashboard.
+     *        InvalidStateException is caught when the OAuth state token is
+     *        missing or mismatched (e.g. the user navigated directly to the
+     *        callback URL or their session expired). Any other exception is
+     *        caught as a generic sign-in failure. Both redirect back to the
+     *        login page with a descriptive error flash message.
      */
     public function callback(): RedirectResponse
     {
-        $googleUser = Socialite::driver('google')->user();
+        try {
+            $googleUser = Socialite::driver('google')->user();
+        } catch (InvalidStateException) {
+            return redirect()->route('login')
+                ->with('error', 'The sign-in request was invalid or has expired. Please try again.');
+        } catch (\Exception) {
+            return redirect()->route('login')
+                ->with('error', 'Sign-in with Google failed. Please try again.');
+        }
 
         $user = User::where('google_id', $googleUser->getId())->first();
 

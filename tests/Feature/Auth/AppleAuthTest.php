@@ -10,12 +10,12 @@ use Laravel\Socialite\Two\User as SocialiteUser;
 use Mockery;
 use Tests\TestCase;
 
-class GoogleAuthTest extends TestCase
+class AppleAuthTest extends TestCase
 {
     use RefreshDatabase;
 
     /**
-     * Build a partial mock of the Socialite Google driver that returns the
+     * Build a partial mock of the Socialite Apple driver that returns the
      * given user object from ->user().
      *
      * @param  SocialiteUser  $socialiteUser
@@ -23,26 +23,26 @@ class GoogleAuthTest extends TestCase
      */
     private function mockSocialiteDriver(SocialiteUser $socialiteUser): void
     {
-        $driver = Mockery::mock('Laravel\Socialite\Two\GoogleProvider');
+        $driver = Mockery::mock('SocialiteProviders\Apple\Provider');
         $driver->shouldReceive('user')->andReturn($socialiteUser);
 
         Socialite::shouldReceive('driver')
-            ->with('google')
+            ->with('apple')
             ->andReturn($driver);
     }
 
     /**
-     * Build a minimal Socialite user object.
+     * Build a minimal Socialite user object for Apple Sign In.
      *
      * @param  string  $id
      * @param  string  $email
-     * @param  string  $name
+     * @param  string|null  $name
      * @return SocialiteUser
      */
     private function makeSocialiteUser(
         string $id,
         string $email,
-        string $name = 'Test User',
+        ?string $name = 'Test User',
     ): SocialiteUser {
         $user = new SocialiteUser();
         $user->map([
@@ -58,17 +58,17 @@ class GoogleAuthTest extends TestCase
     // Redirect
     // -------------------------------------------------------------------------
 
-    public function test_google_redirect_route_redirects_to_google(): void
+    public function test_apple_redirect_route_redirects_to_apple(): void
     {
-        $driver = Mockery::mock('Laravel\Socialite\Two\GoogleProvider');
+        $driver = Mockery::mock('SocialiteProviders\Apple\Provider');
         $driver->shouldReceive('redirect')
-            ->andReturn(redirect('https://accounts.google.com/o/oauth2/auth'));
+            ->andReturn(redirect('https://appleid.apple.com/auth/authorize'));
 
         Socialite::shouldReceive('driver')
-            ->with('google')
+            ->with('apple')
             ->andReturn($driver);
 
-        $response = $this->get(route('auth.google.redirect'));
+        $response = $this->get(route('auth.apple.redirect'));
 
         $response->assertRedirect();
     }
@@ -79,52 +79,69 @@ class GoogleAuthTest extends TestCase
 
     public function test_callback_creates_new_user_and_logs_in(): void
     {
-        $socialiteUser = $this->makeSocialiteUser('google-123', 'new@example.com', 'New User');
+        $socialiteUser = $this->makeSocialiteUser('apple-123', 'new@example.com', 'New User');
         $this->mockSocialiteDriver($socialiteUser);
 
-        $response = $this->get(route('auth.google.callback'));
+        $response = $this->post(route('auth.apple.callback'));
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
 
         $this->assertDatabaseHas('users', [
-            'email'     => 'new@example.com',
-            'google_id' => 'google-123',
+            'email'    => 'new@example.com',
+            'apple_id' => 'apple-123',
         ]);
     }
 
     // -------------------------------------------------------------------------
-    // Callback — existing user matched by google_id
+    // Callback — new user with no name falls back to email local-part
     // -------------------------------------------------------------------------
 
-    public function test_callback_logs_in_existing_user_by_google_id(): void
+    public function test_callback_uses_email_local_part_when_name_is_null(): void
     {
-        $user = User::factory()->create(['google_id' => 'google-456']);
-        $socialiteUser = $this->makeSocialiteUser('google-456', $user->email, $user->name);
+        $socialiteUser = $this->makeSocialiteUser('apple-999', 'john@example.com', null);
         $this->mockSocialiteDriver($socialiteUser);
 
-        $response = $this->get(route('auth.google.callback'));
+        $this->post(route('auth.apple.callback'));
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'john@example.com',
+            'name'  => 'john',
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Callback — existing user matched by apple_id
+    // -------------------------------------------------------------------------
+
+    public function test_callback_logs_in_existing_user_by_apple_id(): void
+    {
+        $user = User::factory()->create(['apple_id' => 'apple-456']);
+        $socialiteUser = $this->makeSocialiteUser('apple-456', $user->email, $user->name);
+        $this->mockSocialiteDriver($socialiteUser);
+
+        $response = $this->post(route('auth.apple.callback'));
 
         $this->assertAuthenticatedAs($user);
         $response->assertRedirect(route('dashboard', absolute: false));
     }
 
     // -------------------------------------------------------------------------
-    // Callback — existing user matched by e-mail, google_id attached
+    // Callback — existing user matched by e-mail, apple_id attached
     // -------------------------------------------------------------------------
 
-    public function test_callback_attaches_google_id_to_existing_email_account(): void
+    public function test_callback_attaches_apple_id_to_existing_email_account(): void
     {
-        $user = User::factory()->create(['email' => 'existing@example.com', 'google_id' => null]);
-        $socialiteUser = $this->makeSocialiteUser('google-789', 'existing@example.com');
+        $user = User::factory()->create(['email' => 'existing@example.com', 'apple_id' => null]);
+        $socialiteUser = $this->makeSocialiteUser('apple-789', 'existing@example.com');
         $this->mockSocialiteDriver($socialiteUser);
 
-        $response = $this->get(route('auth.google.callback'));
+        $this->post(route('auth.apple.callback'));
 
         $this->assertAuthenticatedAs($user);
         $this->assertDatabaseHas('users', [
-            'id'        => $user->id,
-            'google_id' => 'google-789',
+            'id'       => $user->id,
+            'apple_id' => 'apple-789',
         ]);
     }
 
@@ -134,14 +151,14 @@ class GoogleAuthTest extends TestCase
 
     public function test_callback_redirects_to_login_with_error_on_invalid_state(): void
     {
-        $driver = Mockery::mock('Laravel\Socialite\Two\GoogleProvider');
+        $driver = Mockery::mock('SocialiteProviders\Apple\Provider');
         $driver->shouldReceive('user')->andThrow(new InvalidStateException());
 
         Socialite::shouldReceive('driver')
-            ->with('google')
+            ->with('apple')
             ->andReturn($driver);
 
-        $response = $this->get(route('auth.google.callback'));
+        $response = $this->post(route('auth.apple.callback'));
 
         $this->assertGuest();
         $response->assertRedirect(route('login'));
@@ -157,29 +174,29 @@ class GoogleAuthTest extends TestCase
 
     public function test_callback_redirects_to_login_with_error_on_generic_exception(): void
     {
-        $driver = Mockery::mock('Laravel\Socialite\Two\GoogleProvider');
+        $driver = Mockery::mock('SocialiteProviders\Apple\Provider');
         $driver->shouldReceive('user')->andThrow(new \Exception('Something went wrong'));
 
         Socialite::shouldReceive('driver')
-            ->with('google')
+            ->with('apple')
             ->andReturn($driver);
 
-        $response = $this->get(route('auth.google.callback'));
+        $response = $this->post(route('auth.apple.callback'));
 
         $this->assertGuest();
         $response->assertRedirect(route('login'));
-        $response->assertSessionHas('error', 'Sign-in with Google failed. Please try again.');
+        $response->assertSessionHas('error', 'Sign-in with Apple failed. Please try again.');
     }
 
     // -------------------------------------------------------------------------
     // Redirect is only available to guests
     // -------------------------------------------------------------------------
 
-    public function test_authenticated_user_cannot_access_google_redirect(): void
+    public function test_authenticated_user_cannot_access_apple_redirect(): void
     {
         $user = User::factory()->create();
 
-        $response = $this->actingAs($user)->get(route('auth.google.redirect'));
+        $response = $this->actingAs($user)->get(route('auth.apple.redirect'));
 
         $response->assertRedirect(route('dashboard', absolute: false));
     }

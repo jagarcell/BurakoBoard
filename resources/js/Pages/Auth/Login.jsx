@@ -1,4 +1,5 @@
 import Checkbox from '@/Components/Checkbox';
+import AppleButton from '@/Components/AppleButton';
 import GoogleButton from '@/Components/GoogleButton';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
@@ -7,7 +8,7 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 
-export default function Login({ status, canResetPassword }) {
+export default function Login({ status, error, canResetPassword }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
@@ -29,6 +30,12 @@ export default function Login({ status, canResetPassword }) {
             {status && (
                 <div className="mb-4 text-sm font-medium text-green-600">
                     {status}
+                </div>
+            )}
+
+            {error && (
+                <div className="mb-4 text-sm font-medium text-red-600">
+                    {error}
                 </div>
             )}
 
@@ -121,6 +128,10 @@ export default function Login({ status, canResetPassword }) {
 
                 <div className="mt-4">
                     <GoogleButton />
+                </div>
+
+                <div className="mt-3">
+                    <AppleButton />
                 </div>
             </div>
         </GuestLayout>

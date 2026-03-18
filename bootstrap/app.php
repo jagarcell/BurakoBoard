@@ -15,6 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
 
+        // Apple Sign In POSTs to the callback URI from its own servers;
+        // exclude that URL from CSRF verification.
+        $middleware->validateCsrfTokens(except: [
+            'auth/apple/callback',
+        ]);
+
         $middleware->statefulApi();
 
         $middleware->api(append: [
