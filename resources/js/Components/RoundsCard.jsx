@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import BaseElementsInput from '@/Components/BaseElementsInput';
+import CardSpinner from '@/Components/CardSpinner';
 
 /** Human-readable labels for each round role key, used in the player order reference strip. */
 const PLAYER_ROLE_LABEL_MAP = {
@@ -389,9 +391,6 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Unlock AudioContext synchronously while the user-gesture is still
-        // live so the victory fanfare works on iOS Safari.
-        unlockWinnerSound();
         setInputErrors({});
         setSaveError('');
 
@@ -428,8 +427,24 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             return;
         }
 
-        setExpandedRound(null);
-        setIsSaving(true);
+        // flushSync forces React to commit these state updates to the real DOM
+        // before JavaScript continues.  The subsequent setTimeout(0) yields to
+        // the browser's macrotask queue so it can paint the spinner frame before
+        // the network request starts — without this the browser may not repaint
+        // until the microtask (axios promise) settles, making the spinner
+        // invisible on fast connections.
+        flushSync(() => {
+            setExpandedRound(null);
+            setIsSaving(true);
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Unlock the AudioContext after the spinner has painted.  This must
+        // still be initiated within the same user-gesture task so iOS Safari
+        // honours the resume() call — but ctx.resume() is fire-and-forget; we
+        // do NOT await it so a slow OS audio session wake-up (2-3 s after
+        // inactivity) cannot delay the network request.
+        unlockWinnerSound();
 
         try {
             const response = await axios.post(
@@ -601,7 +616,14 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                             </p>
                         </div>
                     ) : (
-                        <div className="border-b border-slate-100 px-6 py-5">
+                        <div className="relative border-b border-slate-100 px-6 py-5">
+                            {/* In-progress overlay — shown while the round POST is in flight */}
+                            {isSaving && (
+                                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/90 backdrop-blur-[2px]">
+                                    <CardSpinner message="Recording…" />
+                                </div>
+                            )}
+
                             <div className="mb-4 flex items-center justify-between">
                                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
                                     Round {nextRound}

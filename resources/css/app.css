@@ -31,3 +31,24 @@
         animation: genie-close 480ms cubic-bezier(0.55, 0, 0.7, 0.6) both;
     }
 }
+
+/* ── Card-orbit spinner animation ─────────────────────────────────────────── */
+/* Used by CardSpinner: five playing cards orbit the SVG centre (100 100). */
+@keyframes card-orbit {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+@layer utilities {
+    .animate-card-orbit {
+        /* view-box (SVG default) makes 50% 50% equal to the SVG viewport centre */
+        transform-origin: center;
+        animation: card-orbit 2.4s linear infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .animate-card-orbit {
+            animation-duration: 10s;
+        }
+    }
+}

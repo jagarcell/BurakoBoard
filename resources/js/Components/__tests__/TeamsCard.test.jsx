@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axios from 'axios';
 import TeamsCard from '@/Components/TeamsCard';
@@ -69,7 +69,9 @@ describe('TeamsCard', () => {
     it('shows a placeholder when no game is selected', async () => {
         setupGetMocks();
 
-        render(<TeamsCard initialTeams={[]} selectedGame={null} />);
+        await act(async () => {
+            render(<TeamsCard initialTeams={[]} selectedGame={null} />);
+        });
 
         expect(
             screen.getByText('Select a game above to manage its teams.'),
