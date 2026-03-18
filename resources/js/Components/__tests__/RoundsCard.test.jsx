@@ -53,10 +53,13 @@ describe('RoundsCard', () => {
         axios.get.mockResolvedValue(elementsResponse);
     });
 
-    it('shows a placeholder when no game is selected', () => {
+    it('shows a placeholder when no game is selected', async () => {
         render(<RoundsCard selectedGame={null} />);
 
-        expect(screen.getByText('Select a game above to record rounds.')).toBeInTheDocument();
+        // findByText wraps the lookup in waitFor/act, which drains the
+        // pending axios.get microtask and resulting setElements state update
+        // so no out-of-act warning is emitted.
+        expect(await screen.findByText('Select a game above to record rounds.')).toBeInTheDocument();
     });
 
     it('shows a message when fewer than two teams are configured', async () => {
