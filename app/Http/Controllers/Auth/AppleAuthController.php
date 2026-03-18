@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 
 class AppleAuthController extends Controller
 {
@@ -42,10 +43,23 @@ class AppleAuthController extends Controller
      *        on the very first sign-in, so a fallback is derived from the
      *        e-mail local-part for subsequent logins. The session is always
      *        regenerated before redirecting to the dashboard.
+     *        InvalidStateException is caught when the OAuth state token is
+     *        missing or mismatched (e.g. the user navigated directly to the
+     *        callback URL or their session expired). Any other exception is
+     *        caught as a generic sign-in failure. Both redirect back to the
+     *        login page with a descriptive error flash message.
      */
     public function callback(): RedirectResponse
     {
-        $appleUser = Socialite::driver('apple')->user();
+        try {
+            $appleUser = Socialite::driver('apple')->user();
+        } catch (InvalidStateException) {
+            return redirect()->route('login')
+                ->with('error', 'The sign-in request was invalid or has expired. Please try again.');
+        } catch (\Exception) {
+            return redirect()->route('login')
+                ->with('error', 'Sign-in with Apple failed. Please try again.');
+        }
 
         $user = User::where('apple_id', $appleUser->getId())->first();
 
