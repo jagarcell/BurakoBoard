@@ -124,7 +124,7 @@ describe('BaseElementsInput', () => {
             />,
         );
 
-        expect(screen.getByText('0 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('0');
     });
 
     it('computes the total correctly for a mix of boolean and quantity elements', () => {
@@ -138,7 +138,7 @@ describe('BaseElementsInput', () => {
         );
 
         // burako (true) = 100, clean_canastra (3) = 3 × 200 = 600 → total 700
-        expect(screen.getByText('700 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('700');
     });
 
     it('generates unique input IDs scoped to the teamId to prevent DOM conflicts', () => {
@@ -280,7 +280,7 @@ describe('BaseElementsInput', () => {
         );
 
         // booleanEl=100, cardsInHand=50 → 100 − 50 = 50
-        expect(screen.getByText('50 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('50');
     });
 
     it('adds cards on table to the total when a canastra element is present and scored', () => {
@@ -295,7 +295,7 @@ describe('BaseElementsInput', () => {
         );
 
         // clean_canastra(1) = 200, cardsOnTable=75 adds because canastra > 0 → 200 + 75 = 275
-        expect(screen.getByText('275 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('275');
     });
 
     it('subtracts cards on table when all canastras are zero', () => {
@@ -310,7 +310,7 @@ describe('BaseElementsInput', () => {
         );
 
         // clean_canastra=0 → canastrasAllZero=true → 0 − 75 = -75
-        expect(screen.getByText('-75 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('-75');
     });
 
     it('applies both card adjustments with subtraction when all canastras are zero', () => {
@@ -326,7 +326,7 @@ describe('BaseElementsInput', () => {
         );
 
         // booleanEl=100, no canastra elements → canastrasAllZero=true → 100 − 30 − 20 = 50
-        expect(screen.getByText('50 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('50');
     });
 
     it('applies both card adjustments with addition when a canastra is scored', () => {
@@ -342,7 +342,7 @@ describe('BaseElementsInput', () => {
         );
 
         // booleanEl=100, clean_canastra(1)=200 → base=300, − 30 + 20 = 290
-        expect(screen.getByText('290 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('290');
     });
 
     it('subtracts both cardsInHand and cardsOnTable from base points when a score_override element is checked', () => {
@@ -360,7 +360,7 @@ describe('BaseElementsInput', () => {
         );
 
         // booleanEl checked (100), override active: total = 100 - 80 - 50 = -30
-        expect(screen.getByText('-30 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('-30');
     });
 
     it('uses normal formula when the score_override element is unchecked', () => {
@@ -378,7 +378,7 @@ describe('BaseElementsInput', () => {
         );
 
         // booleanEl=100, cardsInHand=10 → normal: 100 - 10 = 90
-        expect(screen.getByText('90 pts')).toBeInTheDocument();
+        expect(screen.getByTestId('current-round-score')).toHaveTextContent('90');
     });
 
     it('shows a cardsInHand error message when provided', () => {
@@ -495,7 +495,7 @@ describe('BaseElementsInput', () => {
             );
 
             // penaltyBooleanEl unchecked → -(penalty 100) is applied; no cards → total = -100
-            expect(screen.getByText('-100 pts')).toBeInTheDocument();
+            expect(screen.getByTestId('current-round-score')).toHaveTextContent('-100');
         });
 
         it('subtracts the penalty amount from the total when a quantity element with penalty is zero', () => {
@@ -509,7 +509,7 @@ describe('BaseElementsInput', () => {
             );
 
             // penaltyQuantityEl qty=0 → -(penalty 50) is applied; no cards → total = -50
-            expect(screen.getByText('-50 pts')).toBeInTheDocument();
+            expect(screen.getByTestId('current-round-score')).toHaveTextContent('-50');
         });
 
         it('does not subtract penalty from total when a boolean element with penalty is active', () => {
@@ -538,8 +538,83 @@ describe('BaseElementsInput', () => {
             );
 
             // penaltyQuantityEl qty=2 → normal 2 × 50 = 100; no cards → total = 100
-            const ptLabels = screen.getAllByText('100 pts');
-            expect(ptLabels.length).toBeGreaterThanOrEqual(1);
+            expect(screen.getByTestId('current-round-score')).toHaveTextContent('100');
+        });
+    });
+
+    describe('showBaseElements prop', () => {
+        it('hides the Check Achievements section when showBaseElements is false', () => {
+            render(
+                <BaseElementsInput
+                    elements={[booleanEl]}
+                    onChange={() => {}}
+                    showBaseElements={false}
+                    teamId={10}
+                    values={{}}
+                />,
+            );
+
+            expect(screen.queryByText('Check Achievements')).not.toBeInTheDocument();
+            expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+        });
+
+        it('hides the Quantity section when showBaseElements is false', () => {
+            render(
+                <BaseElementsInput
+                    elements={[quantityEl]}
+                    onChange={() => {}}
+                    showBaseElements={false}
+                    teamId={10}
+                    values={{}}
+                />,
+            );
+
+            expect(screen.queryByText('Quantity')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Clean Canastra')).not.toBeInTheDocument();
+        });
+
+        it('hides Points in Hand and Points on Table when showBaseElements is false', () => {
+            render(
+                <BaseElementsInput
+                    elements={[booleanEl, quantityEl]}
+                    onChange={() => {}}
+                    showBaseElements={false}
+                    teamId={10}
+                    values={{}}
+                />,
+            );
+
+            expect(screen.queryByLabelText('Points in Hand')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Points on Table')).not.toBeInTheDocument();
+        });
+
+        it('still shows the Score total when showBaseElements is false', () => {
+            render(
+                <BaseElementsInput
+                    elements={[booleanEl, quantityEl]}
+                    onChange={() => {}}
+                    showBaseElements={false}
+                    teamId={10}
+                    values={{}}
+                />,
+            );
+
+            expect(screen.getByText('Round Score:')).toBeInTheDocument();
+            expect(screen.getByTestId('current-round-score')).toHaveTextContent('0');
+        });
+
+        it('shows all sections when showBaseElements is true (the default)', () => {
+            render(
+                <BaseElementsInput
+                    elements={elements}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{}}
+                />,
+            );
+
+            expect(screen.getByText('Check Achievements')).toBeInTheDocument();
+            expect(screen.getByText('Quantity')).toBeInTheDocument();
         });
     });
 
