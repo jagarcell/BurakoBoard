@@ -1,4 +1,5 @@
 import Checkbox from '@/Components/Checkbox';
+import AppleButton from '@/Components/AppleButton';
 import GoogleButton from '@/Components/GoogleButton';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
@@ -121,6 +122,10 @@ export default function Login({ status, canResetPassword }) {
 
                 <div className="mt-4">
                     <GoogleButton />
+                </div>
+
+                <div className="mt-3">
+                    <AppleButton />
                 </div>
             </div>
         </GuestLayout>
