@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as SocialiteUser;
 use Mockery;
 use Tests\TestCase;
@@ -125,6 +126,49 @@ class GoogleAuthTest extends TestCase
             'id'        => $user->id,
             'google_id' => 'google-789',
         ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Callback — invalid state exception (expired / replayed session)
+    // -------------------------------------------------------------------------
+
+    public function test_callback_redirects_to_login_with_error_on_invalid_state(): void
+    {
+        $driver = Mockery::mock('Laravel\Socialite\Two\GoogleProvider');
+        $driver->shouldReceive('user')->andThrow(new InvalidStateException());
+
+        Socialite::shouldReceive('driver')
+            ->with('google')
+            ->andReturn($driver);
+
+        $response = $this->get(route('auth.google.callback'));
+
+        $this->assertGuest();
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHas(
+            'error',
+            'The sign-in request was invalid or has expired. Please try again.'
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Callback — generic exception (network error, revoked credentials, etc.)
+    // -------------------------------------------------------------------------
+
+    public function test_callback_redirects_to_login_with_error_on_generic_exception(): void
+    {
+        $driver = Mockery::mock('Laravel\Socialite\Two\GoogleProvider');
+        $driver->shouldReceive('user')->andThrow(new \Exception('Something went wrong'));
+
+        Socialite::shouldReceive('driver')
+            ->with('google')
+            ->andReturn($driver);
+
+        $response = $this->get(route('auth.google.callback'));
+
+        $this->assertGuest();
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHas('error', 'Sign-in with Google failed. Please try again.');
     }
 
     // -------------------------------------------------------------------------
