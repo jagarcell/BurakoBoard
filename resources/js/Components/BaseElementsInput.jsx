@@ -19,14 +19,16 @@ import NumericStepper from '@/Components/NumericStepper';
  * @param {number}   cardsInHand   - Total points of cards still in hand; subtracted from the running total.
  * @param {number}   cardsOnTable  - Total points of cards laid on the table; added to the running total.
  * @param {Function} onCardsChange - Callback (field: 'cardsInHand' | 'cardsOnTable', value: string) fired on card input change.
- * @param {Object}   cardErrors    - Validation messages: { cardsInHand?: string, cardsOnTable?: string }.
- * @param {boolean}  readOnly      - When true all inputs are disabled, errors are hidden, and the total row is omitted.
+ * @param {Object}   cardErrors       - Validation messages: { cardsInHand?: string, cardsOnTable?: string }.
+ * @param {boolean}  readOnly         - When true all inputs are disabled, errors are hidden, and the total row is omitted.
+ * @param {boolean}  showBaseElements - When false, all input sections (Check Achievements, Quantity,
+ *                                      and Cards) are hidden; only the Score total remains visible.
  *
  * Logic: When an element has a non-zero `penalty` value and is not active (boolean unchecked or
  * quantity = 0), the points slot displays the penalty as a negative score (e.g. −100 pts) in
  * rose/red text, giving the user a visual cue that a deduction will be applied.
  */
-export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false }) {
+export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false, showBaseElements = true }) {
     // When a score_override boolean element is checked both cardsInHand and
     // cardsOnTable are subtracted from the base score (penalty mode).
     const scoreOverrideActive = elements.some((el) => el.score_override && !!values[el.id]);
@@ -124,21 +126,21 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
 
     return (
         <div className="space-y-2">
-            {booleanEls.length > 0 && (
+            {showBaseElements && booleanEls.length > 0 && (
                 <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Check Achievements</p>
                     {booleanEls.map(renderElement)}
                 </div>
             )}
 
-            {quantityEls.length > 0 && (
-                <div className={`space-y-2 ${booleanEls.length > 0 ? 'mt-3 border-t border-slate-100 pt-3' : ''}`}>
+            {showBaseElements && quantityEls.length > 0 && (
+                <div className={`space-y-2 ${showBaseElements && booleanEls.length > 0 ? 'mt-3 border-t border-slate-100 pt-3' : ''}`}>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Quantity</p>
                     {quantityEls.map(renderElement)}
                 </div>
             )}
 
-            <div className="mt-1 space-y-2 border-t border-dashed border-slate-200 pt-2">
+            {showBaseElements && <div className="mt-1 space-y-2 border-t border-dashed border-slate-200 pt-2">
                 <div className="space-y-0.5">
                     <div className="flex items-center gap-3">
                         <NumericStepper
@@ -184,14 +186,26 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                         <InputError message={cardErrors.cardsOnTable} />
                     )}
                 </div>
-            </div>
+            </div>}
 
             {!readOnly && (
-                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-                    <span className="text-sm font-medium text-slate-500">Score</span>
-                    <span className="text-base font-semibold text-slate-900">
-                        {total.toLocaleString()} pts
-                    </span>
+                <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                    <span className="text-xs font-medium text-slate-400">Round Score:</span>
+                    {(() => {
+                        const chipCls = total < 0
+                            ? 'bg-red-100 text-red-800'
+                            : total === 0
+                                ? 'bg-[bisque] text-green-700'
+                                : 'bg-green-100 text-green-800';
+                        return (
+                            <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}
+                                data-testid="current-round-score"
+                            >
+                                {total}
+                            </span>
+                        );
+                    })()}
                 </div>
             )}
         </div>
