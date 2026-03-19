@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axios from 'axios';
 import TeamsCard from '@/Components/TeamsCard';
@@ -1653,45 +1653,374 @@ describe('TeamsCard', () => {
 
             expect(screen.queryByRole('generic', { name: /^Seat/ })).not.toBeInTheDocument();
         });
-    });
 
-    describe('player role badges in player list', () => {
-        it('shows role badges next to player names when round roles are available', async () => {
+        it('shows seat number badge next to each existing player in the edit modal', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                { id: 2, user_id: null, display_name: 'Diana', seat_number: 2 },
+            ]);
             setupGetMocks();
 
-            const teams = [
-                makeTeam(10, 'Team Alpha', [
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog = screen.getByRole('dialog');
+            expect(within(dialog).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
+            expect(within(dialog).getByRole('generic', { name: 'Seat 2' })).toBeInTheDocument();
+        });
+
+        it('shows seat badge before player name in the edit modal current players list', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos', seat_number: 3 },
+            ]);
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog = screen.getByRole('dialog');
+            const seatBadge = within(dialog).getByRole('generic', { name: 'Seat 3' });
+            expect(seatBadge).toHaveTextContent('Seat 3');
+            expect(seatBadge.nextSibling).toHaveTextContent('Carlos');
+        });
+
+        it('does not show a seat badge in the edit modal when seat_number is null', async () => {
+            const team = makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos', seat_number: null },
+            ]);
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog = screen.getByRole('dialog');
+            expect(within(dialog).queryByRole('generic', { name: /^Seat/ })).not.toBeInTheDocument();
+        });
+
+        describe('preview list seat badges', () => {
+            it('shows a projected seat 1 badge when the first player is added via the slot-0 create modal', async () => {
+                setupGetMocks();
+
+                render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+                await waitFor(() =>
+                    expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+                );
+
+                // Click the first "Create team" button (slot 0)
+                await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+
+                await userEvent.type(screen.getByLabelText('Player name'), 'Alice');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+                const dialog = screen.getByRole('dialog');
+                expect(within(dialog).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
+            });
+
+            it('seat badge is placed before the player name in the preview list', async () => {
+                setupGetMocks();
+
+                render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+                await waitFor(() =>
+                    expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+                );
+
+                await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+
+                await userEvent.type(screen.getByLabelText('Player name'), 'Bob');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+                const dialog = screen.getByRole('dialog');
+                const seatBadge = within(dialog).getByRole('generic', { name: 'Seat 1' });
+                expect(seatBadge.nextSibling).toHaveTextContent('Bob');
+            });
+
+            it('assigns consecutive odd projected seats for multiple players in slot-0 create modal', async () => {
+                setupGetMocks();
+
+                render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
+
+                await waitFor(() =>
+                    expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
+                );
+
+                await userEvent.click(screen.getAllByRole('button', { name: 'Create team' })[0]);
+
+                await userEvent.type(screen.getByLabelText('Player name'), 'Alice');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+                await userEvent.type(screen.getByLabelText('Player name'), 'Bob');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+                const dialog = screen.getByRole('dialog');
+                expect(within(dialog).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
+                expect(within(dialog).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
+            });
+
+            it('assigns consecutive even projected seats for players in slot-1 create modal', async () => {
+                setupGetMocks();
+
+                render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
+
+                await screen.findByText('Team Alpha');
+
+                // The second "Create team" button belongs to slot 1
+                await userEvent.click(screen.getByRole('button', { name: 'Create team' }));
+
+                await userEvent.type(screen.getByLabelText('Player name'), 'Carlos');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+                await userEvent.type(screen.getByLabelText('Player name'), 'Diana');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+                const dialog = screen.getByRole('dialog');
+                expect(within(dialog).getByRole('generic', { name: 'Seat 2' })).toBeInTheDocument();
+                expect(within(dialog).getByRole('generic', { name: 'Seat 4' })).toBeInTheDocument();
+            });
+
+            it('offsets projected seats by the existing non-removed player count when editing a slot-0 team', async () => {
+                const team = makeTeam(10, 'Team Alpha', [
+                    { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                ]);
+                setupGetMocks();
+
+                render(<TeamsCard initialTeams={[team, makeTeam(11, 'Team Beta')]} selectedGame={selectedGame} />);
+
+                await screen.findByText('Team Alpha');
+                await userEvent.click(screen.getAllByRole('button', { name: 'Edit team' })[0]);
+
+                await userEvent.type(screen.getByLabelText('Player name'), 'Diana');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+                // Slot 0, 1 existing player → position 1 → seat = 1*2+1 = 3
+                const dialog = screen.getByRole('dialog');
+                expect(within(dialog).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
+            });
+
+            it('offsets projected seats by the existing non-removed player count when editing a slot-1 team', async () => {
+                const team = makeTeam(11, 'Team Beta', [
+                    { id: 2, user_id: null, display_name: 'Eve', seat_number: 2 },
+                ]);
+                setupGetMocks();
+
+                render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha'), team]} selectedGame={selectedGame} />);
+
+                await screen.findByText('Team Beta');
+                await userEvent.click(screen.getAllByRole('button', { name: 'Edit team' })[1]);
+
+                await userEvent.type(screen.getByLabelText('Player name'), 'Frank');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+                // Slot 1, 1 existing player → position 1 → seat = 1*2+2 = 4
+                const dialog = screen.getByRole('dialog');
+                expect(within(dialog).getByRole('generic', { name: 'Seat 4' })).toBeInTheDocument();
+            });
+
+            it('decrements the offset when an existing player is removed before adding a new one', async () => {
+                const team = makeTeam(10, 'Team Alpha', [
                     { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
                     { id: 3, user_id: null, display_name: 'Diana', seat_number: 3 },
-                ]),
-                makeTeam(11, 'Team Beta', [
-                    { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
-                    { id: 4, user_id: null, display_name: 'Elisa', seat_number: 4 },
-                ]),
-            ];
+                ]);
+                setupGetMocks();
 
-            const gameSummary = makeGameSummary(teams, {
-                game: { current_round_number: 1, initial_shuffler_seat_number: 1 },
-                round_roles: [
-                    {
-                        round_number: 2,
-                        shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                        cutter: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                        dealer: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
-                        first_draw: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                    },
-                ],
-            }).data.data.game;
+                render(<TeamsCard initialTeams={[team, makeTeam(11, 'Team Beta')]} selectedGame={selectedGame} />);
 
-            render(<TeamsCard gameSummary={gameSummary} initialTeams={teams} selectedGame={selectedGame} />);
+                await screen.findByText('Team Alpha');
+                await userEvent.click(screen.getAllByRole('button', { name: 'Edit team' })[0]);
 
-            await screen.findByText('Carlos');
+                // Remove one existing player first
+                await userEvent.click(screen.getByRole('button', { name: 'Remove Carlos' }));
 
-            // Role badges appear next to each player's name in the player list
-            expect(screen.getByText('Shuffler')).toBeInTheDocument();
-            expect(screen.getByText('Cutter')).toBeInTheDocument();
-            expect(screen.getByText('Dealer')).toBeInTheDocument();
-            expect(screen.getByText('First Draw')).toBeInTheDocument();
+                await userEvent.type(screen.getByLabelText('Player name'), 'Eve');
+                await userEvent.click(screen.getByRole('button', { name: 'Add player' }));
+
+                // Slot 0, 1 non-removed existing player (Diana) → position 1 → seat = 1*2+1 = 3
+                // The preview entry for Eve should show Seat 3 before her name
+                const dialog = screen.getByRole('dialog');
+                const eveText = within(dialog).getByText('Eve');
+                expect(eveText.previousSibling).toHaveTextContent('Seat 3');
+            });
         });
     });
+
+    describe('seat swap via drag & drop in Edit Team modal', () => {
+        const makeSeatedTeam = () =>
+            makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Alice', seat_number: 1 },
+                { id: 2, user_id: null, display_name: 'Bob',   seat_number: 3 },
+            ]);
+
+        it('player rows with a seat number are draggable', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+            expect(aliceRow).toHaveAttribute('draggable', 'true');
+        });
+
+        it('defers the swap-seats API call until Update team is submitted, not on drag', async () => {
+            setupGetMocks();
+
+            const swappedTeam = makeTeam(10, 'Team Alpha', [
+                { id: 2, user_id: null, display_name: 'Bob',   seat_number: 1 },
+                { id: 1, user_id: null, display_name: 'Alice', seat_number: 3 },
+            ]);
+
+            // First PUT resolves the team-name update; second PUT resolves the swap-seats call.
+            axios.put
+                .mockResolvedValueOnce(makeGameSummary([makeSeatedTeam()]))
+                .mockResolvedValueOnce(makeGameSummary([swappedTeam]));
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+            const bobRow   = within(dialog).getByRole('generic', { name: 'Seat 3' }).closest('li');
+
+            fireEvent.dragStart(aliceRow);
+            fireEvent.dragOver(bobRow);
+            fireEvent.drop(bobRow);
+
+            // No API call yet — the drag only updates modal state.
+            expect(axios.put).not.toHaveBeenCalled();
+
+            // Now submit — the swap-seats call should be made.
+            await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+            await waitFor(() =>
+                expect(axios.put).toHaveBeenCalledWith(
+                    '/api/v1/games/5/players/swap-seats',
+                    { player_id_a: 1, player_id_b: 2 },
+                ),
+            );
+        });
+
+        it('swaps the seat badge labels in the modal immediately on drop without making an API call', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+            const bobRow   = within(dialog).getByRole('generic', { name: 'Seat 3' }).closest('li');
+
+            fireEvent.dragStart(aliceRow);
+            fireEvent.dragOver(bobRow);
+            fireEvent.drop(bobRow);
+
+            // The row that was seat 1 (Alice) now shows Seat 3, and vice-versa — immediately,
+            // with no API call.
+            expect(within(aliceRow).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
+            expect(within(bobRow).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
+            expect(axios.put).not.toHaveBeenCalled();
+        });
+
+        it('restores original seat badges when Cancel is clicked after a drag swap', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+            const bobRow   = within(dialog).getByRole('generic', { name: 'Seat 3' }).closest('li');
+
+            fireEvent.dragStart(aliceRow);
+            fireEvent.dragOver(bobRow);
+            fireEvent.drop(bobRow);
+
+            // Confirm the swap is visible in the modal.
+            expect(within(aliceRow).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
+
+            // Click Cancel — no API should have been called.
+            await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+            expect(axios.put).not.toHaveBeenCalled();
+
+            // Re-open the modal — original seats must be restored.
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const newDialog = screen.getByRole('dialog');
+            expect(within(newDialog).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
+            expect(within(newDialog).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
+        });
+
+        it('does not update the teams section seat display until Update team is submitted', async () => {
+            setupGetMocks();
+
+            const swappedTeam = makeTeam(10, 'Team Alpha', [
+                { id: 2, user_id: null, display_name: 'Bob',   seat_number: 1 },
+                { id: 1, user_id: null, display_name: 'Alice', seat_number: 3 },
+            ]);
+            axios.put
+                .mockResolvedValueOnce(makeGameSummary([makeSeatedTeam()]))
+                .mockResolvedValueOnce(makeGameSummary([swappedTeam]));
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+            const bobRow   = within(dialog).getByRole('generic', { name: 'Seat 3' }).closest('li');
+
+            fireEvent.dragStart(aliceRow);
+            fireEvent.dragOver(bobRow);
+            fireEvent.drop(bobRow);
+
+            // Modal reflects the swap (aliceRow now shows Seat 3).
+            expect(within(aliceRow).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
+
+            // Teams section (outside the dialog) must still show the original seat assignments.
+            const allSeat1 = screen.getAllByRole('generic', { name: 'Seat 1' });
+            const allSeat3 = screen.getAllByRole('generic', { name: 'Seat 3' });
+            expect(allSeat1.filter((el) => !dialog.contains(el))).toHaveLength(1);
+            expect(allSeat3.filter((el) => !dialog.contains(el))).toHaveLength(1);
+
+            // After submit the teams section is updated with the server response.
+            await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
+
+            await waitFor(() =>
+                expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+            );
+        });
+
+        it('does not fire a swap API call when a player row is dropped onto itself', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+
+            fireEvent.dragStart(aliceRow);
+            fireEvent.dragOver(aliceRow);
+            fireEvent.drop(aliceRow);
+
+            expect(axios.put).not.toHaveBeenCalled();
+        });
+    });
+
 });

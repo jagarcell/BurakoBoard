@@ -26,7 +26,11 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
     const [errors, setErrors] = useState({});
     const [editingTeam, setEditingTeam] = useState(null);
     const [removedExistingPlayerIds, setRemovedExistingPlayerIds] = useState([]);
+    const [creatingSlot, setCreatingSlot] = useState(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [draggedPlayerId, setDraggedPlayerId] = useState(null);
+    const [dragOverPlayerId, setDragOverPlayerId] = useState(null);
+    const [pendingSeatSwaps, setPendingSeatSwaps] = useState([]);
     const duplicatePlayerErrorTimer = useRef(null);
     const diffLabelRef = useRef(null);
     const [arrowHalfWidth, setArrowHalfWidth] = useState(null);
@@ -86,10 +90,15 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
         setErrors({});
         setEditingTeam(null);
         setRemovedExistingPlayerIds([]);
+        setCreatingSlot(null);
+        setDraggedPlayerId(null);
+        setDragOverPlayerId(null);
+        setPendingSeatSwaps([]);
     };
 
-    const openModal = () => {
+    const openModal = (slot = null) => {
         resetModal();
+        setCreatingSlot(slot);
         setIsModalOpen(true);
     };
 
@@ -170,6 +179,46 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
             ...current,
             players: current.players.filter((_, i) => i !== index),
         }));
+    };
+
+    /**
+     * Queue a seat swap between two existing players in the edit modal.
+     *
+     * Only updates the local modal state immediately for visual feedback.
+     * The API call is deferred until the user submits the form via "Update team".
+     * Clicking "Cancel" discards the queued swaps without touching the teams display.
+     *
+     * @param {number} playerIdA - ID of the first player.
+     * @param {number} playerIdB - ID of the second (drop-target) player.
+     * @return {void}
+     *
+     * Logic: Flips the seat_number of the two players in editingTeam.existingPlayers
+     * and appends the pair to pendingSeatSwaps so handleSubmit can replay them via
+     * the API when the user confirms the edit.
+     */
+    const handleSeatSwap = (playerIdA, playerIdB) => {
+        const prevPlayers = editingTeam.existingPlayers;
+
+        const playerA = prevPlayers.find((p) => p.id === playerIdA);
+        const playerB = prevPlayers.find((p) => p.id === playerIdB);
+
+        if (playerA?.seat_number == null || playerB?.seat_number == null) return;
+
+        const seatA = playerA.seat_number;
+        const seatB = playerB.seat_number;
+
+        // Update local modal state for immediate visual feedback — no API call yet.
+        setEditingTeam((prev) => ({
+            ...prev,
+            existingPlayers: prev.existingPlayers.map((p) => {
+                if (p.id === playerIdA) return { ...p, seat_number: seatB };
+                if (p.id === playerIdB) return { ...p, seat_number: seatA };
+                return p;
+            }),
+        }));
+
+        // Queue the swap to be committed when the user clicks "Update team".
+        setPendingSeatSwaps((prev) => [...prev, { playerIdA, playerIdB }]);
     };
 
     const handleAddExistingTeam = async (slot) => {
@@ -254,6 +303,13 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                     lastResponse = await axios.post(
                         `/api/v1/games/${selectedGame.id}/teams/${editingTeam.id}/players`,
                         payload,
+                    );
+                }
+
+                for (const { playerIdA, playerIdB } of pendingSeatSwaps) {
+                    lastResponse = await axios.put(
+                        `/api/v1/games/${selectedGame.id}/players/swap-seats`,
+                        { player_id_a: playerIdA, player_id_b: playerIdB },
                     );
                 }
 
@@ -486,15 +542,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                                                     ) : null}
                                                                     <span className="truncate">{player.display_name}</span>
                                                                 </div>
-                                                                {getCurrentRoundRoleForPlayer(player.id) ? (
-                                                                    <div className="flex flex-wrap justify-end gap-1">
-                                                                        <span
-                                                                            className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700"
-                                                                        >
-                                                                            {getCurrentRoundRoleForPlayer(player.id)}
-                                                                        </span>
-                                                                    </div>
-                                                                ) : null}
+
                                                             </li>
                                                         ))}
                                                     </ul>
@@ -545,7 +593,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                                             ...(slotSelections[1 - slot] ? [Number(slotSelections[1 - slot])] : []),
                                                         ]}
                                                         onAddTeam={() => handleAddExistingTeam(slot)}
-                                                        onCreateTeam={openModal}
+                                                        onCreateTeam={() => openModal(slot)}
                                                         onSelect={(val) =>
                                                             setSlotSelections((s) => ({
                                                                 ...s,
@@ -674,9 +722,55 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                     .map((player) => (
                                         <li
                                             key={player.id}
-                                            className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                                            draggable={player.seat_number != null}
+                                            onDragStart={() => setDraggedPlayerId(player.id)}
+                                            onDragEnd={() => {
+                                                setDraggedPlayerId(null);
+                                                setDragOverPlayerId(null);
+                                            }}
+                                            onDragOver={(e) => {
+                                                if (
+                                                    draggedPlayerId !== null
+                                                    && draggedPlayerId !== player.id
+                                                    && player.seat_number != null
+                                                ) {
+                                                    e.preventDefault();
+                                                    setDragOverPlayerId(player.id);
+                                                }
+                                            }}
+                                            onDragLeave={() => setDragOverPlayerId(null)}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                if (
+                                                    draggedPlayerId !== null
+                                                    && draggedPlayerId !== player.id
+                                                ) {
+                                                    handleSeatSwap(draggedPlayerId, player.id);
+                                                    setDraggedPlayerId(null);
+                                                    setDragOverPlayerId(null);
+                                                }
+                                            }}
+                                            className={[
+                                                'flex items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors',
+                                                draggedPlayerId === player.id
+                                                    ? 'opacity-40 bg-slate-100 ring-2 ring-inset ring-slate-300'
+                                                    : dragOverPlayerId === player.id
+                                                        ? 'bg-indigo-50 ring-2 ring-inset ring-indigo-400'
+                                                        : 'bg-slate-50',
+                                                player.seat_number != null ? 'cursor-grab active:cursor-grabbing' : '',
+                                            ].join(' ')}
                                         >
-                                            <span>{player.display_name}</span>
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                {player.seat_number != null ? (
+                                                    <span
+                                                        aria-label={`Seat ${player.seat_number}`}
+                                                        className="flex flex-shrink-0 items-center justify-center rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500"
+                                                    >
+                                                        Seat {player.seat_number}
+                                                    </span>
+                                                ) : null}
+                                                <span className="truncate">{player.display_name}</span>
+                                            </div>
                                             <button
                                                 aria-label={`Remove ${player.display_name}`}
                                                 className="ml-2 text-slate-400 hover:text-red-500"
@@ -746,22 +840,44 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
 
                         {teamForm.players.length > 0 ? (
                             <ul className="space-y-1 pt-1">
-                                {teamForm.players.map((player, index) => (
-                                    <li
-                                        key={index}
-                                        className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                                    >
-                                        <span>{player.name}</span>
-                                        <button
-                                            aria-label={`Remove ${player.name}`}
-                                            className="ml-2 text-slate-400 hover:text-red-500"
-                                            onClick={() => removePlayer(index)}
-                                            type="button"
+                                {teamForm.players.map((player, index) => {
+                                    const modalSlot = editingTeam
+                                        ? teams.findIndex((t) => t.id === editingTeam.id)
+                                        : creatingSlot;
+                                    const nonRemovedExistingCount = editingTeam
+                                        ? editingTeam.existingPlayers.filter((p) => ! removedExistingPlayerIds.includes(p.id)).length
+                                        : 0;
+                                    const projectedSeat = (modalSlot === 0 || modalSlot === 1)
+                                        ? (nonRemovedExistingCount + index) * 2 + (modalSlot === 0 ? 1 : 2)
+                                        : null;
+
+                                    return (
+                                        <li
+                                            key={index}
+                                            className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
                                         >
-                                            ×
-                                        </button>
-                                    </li>
-                                ))}
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                {projectedSeat != null ? (
+                                                    <span
+                                                        aria-label={`Seat ${projectedSeat}`}
+                                                        className="flex flex-shrink-0 items-center justify-center rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500"
+                                                    >
+                                                        Seat {projectedSeat}
+                                                    </span>
+                                                ) : null}
+                                                <span className="truncate">{player.name}</span>
+                                            </div>
+                                            <button
+                                                aria-label={`Remove ${player.name}`}
+                                                className="ml-2 text-slate-400 hover:text-red-500"
+                                                onClick={() => removePlayer(index)}
+                                                type="button"
+                                            >
+                                                ×
+                                            </button>
+                                        </li>
+                                    );
+                                })}
                             </ul>
                         ) : null}
                     </div>
