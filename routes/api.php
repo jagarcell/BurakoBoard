@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\RoundDraftController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TeamPlayerController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\UserVoiceAliasController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -43,5 +44,9 @@ Route::prefix('v1')->group(function () {
                 'user' => $request->user(),
             ];
         });
+
+        Route::get('/user/voice-aliases', [UserVoiceAliasController::class, 'index']);
+        Route::post('/user/voice-aliases', [UserVoiceAliasController::class, 'store']);
+        Route::delete('/user/voice-aliases/{aliasId}', [UserVoiceAliasController::class, 'destroy']);
     });
 });
