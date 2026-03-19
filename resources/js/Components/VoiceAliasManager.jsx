@@ -36,19 +36,24 @@ function AliasRow({ alias, keyword, onDelete, isDeleting }) {
  *   aliases: Array<{ id: number, alias: string, keyword: string }>,
  *   isLoading: boolean,
  *   error: string | null,
+ *   misheardOptions: string[],
  *   onAdd: (alias: string, keyword: string) => Promise<void>,
  *   onRemove: (aliasId: number) => Promise<void>,
  * }} props
  *
  * Logic:
- *   - Renders an add-form at the top with two inputs (misheard word, intended word)
+ *   - Renders an add-form at the top with a misheard word field (select when
+ *     misheardOptions are available, text input otherwise), an intended word input,
  *     and an inline Submit button. Client-side validation requires both fields.
+ *   - When misheardOptions is non-empty (populated after a mic listening session),
+ *     the misheard field is rendered as a <select> whose options are the unique
+ *     lowercased words returned by the browser's speech recognition alternatives.
  *   - On submit, calls onAdd and clears the form on success, or shows an inline
  *     error message from the server (e.g. "You already have an alias for that word.").
  *   - Each existing alias is shown as an AliasRow with an optimistic delete button.
  *   - Tracks which alias is being deleted to show a disabled state on that row.
  */
-export default function VoiceAliasManager({ aliases = [], isLoading, error, onAdd, onRemove }) {
+export default function VoiceAliasManager({ aliases = [], isLoading, error, misheardOptions = [], onAdd, onRemove }) {
     const [misheard, setMisheard] = useState('');
     const [intended, setIntended] = useState('');
     const [addError, setAddError] = useState('');
@@ -100,15 +105,30 @@ export default function VoiceAliasManager({ aliases = [], isLoading, error, onAd
             {/* Add form */}
             <form className="mb-3 flex flex-col gap-2" onSubmit={handleAdd}>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                        aria-label="Misheard word"
-                        className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                        disabled={isAdding}
-                        onChange={(e) => setMisheard(e.target.value)}
-                        placeholder="Misheard (e.g. Morocco)"
-                        type="text"
-                        value={misheard}
-                    />
+                    {misheardOptions.length > 0 ? (
+                        <select
+                            aria-label="Misheard word"
+                            className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                            disabled={isAdding}
+                            onChange={(e) => setMisheard(e.target.value)}
+                            value={misheard}
+                        >
+                            <option value="">— pick misheard word —</option>
+                            {misheardOptions.map((word) => (
+                                <option key={word} value={word}>{word}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <input
+                            aria-label="Misheard word"
+                            className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                            disabled={isAdding}
+                            onChange={(e) => setMisheard(e.target.value)}
+                            placeholder="Misheard (e.g. Morocco)"
+                            type="text"
+                            value={misheard}
+                        />
+                    )}
                     <input
                         aria-label="Intended word"
                         className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"

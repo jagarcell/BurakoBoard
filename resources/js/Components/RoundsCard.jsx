@@ -36,6 +36,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [voiceFeedback, setVoiceFeedback] = useState(null);
     const voiceFeedbackTimerRef = useRef(null);
     const [showAliasManager, setShowAliasManager] = useState(false);
+    const [lastMisheardCandidates, setLastMisheardCandidates] = useState([]);
     const { aliases, isLoading: aliasesLoading, error: aliasesError, addAlias, removeAlias } = useVoiceAliases();
 
     const [expandedRound, setExpandedRound] = useState(null);
@@ -549,6 +550,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
      */
     const handleVoiceFeedback = (feedback) => {
         setVoiceFeedback(feedback);
+        if (feedback.misheardCandidates) setLastMisheardCandidates(feedback.misheardCandidates);
         if (voiceFeedbackTimerRef.current) clearTimeout(voiceFeedbackTimerRef.current);
         voiceFeedbackTimerRef.current = setTimeout(() => setVoiceFeedback(null), 3500);
     };
@@ -772,6 +774,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                         aliases={aliases}
                                         error={aliasesError}
                                         isLoading={aliasesLoading}
+                                        misheardOptions={lastMisheardCandidates}
                                         onAdd={addAlias}
                                         onRemove={removeAlias}
                                     />

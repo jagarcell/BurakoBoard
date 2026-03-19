@@ -58,8 +58,53 @@ describe('VoiceAliasManager', () => {
             expect(screen.getByRole('button', { name: /^add$/i })).toBeInTheDocument();
         });
 
+        it('renders a text input for misheard word when misheardOptions is empty', () => {
+            renderManager();
+            const misheardField = screen.getByLabelText(/misheard/i);
+            expect(misheardField.tagName.toLowerCase()).toBe('input');
+        });
+
+        it('renders a select dropdown for misheard word when misheardOptions is provided', () => {
+            renderManager({ misheardOptions: ['burako', 'morocco', 'minus'] });
+            const misheardField = screen.getByLabelText(/misheard/i);
+            expect(misheardField.tagName.toLowerCase()).toBe('select');
+        });
+
+        it('shows each misheard candidate as a dropdown option', () => {
+            renderManager({ misheardOptions: ['burako', 'morocco', 'minus'] });
+            expect(screen.getByRole('option', { name: 'burako' })).toBeInTheDocument();
+            expect(screen.getByRole('option', { name: 'morocco' })).toBeInTheDocument();
+            expect(screen.getByRole('option', { name: 'minus' })).toBeInTheDocument();
+        });
+
+        it('shows a placeholder option when the dropdown is unselected', () => {
+            renderManager({ misheardOptions: ['burako', 'morocco'] });
+            expect(screen.getByRole('option', { name: /pick misheard word/i })).toBeInTheDocument();
+        });
+
+        it('calls onAdd with the selected dropdown word on valid submit', async () => {
+            const onAdd = vi.fn().mockResolvedValue({});
+            renderManager({ onAdd, misheardOptions: ['morocco', 'burako'] });
+
+            fireEvent.change(screen.getByLabelText(/misheard/i), { target: { value: 'morocco' } });
+            fireEvent.change(screen.getByLabelText(/intended/i), { target: { value: 'burako' } });
+            fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
+
+            await waitFor(() => {
+                expect(onAdd).toHaveBeenCalledWith('morocco', 'burako');
+            });
+        });
+
         it('shows client-side error when submitted with empty fields', async () => {
             renderManager();
+            fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
+            expect(await screen.findByText(/both fields are required/i)).toBeInTheDocument();
+        });
+
+        it('shows client-side error when dropdown is submitted without selection', async () => {
+            renderManager({ misheardOptions: ['morocco', 'burako'] });
+            // leave the select at its default placeholder (empty string)
+            fireEvent.change(screen.getByLabelText(/intended/i), { target: { value: 'burako' } });
             fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
             expect(await screen.findByText(/both fields are required/i)).toBeInTheDocument();
         });
