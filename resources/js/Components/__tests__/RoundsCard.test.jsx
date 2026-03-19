@@ -1793,5 +1793,100 @@ describe('RoundsCard', () => {
         });
     });
 
+    describe('voice alias manager toggle (+ button)', () => {
+        const aliasesResponse = { data: { data: [] } };
+
+        const mockDraftElementsAndAliases = (url) => {
+            if (url.includes('round-draft') || url.match(/\/rounds\/\d+\/draft/)) {
+                return Promise.resolve({ data: { data: { round_draft: null } } });
+            }
+            if (url.includes('voice-aliases')) {
+                return Promise.resolve(aliasesResponse);
+            }
+            return Promise.resolve(elementsResponse);
+        };
+
+        beforeEach(() => {
+            // Stub window.webkitSpeechRecognition so voiceSupported is true
+            // and the + button is rendered.
+            vi.stubGlobal('webkitSpeechRecognition', vi.fn());
+            axios.put = vi.fn().mockResolvedValue({});
+            axios.get.mockImplementation(mockDraftElementsAndAliases);
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        it('renders the Manage voice aliases button when voice is supported', async () => {
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            expect(
+                screen.getByRole('button', { name: 'Manage voice aliases' }),
+            ).toBeInTheDocument();
+        });
+
+        it('clicking the + button shows the VoiceAliasManager panel', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            await user.click(screen.getByRole('button', { name: 'Manage voice aliases' }));
+
+            // The heading inside VoiceAliasManager should now be visible.
+            expect(screen.getByText(/voice aliases/i)).toBeInTheDocument();
+            // The add form inputs must be present.
+            expect(screen.getByLabelText(/misheard/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/intended/i)).toBeInTheDocument();
+            // Empty state message since no aliases exist yet.
+            expect(screen.getByText(/no aliases yet/i)).toBeInTheDocument();
+        });
+
+        it('clicking the + button again hides the VoiceAliasManager panel', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            const aliasBtn = screen.getByRole('button', { name: 'Manage voice aliases' });
+
+            await user.click(aliasBtn);
+            expect(screen.getByText(/voice aliases/i)).toBeInTheDocument();
+
+            await user.click(screen.getByRole('button', { name: 'Hide voice aliases' }));
+            expect(screen.queryByText(/voice aliases/i)).not.toBeInTheDocument();
+        });
+
+        it('the score entry form remains visible while the alias panel is open', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+
+            await user.click(screen.getByRole('button', { name: 'Manage voice aliases' }));
+
+            // Both team scoring inputs are still rendered alongside the alias panel.
+            expect(screen.getAllByLabelText('Burako')).toHaveLength(2);
+            // Submit button is also still present.
+            expect(screen.getByRole('button', { name: 'Record Round' })).toBeInTheDocument();
+
+            void burakoCheckboxes; // suppress unused-variable lint
+        });
+    });
+
 });
 
