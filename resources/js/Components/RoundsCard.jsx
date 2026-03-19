@@ -96,6 +96,14 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 requestAnimationFrame(() => {
                     teamRefs.current.get(teamId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
+            } else {
+                // When collapsing a team, scroll the other team fully into view.
+                const otherTeam = teams.find((t) => t.id !== teamId);
+                if (otherTeam) {
+                    requestAnimationFrame(() => {
+                        teamRefs.current.get(otherTeam.id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    });
+                }
             }
 
             return next;
