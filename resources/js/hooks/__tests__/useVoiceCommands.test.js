@@ -173,6 +173,33 @@ describe('useVoiceCommands', () => {
         );
     });
 
+    it('includes misheardCandidates in onFeedback with unique lowercased words from all alternatives', () => {
+        const onFeedback = vi.fn();
+
+        const { result } = renderHook(() =>
+            useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback }),
+        );
+
+        act(() => result.current.toggle());
+
+        act(() => {
+            MockRecognition.instances[0].onresult({
+                results: [[
+                    { transcript: 'add burako to the cracks' },
+                    { transcript: 'add morocco to the cracks' },
+                ]],
+            });
+        });
+
+        const feedback = onFeedback.mock.calls[0][0];
+        expect(feedback.misheardCandidates).toEqual(
+            expect.arrayContaining(['add', 'burako', 'cracks', 'morocco', 'the', 'to']),
+        );
+        // Each word appears only once even though some words are shared across alternatives.
+        const uniqueCheck = new Set(feedback.misheardCandidates);
+        expect(uniqueCheck.size).toBe(feedback.misheardCandidates.length);
+    });
+
     it('calls onFeedback with a microphone-denied message on not-allowed error', () => {
         const onFeedback = vi.fn();
 

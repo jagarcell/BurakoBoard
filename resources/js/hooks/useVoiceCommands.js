@@ -17,8 +17,11 @@ import { parseVoiceCommand } from '@/utils/voiceCommandParser';
  * @param {Function} options.onCommand  - Called with the parsed command object when a
  *   final transcript resolves to a known command.
  *   Receives `{ type: 'element'|'save', action?, elementId?, teamId?, quantity? }`.
- * @param {Function} options.onFeedback - Called with `{ ok: boolean, message: string }`
+ * @param {Function} options.onFeedback - Called with `{ ok: boolean, message: string, transcript?: string, misheardCandidates?: string[] }`
  *   for every recognition result (success or failure), so the UI can show a toast.
+ *   `misheardCandidates` is a sorted array of unique, lowercased words drawn from all
+ *   speech alternatives returned by the browser for the last recognition result. It is
+ *   populated only when `onresult` fires (not on error or silent-stop).
  * @param {Array}    [options.aliases=[]] - The authenticated user's voice aliases.
  *   Each object must have `{ alias: string, keyword: string }`. Applied as a
  *   pre-processing step in the parser before fuzzy matching.
@@ -186,6 +189,7 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
         r.continuous = false;
         r.interimResults = false;
         r.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
+        r.maxAlternatives = 5;
 
         r.onstart = () => {
             setIsReady(true);
@@ -193,8 +197,21 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
 
         r.onresult = (event) => {
             sessionFeedbackGivenRef.current = true;
-            const transcript =
-                event.results[event.results.length - 1][0].transcript;
+            const lastResult = event.results[event.results.length - 1];
+            const transcript = lastResult[0].transcript;
+
+            // Collect unique lowercased words from all speech alternatives so the
+            // alias-manager dropdown can offer every word the browser considered.
+            const wordSet = new Set();
+            for (let i = 0; i < lastResult.length; i++) {
+                lastResult[i].transcript
+                    .toLowerCase()
+                    .replace(/[^a-z0-9\s'-]/g, '')
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .forEach((w) => wordSet.add(w));
+            }
+            const misheardCandidates = [...wordSet].sort();
 
             const command = parseVoiceCommand(
                 transcript,
@@ -205,12 +222,12 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
 
             if (command.type === 'save') {
                 onCommandRef.current(command);
-                onFeedbackRef.current({ ok: true, message: 'Saving round…', transcript });
+                onFeedbackRef.current({ ok: true, message: 'Saving round…', transcript, misheardCandidates });
             } else if (command.type === 'element') {
                 onCommandRef.current(command);
-                onFeedbackRef.current({ ok: true, message: `✓ ${transcript}`, transcript });
+                onFeedbackRef.current({ ok: true, message: `✓ ${transcript}`, transcript, misheardCandidates });
             } else {
-                onFeedbackRef.current({ ok: false, message: command.reason, transcript });
+                onFeedbackRef.current({ ok: false, message: command.reason, transcript, misheardCandidates });
             }
         };
 
