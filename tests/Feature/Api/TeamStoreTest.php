@@ -282,6 +282,66 @@ class TeamStoreTest extends TestCase
     }
 
     /**
+     * Ensure seats are correct when the lower-id team is attached second.
+     *
+     * @return void Verifies that attaching a team with a lower database id after a higher-id team
+     *              correctly reassigns all seats so neither team ends up with conflicting or missing seats.
+     * Logic: create teamHigh before teamLow so teamHigh has the lower id. Attach teamHigh to the
+     * target game first (so it temporarily takes slot 0 with odd seats), then attach teamLow.
+     * After teamLow is attached, DB ordering puts teamLow at slot 0 (odd) and teamHigh at slot 1
+     * (even). Assert that both players end up with the correct non-overlapping seats and that
+     * teamHigh's seat was corrected from odd to even.
+     */
+    public function test_attach_corrects_seats_when_lower_id_team_added_second(): void
+    {
+        $sourceGame = $this->makeGame();
+        $targetGame = $this->makeGame();
+
+        // teamLow intentionally created first so it gets a lower auto-increment id.
+        $teamLow  = $this->makeTeam($sourceGame, 'Team Low');
+        $playerLow = $this->attachPlayerByName($teamLow, 'PlayerLow');
+
+        // teamHigh is created second so it gets a higher id.
+        $teamHigh = $this->makeTeam($sourceGame, 'Team High');
+        $playerHigh = $this->attachPlayerByName($teamHigh, 'PlayerHigh');
+
+        // Attach the higher-id team first. At this point it is the only team → slot 0 → seat 1.
+        $this->postJson("/api/v1/games/{$targetGame->id}/teams/{$teamHigh->id}/attach")
+            ->assertStatus(201);
+
+        // Attach the lower-id team second. This triggers a full re-seat:
+        //   teamLow  (lower id) → slot 0 → seat 1 (odd)
+        //   teamHigh (higher id) → slot 1 → seat 2 (even)
+        $response = $this->postJson("/api/v1/games/{$targetGame->id}/teams/{$teamLow->id}/attach")
+            ->assertStatus(201);
+
+        // API response must reflect the corrected seats.
+        $response->assertJsonPath('data.game.teams.0.players.0.seat_number', 1);
+        $response->assertJsonPath('data.game.teams.1.players.0.seat_number', 2);
+
+        // Database must have the corrected seat rows with no duplicates.
+        $this->assertDatabaseHas('game_player_seat', [
+            'game_id'     => $targetGame->id,
+            'player_id'   => $playerLow->id,
+            'seat_number' => 1,
+        ]);
+
+        $this->assertDatabaseHas('game_player_seat', [
+            'game_id'     => $targetGame->id,
+            'player_id'   => $playerHigh->id,
+            'seat_number' => 2,
+        ]);
+
+        // No seat number may be duplicated within the same game.
+        $seatNumbers = DB::table('game_player_seat')
+            ->where('game_id', $targetGame->id)
+            ->pluck('seat_number')
+            ->all();
+
+        $this->assertCount(count(array_unique($seatNumbers)), $seatNumbers, 'Seat numbers must be unique per game.');
+    }
+
+    /**
      * Ensure the attach endpoint returns 422 when the team is already part of the game.
      *
      * @return void Verifies duplicate attach attempts are rejected.

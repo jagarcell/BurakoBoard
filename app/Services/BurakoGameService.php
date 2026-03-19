@@ -165,11 +165,10 @@ class BurakoGameService
 
         $this->repository->attachTeamToGame($gameId, $team->id);
 
-        $playerIds = $this->repository->getTeamPlayerIds($team->id);
-
-        foreach ($playerIds as $playerId) {
-            $this->repository->assignPlayerSeat($gameId, $team->id, (int) $playerId);
-        }
+        // Reassign all seats from scratch so that a team with a lower id added after
+        // a team with a higher id gets the correct odd-slot seats, and the existing
+        // team's players are moved to the even slot where required.
+        $this->repository->reassignAllSeatsForGame($gameId);
 
         return $this->repository->getGameSummary($gameId);
     }
@@ -261,6 +260,31 @@ class BurakoGameService
 
         $this->repository->removePlayerSeatForTeam($teamId, $playerId);
         $this->repository->detachPlayerFromTeam($teamId, $playerId);
+
+        return $this->repository->getGameSummary($gameId);
+    }
+
+    /**
+     * Swap the seat numbers of two players within a game.
+     *
+     * @param  int  $gameId     Identifier of the game in which the swap takes place.
+     * @param  int  $playerIdA  Identifier of the first player.
+     * @param  int  $playerIdB  Identifier of the second player.
+     * @return array<string, mixed> Updated game summary payload after the swap.
+     * Logic: enforce that the game is still in progress, then delegate the atomic seat exchange
+     * to the repository and return the refreshed summary so the client can reconcile state.
+     */
+    public function swapPlayerSeats(int $gameId, int $playerIdA, int $playerIdB): array
+    {
+        $game = $this->repository->findGameOrFail($gameId);
+
+        if ($game->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'game' => 'Cannot swap seats in a finished game.',
+            ]);
+        }
+
+        $this->repository->swapPlayerSeats($gameId, $playerIdA, $playerIdB);
 
         return $this->repository->getGameSummary($gameId);
     }

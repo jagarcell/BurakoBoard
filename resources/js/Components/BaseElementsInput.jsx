@@ -206,6 +206,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             </span>
                         );
                     })()}
+                    <span aria-hidden="true" className="sm:hidden inline-flex flex-shrink-0 w-6 h-6" />
                 </div>
             )}
         </div>

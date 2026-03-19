@@ -1164,6 +1164,34 @@ describe('RoundsCard', () => {
             const expandBtn = screen.getByRole('button', { name: 'Expand Team Alpha score inputs' });
             expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
         });
+
+        it('collapsing a team scrolls the other team into view', async () => {
+            axios.get.mockImplementation(mockDraftAndElements);
+
+            const scrollIntoViewMock = vi.fn();
+            window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+
+            render(
+                <RoundsCard
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            await userEvent.click(
+                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+            );
+
+            // scrollIntoView should have been called on the other team (Team Beta)
+            await waitFor(() => {
+                expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
+            });
+
+            delete window.HTMLElement.prototype.scrollIntoView;
+        });
     });
 
     describe('viewport layout transition (stacked ↔ non-stacked)', () => {
