@@ -8,7 +8,6 @@ use App\Http\Resources\UserVoiceAliasResource;
 use App\Services\UserVoiceAliasService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class UserVoiceAliasController extends Controller
 {
@@ -26,36 +25,40 @@ class UserVoiceAliasController extends Controller
      * Return all voice aliases for the authenticated user.
      *
      * @param Request $request The incoming HTTP request (provides authenticated user).
-     * @return AnonymousResourceCollection JSON array of UserVoiceAliasResource objects.
+     * @return JsonResponse JSON object with an `aliases` key containing the array.
      *
-     * Logic: Loads aliases scoped to the current user via the service and wraps them
-     *   in a typed resource collection so the response shape is consistent.
+     * Logic: Loads aliases scoped to the current user and returns them under a named
+     *   `aliases` key so the EnsureApiResponseEnvelope middleware produces a single-level
+     *   `data.aliases` path — consistent with other list endpoints (e.g. BaseElementController
+     *   uses `data.base_elements`). Avoids the double-nesting caused by returning a
+     *   ResourceCollection directly, which adds its own `{ data: [] }` wrapper.
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): JsonResponse
     {
         $aliases = $this->service->getAliasesForUser($request->user()->id);
 
-        return UserVoiceAliasResource::collection($aliases);
+        return response()->json(['aliases' => UserVoiceAliasResource::collection($aliases)]);
     }
 
     /**
-     * Create a new voice alias for the authenticated user.
+     * Create a new voice alias for the authenticated user, or return the existing one.
      *
      * @param StoreVoiceAliasRequest $request Validated request containing alias and keyword.
-     * @return JsonResponse 201 response with the created alias resource.
+     * @return JsonResponse 201 when a new alias was created; 200 when the alias already existed.
      *
-     * Logic: Passes the pre-validated (and normalised) alias/keyword to the service,
-     *   then returns the created model wrapped in the resource with a 201 status.
+     * Logic: Delegates to the service which performs a find-or-create. Returns 201 for
+     *   newly created aliases and 200 for duplicates, so callers never receive a 4xx for
+     *   an alias they already own — avoiding spurious browser console errors.
      */
     public function store(StoreVoiceAliasRequest $request): JsonResponse
     {
-        $alias = $this->service->addAlias(
+        [$alias, $wasCreated] = $this->service->findOrCreateAlias(
             $request->user()->id,
             $request->validated('alias'),
             $request->validated('keyword'),
         );
 
-        return response()->json(new UserVoiceAliasResource($alias), 201);
+        return response()->json(new UserVoiceAliasResource($alias), $wasCreated ? 201 : 200);
     }
 
     /**

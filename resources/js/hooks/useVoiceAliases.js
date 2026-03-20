@@ -18,8 +18,10 @@ import axios from 'axios';
  *
  * Logic:
  *   - On mount, GET /api/v1/user/voice-aliases and populate the aliases list.
- *     Only the array under the `data` key is stored; any non-array response (e.g.
- *     an unexpected server error body) is silently replaced with an empty array so
+ *     The API response is envelope-wrapped by middleware as
+ *     `{ status, data: { aliases: [...] }, … }`, so the aliases array lives at
+ *     `data.data.aliases`. Any non-array value at that path (e.g. an unexpected
+ *     server error body) is silently replaced with an empty array so
  *     VoiceAliasManager never receives a non-iterable value.
  *   - addAlias POSTs the new alias and merges the server response into state
  *     (sorted alphabetically) without a re-fetch.
@@ -38,7 +40,7 @@ export default function useVoiceAliases() {
             setIsLoading(true);
             setError(null);
             const { data } = await axios.get('/api/v1/user/voice-aliases');
-            setAliases(Array.isArray(data.data) ? data.data : []);
+            setAliases(Array.isArray(data.data?.aliases) ? data.data.aliases : []);
         } catch {
             setError('Failed to load voice aliases.');
         } finally {
@@ -55,15 +57,26 @@ export default function useVoiceAliases() {
      *
      * Logic: POSTs to the API, then merges the returned record into the sorted
      *   alias list. Throws on validation errors so the caller can display them.
+     *   On failure (e.g. 422 duplicate), re-fetches the full alias list so any
+     *   existing aliases that failed to load on initial mount become visible to
+     *   the user — this closes the UX gap where the initial GET fails (e.g.
+     *   after a session expiry) and the user can see what aliases already exist.
      */
     const addAlias = useCallback(async (alias, keyword) => {
-        const { data } = await axios.post('/api/v1/user/voice-aliases', { alias, keyword });
-        const created = data.data ?? data;
-        setAliases((prev) =>
-            [...prev, created].sort((a, b) => a.alias.localeCompare(b.alias))
-        );
-        return created;
-    }, []);
+        try {
+            const { data } = await axios.post('/api/v1/user/voice-aliases', { alias, keyword });
+            const created = data.data ?? data;
+            setAliases((prev) =>
+                [...prev.filter((a) => a.id !== created.id), created].sort((a, b) => a.alias.localeCompare(b.alias))
+            );
+            return created;
+        } catch (err) {
+            // Re-fetch so the user can see any existing aliases, especially
+            // useful when the initial GET failed and they encounter an error.
+            await fetchAliases().catch(() => {});
+            throw err;
+        }
+    }, [fetchAliases]);
 
     /**
      * Remove a voice alias by ID.
