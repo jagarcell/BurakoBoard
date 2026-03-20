@@ -93,6 +93,15 @@ const SAVE_PHRASES = ['save round', 'record round', 'save', 'submit round', 'sub
  *   that might be a substring of them. Each alias is replaced using a
  *   case-insensitive word-boundary regex so partial word matches are avoided
  *   (e.g. "Moroccan" is not replaced when the alias is "Morocco").
+ *
+ * For aliases of five or more characters a fuzzy fallback pass is attempted
+ * when exact matching finds nothing.  Speech recognition is non-deterministic
+ * and may return subtly different spellings on successive sessions (e.g.
+ * "Morocco" one run, "Morroco" the next).  The fallback replaces any
+ * whitespace-delimited word whose Levenshtein distance from the alias is
+ * within the same threshold used for element/team fuzzy matching:
+ * max(2, floor(alias.length × 0.35)).  Short aliases (< 5 chars) are excluded
+ * from fuzzy matching to prevent false positives on common short words.
  */
 export function applyAliases(transcript, aliases) {
     if (!aliases || aliases.length === 0) return transcript;
@@ -102,8 +111,23 @@ export function applyAliases(transcript, aliases) {
 
     for (const { alias, keyword } of sorted) {
         const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`\\b${escaped}\\b`, 'gi');
-        result = result.replace(re, keyword);
+        const exactRe = new RegExp(`\\b${escaped}\\b`, 'gi');
+
+        // Primary path: exact case-insensitive word-boundary match.
+        if (exactRe.test(result)) {
+            result = result.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), keyword);
+            continue;
+        }
+
+        // Fuzzy fallback: only for aliases of 5+ characters to guard against
+        // false positives on short common words.
+        const aliasNorm = alias.toLowerCase();
+        if (aliasNorm.length < 5) continue;
+
+        const threshold = Math.max(2, Math.floor(aliasNorm.length * 0.35));
+        result = result.replace(/\b[a-zA-Z]+\b/g, (word) =>
+            levenshtein(word.toLowerCase(), aliasNorm) <= threshold ? keyword : word,
+        );
     }
 
     return result;
