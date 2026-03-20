@@ -168,6 +168,30 @@ describe('VoiceAliasManager', () => {
 
             await act(async () => { resolve({}); });
         });
+
+        it('ignores rapid duplicate clicks and only calls onAdd once per in-flight request', async () => {
+            // Simulates rapid clicking before React re-renders to disable the button.
+            // The ref-based guard (isAddingRef) must absorb the extra calls
+            // without firing additional POST requests.
+            let resolve;
+            const onAdd = vi.fn().mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+            renderManager({ onAdd });
+
+            const form = screen.getByLabelText(/misheard/i).closest('form');
+            fireEvent.change(screen.getByLabelText(/misheard/i), { target: { value: 'foo' } });
+            fireEvent.change(screen.getByLabelText(/intended/i), { target: { value: 'bar' } });
+
+            // Fire three submit events in rapid succession (before React can flush
+            // the isAdding state update and disable the button).
+            fireEvent.submit(form);
+            fireEvent.submit(form);
+            fireEvent.submit(form);
+
+            // Only one call should have reached onAdd.
+            expect(onAdd).toHaveBeenCalledTimes(1);
+
+            await act(async () => { resolve({}); });
+        });
     });
 
     describe('delete alias', () => {

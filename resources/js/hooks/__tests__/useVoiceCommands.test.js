@@ -528,4 +528,103 @@ describe('useVoiceCommands', () => {
             expect(() => act(() => { result.current.toggle(); })).not.toThrow();
         });
     });
+
+    describe('alias substitution in feedback', () => {
+        it('shows the intended word instead of the misheard word in the transcript of a success feedback', () => {
+            const onFeedback = vi.fn();
+            const aliases = [{ alias: 'morocco', keyword: 'burako' }];
+
+            const { result } = renderHook(() =>
+                useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback, aliases }),
+            );
+
+            act(() => result.current.toggle());
+
+            act(() => {
+                MockRecognition.instances[0].onresult({
+                    results: [[{ transcript: 'add morocco to the cracks' }]],
+                });
+            });
+
+            const feedback = onFeedback.mock.calls[0][0];
+            expect(feedback.ok).toBe(true);
+            expect(feedback.transcript).toContain('burako');
+            expect(feedback.transcript).not.toContain('morocco');
+            expect(feedback.message).toContain('burako');
+            expect(feedback.message).not.toContain('morocco');
+        });
+
+        it('leaves the transcript unchanged when no aliases match', () => {
+            const onFeedback = vi.fn();
+            const aliases = [{ alias: 'rio', keyword: 'burako' }];
+
+            const { result } = renderHook(() =>
+                useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback, aliases }),
+            );
+
+            act(() => result.current.toggle());
+
+            act(() => {
+                MockRecognition.instances[0].onresult({
+                    results: [[{ transcript: 'add burako to the cracks' }]],
+                });
+            });
+
+            const feedback = onFeedback.mock.calls[0][0];
+            expect(feedback.ok).toBe(true);
+            expect(feedback.transcript).toContain('burako');
+        });
+
+        it('shows the substituted word in the transcript even when the overall command fails', () => {
+            // When the command is structurally unrecognised (type: unknown), the
+            // feedback transcript should still reflect the alias substitution so
+            // the user sees "burako" (not "Morocco") in the failure toast.
+            const onFeedback = vi.fn();
+            const aliases = [{ alias: 'morocco', keyword: 'burako' }];
+
+            const { result } = renderHook(() =>
+                useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback, aliases }),
+            );
+
+            act(() => result.current.toggle());
+
+            // "Morocco" alone has no command structure — parseVoiceCommand returns unknown.
+            act(() => {
+                MockRecognition.instances[0].onresult({
+                    results: [[{ transcript: 'Morocco' }]],
+                });
+            });
+
+            const feedback = onFeedback.mock.calls[0][0];
+            expect(feedback.ok).toBe(false);
+            // Transcript should show the substituted word, not the raw misheard word.
+            expect(feedback.transcript).toContain('burako');
+            expect(feedback.transcript).not.toContain('Morocco');
+        });
+
+        it('matches aliases case-insensitively so a capitalised transcript word is still substituted', () => {
+            // The alias is stored as lowercase "morocco" (server-normalised).
+            // Speech recognition may return "Morocco" with a capital M.
+            // The substitution must fire regardless of casing.
+            const onFeedback = vi.fn();
+            const aliases = [{ alias: 'morocco', keyword: 'burako' }];
+
+            const { result } = renderHook(() =>
+                useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback, aliases }),
+            );
+
+            act(() => result.current.toggle());
+
+            act(() => {
+                MockRecognition.instances[0].onresult({
+                    results: [[{ transcript: 'add Morocco to the cracks' }]],
+                });
+            });
+
+            const feedback = onFeedback.mock.calls[0][0];
+            expect(feedback.ok).toBe(true);
+            expect(feedback.transcript).toContain('burako');
+            expect(feedback.transcript).not.toContain('Morocco');
+        });
+    });
 });

@@ -228,6 +228,34 @@ describe('parseVoiceCommand', () => {
             expect(applyAliases('add morocco and canada to team', aliases))
                 .toBe('add burako and canastra to team');
         });
+
+        describe('fuzzy fallback for speech-recognition spelling variants', () => {
+            it('replaces a word whose spelling differs by 1 character from the alias (5+ char aliases only)', () => {
+                // 'morroco' (alias, double-r single-c) vs 'Morocco' (recognition returns standard single-r double-c)
+                // Levenshtein distance = 2, threshold = max(2, floor(7*0.35)) = 2 — should match
+                const aliases = [{ alias: 'morroco', keyword: 'burako' }];
+                expect(applyAliases('add Morocco to the wolves', aliases)).toBe('add burako to the wolves');
+            });
+
+            it('does not apply fuzzy matching to aliases shorter than 5 characters', () => {
+                // 'can' (3 chars) fuzzy against 'cane' (distance 1) — must NOT replace due to length guard
+                const aliases = [{ alias: 'can', keyword: 'burako' }];
+                expect(applyAliases('add cane to team', aliases)).toBe('add cane to team');
+            });
+
+            it('does not replace words whose distance exceeds the threshold', () => {
+                // 'morroco' vs 'burako': distance ≈ 5 — well above threshold of 2
+                const aliases = [{ alias: 'morroco', keyword: 'replaced' }];
+                expect(applyAliases('add burako to the wolves', aliases)).toBe('add burako to the wolves');
+            });
+
+            it('exact match takes priority over fuzzy match', () => {
+                // 'morocco' exactly matches 'Morocco' via case-insensitive exact path;
+                // the fuzzy pass is never reached
+                const aliases = [{ alias: 'morocco', keyword: 'burako' }];
+                expect(applyAliases('add Morocco to the wolves', aliases)).toBe('add burako to the wolves');
+            });
+        });
     });
 
     describe('voice aliases — parseVoiceCommand with aliases', () => {

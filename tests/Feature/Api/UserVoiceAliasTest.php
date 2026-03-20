@@ -30,7 +30,7 @@ class UserVoiceAliasTest extends TestCase
      * Authenticated users with no aliases receive an empty list.
      *
      * @return void Verifies the response shape and empty data array.
-     * Logic: authenticate a user with no aliases, call GET, assert empty data.data.
+     * Logic: authenticate a user with no aliases, call GET, assert empty data.aliases.
      */
     public function test_index_returns_empty_list_for_user_with_no_aliases(): void
     {
@@ -40,7 +40,7 @@ class UserVoiceAliasTest extends TestCase
         $this->getJson('/api/v1/user/voice-aliases')
             ->assertOk()
             ->assertJsonPath('status', 'success')
-            ->assertJsonCount(0, 'data.data');
+            ->assertJsonCount(0, 'data.aliases');
     }
 
     /**
@@ -64,9 +64,9 @@ class UserVoiceAliasTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertJsonCount(1, 'data.data')
-            ->assertJsonPath('data.data.0.alias', 'morocco')
-            ->assertJsonPath('data.data.0.keyword', 'burako');
+            ->assertJsonCount(1, 'data.aliases')
+            ->assertJsonPath('data.aliases.0.alias', 'morocco')
+            ->assertJsonPath('data.aliases.0.keyword', 'burako');
     }
 
     /**
@@ -88,9 +88,9 @@ class UserVoiceAliasTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.data.0.alias', 'apple')
-            ->assertJsonPath('data.data.1.alias', 'mango')
-            ->assertJsonPath('data.data.2.alias', 'zebra');
+            ->assertJsonPath('data.aliases.0.alias', 'apple')
+            ->assertJsonPath('data.aliases.1.alias', 'mango')
+            ->assertJsonPath('data.aliases.2.alias', 'zebra');
     }
 
     /**
@@ -108,7 +108,7 @@ class UserVoiceAliasTest extends TestCase
 
         $response = $this->getJson('/api/v1/user/voice-aliases');
 
-        $alias = $response->json('data.data.0');
+        $alias = $response->json('data.aliases.0');
         $this->assertArrayHasKey('id', $alias);
         $this->assertArrayHasKey('alias', $alias);
         $this->assertArrayHasKey('keyword', $alias);
@@ -183,23 +183,30 @@ class UserVoiceAliasTest extends TestCase
     }
 
     /**
-     * Duplicate alias for the same user is rejected with 422 and a clear message.
+     * Posting a duplicate alias returns 200 with the existing record (idempotent).
      *
-     * @return void Verifies unique validation error is returned.
-     * Logic: create an existing alias then try to POST the same alias word again.
+     * @return void Verifies 200 is returned and the existing alias is in the response.
+     * Logic: create an existing alias then POST the same alias word — expect 200 and
+     *   the original record back, with no duplicate created in the database.
      */
-    public function test_store_rejects_duplicate_alias_for_same_user(): void
+    public function test_store_returns_existing_alias_with_200_for_duplicate(): void
     {
         $user = User::factory()->create();
-        UserVoiceAlias::create(['user_id' => $user->id, 'alias' => 'morocco', 'keyword' => 'burako']);
+        $existing = UserVoiceAlias::create(['user_id' => $user->id, 'alias' => 'morocco', 'keyword' => 'burako']);
 
         Sanctum::actingAs($user);
 
         $this->postJson('/api/v1/user/voice-aliases', [
-            'alias'   => 'Morocco',  // different case — still duplicate after normalisation
+            'alias'   => 'Morocco',  // different case — normalised to 'morocco'
             'keyword' => 'something else',
-        ])->assertStatus(422)
-            ->assertJsonPath('data.errors.alias.0', 'You already have an alias for that word.');
+        ])
+            ->assertStatus(200)
+            ->assertJsonPath('data.id', $existing->id)
+            ->assertJsonPath('data.alias', 'morocco')
+            ->assertJsonPath('data.keyword', 'burako');
+
+        // No duplicate row should have been inserted.
+        $this->assertDatabaseCount('user_voice_aliases', 1);
     }
 
     /**

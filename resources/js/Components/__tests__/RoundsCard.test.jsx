@@ -1888,5 +1888,132 @@ describe('RoundsCard', () => {
         });
     });
 
+    describe('mic error feedback persistence', () => {
+        let MockRecognition;
+
+        function makeMockRecognition() {
+            const instances = [];
+            const Ctor = vi.fn(function () {
+                this.continuous = false;
+                this.interimResults = false;
+                this.lang = '';
+                this.start = vi.fn();
+                this.abort = vi.fn();
+                this.onstart = null;
+                this.onresult = null;
+                this.onerror = null;
+                this.onend = null;
+                instances.push(this);
+            });
+            Ctor.instances = instances;
+            return Ctor;
+        }
+
+        const mockGetAndDraft = (url) => {
+            if (url.includes('round-draft') || url.match(/\/rounds\/\d+\/draft/)) {
+                return Promise.resolve({ data: { data: { round_draft: null } } });
+            }
+            if (url.includes('voice-aliases')) {
+                return Promise.resolve({ data: { data: [] } });
+            }
+            return Promise.resolve(elementsResponse);
+        };
+
+        beforeEach(() => {
+            MockRecognition = makeMockRecognition();
+            vi.stubGlobal('webkitSpeechRecognition', MockRecognition);
+            axios.get.mockImplementation(mockGetAndDraft);
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        it('error feedback stays visible after the 3.5 s window', async () => {
+            vi.useFakeTimers();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            // Start listening, then fire an error.
+            act(() => {
+                screen.getByRole('button', { name: 'Start voice command' }).click();
+            });
+
+            act(() => {
+                MockRecognition.instances[0].onerror({ error: 'no-speech' });
+                MockRecognition.instances[0].onend();
+            });
+
+            // Advance well past the 3.5 s auto-dismiss window.
+            act(() => { vi.advanceTimersByTime(5000); });
+
+            expect(screen.getByText('Failed!')).toBeInTheDocument();
+
+            vi.useRealTimers();
+        });
+
+        it('error feedback is cleared when the mic button is clicked again', async () => {
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            const micBtn = screen.getByRole('button', { name: 'Start voice command' });
+
+            // Start listening, fire an error, let recognition end.
+            act(() => { micBtn.click(); });
+            act(() => {
+                MockRecognition.instances[0].onerror({ error: 'no-speech' });
+                MockRecognition.instances[0].onend();
+            });
+
+            expect(screen.getByText('Failed!')).toBeInTheDocument();
+
+            // Click mic again — error should disappear immediately.
+            act(() => { screen.getByRole('button', { name: 'Start voice command' }).click(); });
+
+            expect(screen.queryByText('Failed!')).not.toBeInTheDocument();
+        });
+
+        it('success feedback still auto-dismisses after 3.5 s', async () => {
+            vi.useFakeTimers();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            act(() => {
+                screen.getByRole('button', { name: 'Start voice command' }).click();
+            });
+
+            act(() => {
+                MockRecognition.instances[0].onresult({
+                    results: [[{ transcript: 'save round' }]],
+                });
+                MockRecognition.instances[0].onend();
+            });
+
+            // The feedback should be gone after 3.5 s.
+            act(() => { vi.advanceTimersByTime(3500); });
+
+            expect(screen.queryByText('Done!')).not.toBeInTheDocument();
+
+            vi.useRealTimers();
+        });
+    });
+
 });
 
