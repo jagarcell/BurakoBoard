@@ -159,7 +159,7 @@ describe('VoiceMicButton', () => {
             <VoiceMicButton isSupported={true} isListening={false} onToggle={vi.fn()} feedback={null} />,
         );
 
-        expect(container.querySelector('span')).toBeNull();
+        expect(container.querySelector('[aria-live="polite"]')).toBeNull();
     });
 
     it('renders an SVG microphone icon inside the button', () => {
@@ -242,6 +242,107 @@ describe('VoiceMicButton', () => {
             );
 
             expect(queryByTestId('voice-wave-indicator')).toBeNull();
+        });
+    });
+
+    describe('warming-up indicator', () => {
+        it('renders the warming indicator when listening but not yet ready', () => {
+            const { getByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={true} isReady={false} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(getByTestId('mic-warming-indicator')).toBeInTheDocument();
+        });
+
+        it('does not render the warming indicator when listening and ready', () => {
+            const { queryByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={true} isReady={true} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(queryByTestId('mic-warming-indicator')).toBeNull();
+        });
+
+        it('does not render the warming indicator when not listening', () => {
+            const { queryByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={false} isReady={false} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(queryByTestId('mic-warming-indicator')).toBeNull();
+        });
+
+        it('hides the warming indicator from the accessibility tree', () => {
+            const { getByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={true} isReady={false} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(getByTestId('mic-warming-indicator')).toHaveAttribute('aria-hidden', 'true');
+        });
+
+        it('renders a spinning ring inside the warming indicator', () => {
+            const { getByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={true} isReady={false} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            const spinner = getByTestId('mic-warming-indicator').querySelector('.animate-spin');
+            expect(spinner).toBeInTheDocument();
+        });
+    });
+
+    describe('speak-now hint', () => {
+        it('renders the speak-now hint when listening, ready, and not speaking', () => {
+            const { getByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={true} isReady={true} isSpeaking={false} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(getByTestId('speak-now-hint')).toBeInTheDocument();
+            expect(getByTestId('speak-now-hint')).toHaveTextContent('Speak now...');
+        });
+
+        it('does not render the speak-now hint when not listening', () => {
+            const { queryByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={false} isReady={true} isSpeaking={false} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(queryByTestId('speak-now-hint')).toBeNull();
+        });
+
+        it('does not render the speak-now hint when listening but not ready', () => {
+            const { queryByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={true} isReady={false} isSpeaking={false} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(queryByTestId('speak-now-hint')).toBeNull();
+        });
+
+        it('does not render the speak-now hint when the user is already speaking', () => {
+            const { queryByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={true} isReady={true} isSpeaking={true} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(queryByTestId('speak-now-hint')).toBeNull();
+        });
+
+        it('does not render the speak-now hint when feedback is present', () => {
+            const { queryByTestId } = render(
+                <VoiceMicButton
+                    isSupported={true}
+                    isListening={true}
+                    isReady={true}
+                    isSpeaking={false}
+                    onToggle={vi.fn()}
+                    feedback={{ ok: true, message: 'Saving round…' }}
+                />,
+            );
+
+            expect(queryByTestId('speak-now-hint')).toBeNull();
+        });
+
+        it('applies animate-pulse class to the speak-now hint', () => {
+            const { getByTestId } = render(
+                <VoiceMicButton isSupported={true} isListening={true} isReady={true} isSpeaking={false} onToggle={vi.fn()} feedback={null} />,
+            );
+
+            expect(getByTestId('speak-now-hint')).toHaveClass('animate-pulse');
         });
     });
 });
