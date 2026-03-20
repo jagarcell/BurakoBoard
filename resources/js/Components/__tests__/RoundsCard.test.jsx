@@ -1793,5 +1793,227 @@ describe('RoundsCard', () => {
         });
     });
 
+    describe('voice alias manager toggle (+ button)', () => {
+        const aliasesResponse = { data: { data: [] } };
+
+        const mockDraftElementsAndAliases = (url) => {
+            if (url.includes('round-draft') || url.match(/\/rounds\/\d+\/draft/)) {
+                return Promise.resolve({ data: { data: { round_draft: null } } });
+            }
+            if (url.includes('voice-aliases')) {
+                return Promise.resolve(aliasesResponse);
+            }
+            return Promise.resolve(elementsResponse);
+        };
+
+        beforeEach(() => {
+            // Stub window.webkitSpeechRecognition so voiceSupported is true
+            // and the + button is rendered.
+            vi.stubGlobal('webkitSpeechRecognition', vi.fn());
+            axios.put = vi.fn().mockResolvedValue({});
+            axios.get.mockImplementation(mockDraftElementsAndAliases);
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        it('renders the Manage voice aliases button when voice is supported', async () => {
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            expect(
+                screen.getByRole('button', { name: 'Manage voice aliases' }),
+            ).toBeInTheDocument();
+        });
+
+        it('clicking the + button shows the VoiceAliasManager panel', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            await user.click(screen.getByRole('button', { name: 'Manage voice aliases' }));
+
+            // The heading inside VoiceAliasManager should now be visible.
+            expect(screen.getByText(/voice aliases/i)).toBeInTheDocument();
+            // The add form inputs must be present.
+            expect(screen.getByLabelText(/misheard/i)).toBeInTheDocument();
+            expect(screen.getByLabelText(/intended/i)).toBeInTheDocument();
+            // Empty state message since no aliases exist yet.
+            expect(screen.getByText(/no aliases yet/i)).toBeInTheDocument();
+        });
+
+        it('clicking the + button again hides the VoiceAliasManager panel', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            const aliasBtn = screen.getByRole('button', { name: 'Manage voice aliases' });
+
+            await user.click(aliasBtn);
+            expect(screen.getByText(/voice aliases/i)).toBeInTheDocument();
+
+            await user.click(screen.getByRole('button', { name: 'Hide voice aliases' }));
+            expect(screen.queryByText(/voice aliases/i)).not.toBeInTheDocument();
+        });
+
+        it('the score entry form remains visible while the alias panel is open', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+
+            await user.click(screen.getByRole('button', { name: 'Manage voice aliases' }));
+
+            // Both team scoring inputs are still rendered alongside the alias panel.
+            expect(screen.getAllByLabelText('Burako')).toHaveLength(2);
+            // Submit button is also still present.
+            expect(screen.getByRole('button', { name: 'Record Round' })).toBeInTheDocument();
+
+            void burakoCheckboxes; // suppress unused-variable lint
+        });
+    });
+
+    describe('mic error feedback persistence', () => {
+        let MockRecognition;
+
+        function makeMockRecognition() {
+            const instances = [];
+            const Ctor = vi.fn(function () {
+                this.continuous = false;
+                this.interimResults = false;
+                this.lang = '';
+                this.start = vi.fn();
+                this.abort = vi.fn();
+                this.onstart = null;
+                this.onresult = null;
+                this.onerror = null;
+                this.onend = null;
+                instances.push(this);
+            });
+            Ctor.instances = instances;
+            return Ctor;
+        }
+
+        const mockGetAndDraft = (url) => {
+            if (url.includes('round-draft') || url.match(/\/rounds\/\d+\/draft/)) {
+                return Promise.resolve({ data: { data: { round_draft: null } } });
+            }
+            if (url.includes('voice-aliases')) {
+                return Promise.resolve({ data: { data: [] } });
+            }
+            return Promise.resolve(elementsResponse);
+        };
+
+        beforeEach(() => {
+            MockRecognition = makeMockRecognition();
+            vi.stubGlobal('webkitSpeechRecognition', MockRecognition);
+            axios.get.mockImplementation(mockGetAndDraft);
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        it('error feedback stays visible after the 3.5 s window', async () => {
+            vi.useFakeTimers();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            // Start listening, then fire an error.
+            act(() => {
+                screen.getByRole('button', { name: 'Start voice command' }).click();
+            });
+
+            act(() => {
+                MockRecognition.instances[0].onerror({ error: 'no-speech' });
+                MockRecognition.instances[0].onend();
+            });
+
+            // Advance well past the 3.5 s auto-dismiss window.
+            act(() => { vi.advanceTimersByTime(5000); });
+
+            expect(screen.getByText('Failed!')).toBeInTheDocument();
+
+            vi.useRealTimers();
+        });
+
+        it('error feedback is cleared when the mic button is clicked again', async () => {
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            const micBtn = screen.getByRole('button', { name: 'Start voice command' });
+
+            // Start listening, fire an error, let recognition end.
+            act(() => { micBtn.click(); });
+            act(() => {
+                MockRecognition.instances[0].onerror({ error: 'no-speech' });
+                MockRecognition.instances[0].onend();
+            });
+
+            expect(screen.getByText('Failed!')).toBeInTheDocument();
+
+            // Click mic again — error should disappear immediately.
+            act(() => { screen.getByRole('button', { name: 'Start voice command' }).click(); });
+
+            expect(screen.queryByText('Failed!')).not.toBeInTheDocument();
+        });
+
+        it('success feedback still auto-dismisses after 3.5 s', async () => {
+            vi.useFakeTimers();
+
+            render(
+                <RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />,
+            );
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            act(() => {
+                screen.getByRole('button', { name: 'Start voice command' }).click();
+            });
+
+            act(() => {
+                MockRecognition.instances[0].onresult({
+                    results: [[{ transcript: 'save round' }]],
+                });
+                MockRecognition.instances[0].onend();
+            });
+
+            // The feedback should be gone after 3.5 s.
+            await act(async () => { vi.advanceTimersByTime(3500); });
+
+            expect(screen.queryByText('Done!')).not.toBeInTheDocument();
+
+            vi.useRealTimers();
+        });
+    });
+
 });
 

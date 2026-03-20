@@ -42,6 +42,16 @@ During every coding session:
 - Minimise perceived latency: perform all client-side validation before firing any network request; apply optimistic updates immediately (flip state before the API call and roll back on failure) wherever the outcome is predictable; and show loading indicators inline next to the triggering element rather than blocking the whole page. Minimize Payload Size, only send the fields you need, use pagination or cursor-based loading, avoid sending deeply nested structures if not required.
 - **Mobile-First Layout**: Always design and implement UI using a mobile-first approach. Start with base styles targeting small screens (≥320px), then layer responsive overrides using Tailwind's `sm:`, `md:`, `lg:`, and `xl:` prefixes for progressively larger viewports. Never use unprefixed layout utilities (e.g. `flex`, `grid`, `hidden`) if they would break the mobile layout — make the mobile state the default and override upward.
 
+## API
+
+- **Standardise controller responses**: always return `response()->json(['key' => $payload])` with
+  a descriptive named key rather than returning a `JsonResource` or `ResourceCollection` directly.
+  Returning a resource or collection bare from a controller can introduce automatic `{ data: [] }`
+  wrapping that, when combined with response-envelope middleware, produces deeply nested paths that
+  are brittle to consume. Use a named key that describes the payload — plural for collections
+  (`'aliases'`, `'items'`), singular for single resources (`'alias'`, `'item'`). This produces a
+  consistent, predictable response shape across all endpoints.
+
 ## Architecture
 
 - Avoid fat controllers: keep controllers thin, move business logic to services, database queries to repositories, validation to FormRequest classes, and API JSON responses to API Resource classes.

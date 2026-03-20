@@ -3,6 +3,10 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import BaseElementsInput from '@/Components/BaseElementsInput';
 import CardSpinner from '@/Components/CardSpinner';
+import VoiceAliasManager from '@/Components/VoiceAliasManager';
+import VoiceMicButton from '@/Components/VoiceMicButton';
+import useVoiceAliases from '@/hooks/useVoiceAliases';
+import useVoiceCommands from '@/hooks/useVoiceCommands';
 
 /** Human-readable labels for each round role key, used in the player order reference strip. */
 const PLAYER_ROLE_LABEL_MAP = {
@@ -28,6 +32,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [gameStatus, setGameStatus] = useState(selectedGame?.status ?? 'in_progress');
 
     const { unlock: unlockWinnerSound, play: playWinnerSound } = useWinnerSound();
+
+    const [voiceFeedback, setVoiceFeedback] = useState(null);
+    const voiceFeedbackTimerRef = useRef(null);
+    const [showAliasManager, setShowAliasManager] = useState(false);
+    const [lastMisheardCandidates, setLastMisheardCandidates] = useState([]);
+    const { aliases, isLoading: aliasesLoading, error: aliasesError, addAlias, removeAlias } = useVoiceAliases();
 
     const [expandedRound, setExpandedRound] = useState(null);
     const [activeCircleRound, setActiveCircleRound] = useState(null);
@@ -487,6 +497,86 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         }
     };
 
+    /**
+     * Handles a parsed voice command dispatched by useVoiceCommands.
+     *
+     * @param {{ type: string, action?: string, elementId?: number, teamId?: number, quantity?: number }} command
+     *   Structured command produced by the voice-command parser.
+     * @return {void}
+     *
+     * Logic: Routes 'save' commands to the existing handleSubmit function (with a
+     * synthetic no-op event). Routes 'element' commands to handleElementChange for
+     * boolean elements, or directly mutates baseInputs for quantity elements using
+     * the same add/remove/zero/set semantics as the numeric steppers.
+     */
+    const handleVoiceCommand = (command) => {
+        if (command.type === 'save') {
+            handleSubmit({ preventDefault: () => {} });
+            return;
+        }
+
+        if (command.type !== 'element') return;
+
+        const { action, elementId, teamId, quantity } = command;
+        const el = elements.find((e) => e.id === elementId);
+        if (!el) return;
+
+        if (el.input_type === 'boolean') {
+            handleElementChange(teamId, elementId, action === 'add' || action === 'set');
+        } else {
+            setBaseInputs((prev) => {
+                const current = parseInt(prev[teamId]?.[elementId], 10) || 0;
+                let next;
+                switch (action) {
+                    case 'add': next = current + quantity; break;
+                    case 'remove': next = Math.max(0, current - quantity); break;
+                    case 'zero': next = 0; break;
+                    case 'set': next = quantity; break;
+                    default: next = current;
+                }
+                return { ...prev, [teamId]: { ...prev[teamId], [elementId]: next } };
+            });
+        }
+    };
+
+    /**
+     * Receives feedback from useVoiceCommands and shows it as an auto-dismissing toast.
+     *
+     * @param {{ ok: boolean, message: string }} feedback - Result of the last recognition attempt.
+     * @return {void}
+     *
+     * Logic: Successful feedback (`ok: true`) auto-dismisses after 3.5 seconds.
+     * Error feedback (`ok: false`) persists on screen until the user clicks the mic
+     * button again (it is cleared in handleMicToggle).
+     */
+    const handleVoiceFeedback = (feedback) => {
+        setVoiceFeedback(feedback);
+        if (feedback.misheardCandidates) setLastMisheardCandidates(feedback.misheardCandidates);
+        if (voiceFeedbackTimerRef.current) clearTimeout(voiceFeedbackTimerRef.current);
+        if (feedback.ok) {
+            voiceFeedbackTimerRef.current = setTimeout(() => setVoiceFeedback(null), 3500);
+        }
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- voiceFeedbackTimerRef is a stable ref
+    useEffect(() => () => {
+        if (voiceFeedbackTimerRef.current) clearTimeout(voiceFeedbackTimerRef.current);
+    }, []);
+
+    const { isSupported: voiceSupported, isListening, isReady: micReady, isSpeaking, toggle: toggleMic } = useVoiceCommands({
+        elements,
+        teams,
+        onCommand: handleVoiceCommand,
+        onFeedback: handleVoiceFeedback,
+        aliases,
+    });
+
+    const handleMicToggle = () => {
+        setVoiceFeedback(null);
+        if (voiceFeedbackTimerRef.current) clearTimeout(voiceFeedbackTimerRef.current);
+        toggleMic();
+    };
+
     const getAccruedScore = (teamId) =>
         rounds.reduce((sum, round) => {
             const s = round.scores?.find((sc) => sc.team_id === teamId);
@@ -636,6 +726,32 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
                                     Round {nextRound}
                                 </p>
+                                <div className="flex items-center gap-1">
+                                    <VoiceMicButton
+                                        feedback={voiceFeedback}
+                                        isListening={isListening}
+                                        isReady={micReady}
+                                        isSpeaking={isSpeaking}
+                                        isSupported={voiceSupported}
+                                        onToggle={handleMicToggle}
+                                    />
+                                    {voiceSupported && (
+                                        <button
+                                            aria-label={showAliasManager ? 'Hide voice aliases' : 'Manage voice aliases'}
+                                            aria-pressed={showAliasManager}
+                                            className={`inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+                                                showAliasManager
+                                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                    : 'text-slate-400 hover:bg-indigo-100 hover:text-indigo-600'
+                                            }`}
+                                            onClick={() => setShowAliasManager((v) => !v)}
+                                            type="button"
+                                        >
+                                            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                                <path d="M12 6v6m0 0v6m0-6h6m-6 0H6" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </button>
+                                    )}
                                 <button
                                     aria-expanded={activeCircleRound === nextRound}
                                     aria-label={`${activeCircleRound === nextRound ? 'Hide' : 'Show'} seating circle for round ${nextRound}`}
@@ -657,7 +773,22 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                         <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
                                     </svg>
                                 </button>
+                                </div>
                             </div>
+
+                            {/* Voice alias manager — toggled by the + button next to the mic */}
+                            {showAliasManager && (
+                                <div className="mb-4">
+                                    <VoiceAliasManager
+                                        aliases={aliases}
+                                        error={aliasesError}
+                                        isLoading={aliasesLoading}
+                                        misheardOptions={lastMisheardCandidates}
+                                        onAdd={addAlias}
+                                        onRemove={removeAlias}
+                                    />
+                                </div>
+                            )}
 
                             {/* Role panel — circular seating diagram (same as round history cards) */}
                             {(activeCircleRound === nextRound || closingCircleRound === nextRound) && (
