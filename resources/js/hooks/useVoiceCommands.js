@@ -36,12 +36,16 @@ import { parseVoiceCommand, applyAliases } from '@/utils/voiceCommandParser';
  *     transcript is surfaced in `onFeedback` for all outcomes (success and failure)
  *     so the user always sees what the system acted on, not the raw misheard word.
  *   - `onerror` surfaces 'not-allowed' (permission denied) and 'no-speech' to the UI.
- *   - `onend` resets the listening flag and stops audio monitoring.
+ *   - `onend` resets the listening flag and clears isSpeaking.
  *   - All mutable callbacks (`onCommand`, `onFeedback`, `elements`, `teams`) are kept
  *     in always-current refs so stale closures in recognition event handlers are avoided.
- *   - When listening starts, a separate `getUserMedia` + `AnalyserNode` pipeline polls
- *     the raw PCM volume on every animation frame; `isSpeaking` is true when the RMS
- *     amplitude exceeds 0.02 (silence threshold). The stream is closed when listening stops.
+ *   - `isSpeaking` is driven by the SpeechRecognition `onsoundstart`/`onsoundend` events
+ *     rather than a separate `getUserMedia` + `AnalyserNode` pipeline. This avoids
+ *     acquiring a second microphone stream which on Chrome mobile and iOS Safari can
+ *     interfere with the recognition engine and cause it to stop capturing audio silently.
+ *   - iOS Safari does not fire `onsoundstart`/`onsoundend`. A 300 ms fallback timer is
+ *     started in `onstart`; if `onsoundstart` fires first the timer is cancelled, otherwise
+ *     the fallback sets `isSpeaking = true` so the ripple animation still appears on iOS.
  *   - The recognition instance is aborted on component unmount.
  */
 export default function useVoiceCommands({ elements, teams, onCommand, onFeedback, aliases = [] }) {
@@ -53,6 +57,8 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
     const [isReady, setIsReady] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const recognitionRef = useRef(null);
+    // Fallback timer for iOS Safari, which never fires onsoundstart/onsoundend.
+    const soundFallbackTimerRef = useRef(null);
 
     // Always-current refs so recognition callbacks never capture stale closures.
     const elementsRef = useRef(elements);
@@ -75,102 +81,6 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
     useEffect(() => { onFeedbackRef.current = onFeedback; }, [onFeedback]);
     useEffect(() => { aliasesRef.current = aliases; }, [aliases]);
 
-    // ── Audio monitor refs ────────────────────────────────────────────────────
-    const streamRef = useRef(null);
-    const audioCtxRef = useRef(null);
-    const rafRef = useRef(null);
-    /** Tracks the last value written to state to avoid redundant renders. */
-    const isSpeakingRef = useRef(false);
-    /** Set to false by stopAudioMonitor so startAudioMonitor can detect a cancel race. */
-    const monitorActiveRef = useRef(false);
-
-    /**
-     * Stops the audio-monitor poll loop and releases all acquired resources.
-     *
-     * @return {void}
-     *
-     * Logic: Cancels the animation-frame loop, stops all media stream tracks, closes
-     * the AudioContext, and resets isSpeaking. Guards each step with null checks so
-     * it is safe to call when monitoring was never started or already stopped.
-     */
-    const stopAudioMonitor = useCallback(() => {
-        monitorActiveRef.current = false;
-        if (rafRef.current != null) {
-            cancelAnimationFrame(rafRef.current);
-            rafRef.current = null;
-        }
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        audioCtxRef.current?.close().catch(() => {});
-        audioCtxRef.current = null;
-        if (isSpeakingRef.current) {
-            isSpeakingRef.current = false;
-            setIsSpeaking(false);
-        }
-    }, []);
-
-    // Stable ref so getOrCreate's onend handler can always call the latest version.
-    const stopAudioMonitorRef = useRef(stopAudioMonitor);
-    useEffect(() => { stopAudioMonitorRef.current = stopAudioMonitor; }, [stopAudioMonitor]);
-
-    /**
-     * Starts audio monitoring by acquiring a microphone stream and polling RMS amplitude.
-     *
-     * @return {Promise<void>}
-     *
-     * Logic: Requests an audio-only stream via getUserMedia. On each animation frame,
-     * reads raw PCM byte data (0–255, centred at 128) from an AnalyserNode and computes
-     * the RMS value. When RMS > 0.02 the signal is considered "speaking" and isSpeaking
-     * is set to true; the state is only updated on transitions to avoid redundant renders.
-     * If stopAudioMonitor() is called before the getUserMedia Promise resolves (rapid
-     * toggle), the acquired stream is immediately released. Falls back silently when
-     * getUserMedia or AudioContext is unavailable.
-     */
-    const startAudioMonitor = useCallback(async () => {
-        if (!navigator?.mediaDevices?.getUserMedia) return;
-        monitorActiveRef.current = true;
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            // Guard against the user stopping listening before the promise resolved.
-            if (!monitorActiveRef.current) {
-                stream.getTracks().forEach((t) => t.stop());
-                return;
-            }
-            streamRef.current = stream;
-            /* global AudioContext, webkitAudioContext */
-            const AudioCtor = window.AudioContext ?? window.webkitAudioContext;
-            if (!AudioCtor) {
-                stream.getTracks().forEach((t) => t.stop());
-                return;
-            }
-            const ctx = new AudioCtor();
-            audioCtxRef.current = ctx;
-            const analyser = ctx.createAnalyser();
-            analyser.fftSize = 256;
-            analyser.smoothingTimeConstant = 0.3;
-            ctx.createMediaStreamSource(stream).connect(analyser);
-            const data = new Uint8Array(analyser.frequencyBinCount);
-            const poll = () => {
-                analyser.getByteTimeDomainData(data);
-                let sum = 0;
-                for (let i = 0; i < data.length; i++) {
-                    const v = (data[i] - 128) / 128;
-                    sum += v * v;
-                }
-                const speaking = Math.sqrt(sum / data.length) > 0.02;
-                if (speaking !== isSpeakingRef.current) {
-                    isSpeakingRef.current = speaking;
-                    setIsSpeaking(speaking);
-                }
-                rafRef.current = requestAnimationFrame(poll);
-            };
-            rafRef.current = requestAnimationFrame(poll);
-        } catch {
-            // getUserMedia denied or unavailable — isSpeaking stays false.
-        }
-    }, []);
-    // ── End audio monitor ─────────────────────────────────────────────────────
-
     /**
      * Lazily initialises the SpeechRecognition instance and attaches event handlers.
      *
@@ -181,6 +91,11 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
      * need to be re-attached when `elements` or `teams` change.
      * Sets `sessionFeedbackGivenRef.current = true` in every code path where
      * `onFeedback` is called so that `onend` can detect silent-stop sessions.
+     * `onsoundstart`/`onsoundend` drive the `isSpeaking` indicator without requiring
+     * a separate getUserMedia stream, which prevents microphone-access conflicts on
+     * Chrome mobile and iOS Safari.
+     * A 300 ms fallback timer started in `onstart` sets `isSpeaking = true` when
+     * `onsoundstart` never fires (iOS Safari).
      */
     const getOrCreate = useCallback(() => {
         if (recognitionRef.current) return recognitionRef.current;
@@ -196,6 +111,21 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
 
         r.onstart = () => {
             setIsReady(true);
+            // iOS Safari never fires onsoundstart; after 300 ms without it,
+            // activate the speaking indicator so the ripple animation shows.
+            soundFallbackTimerRef.current = setTimeout(() => {
+                setIsSpeaking(true);
+            }, 300);
+        };
+
+        r.onsoundstart = () => {
+            // Real sound event received — cancel the iOS fallback timer.
+            clearTimeout(soundFallbackTimerRef.current);
+            setIsSpeaking(true);
+        };
+
+        r.onsoundend = () => {
+            setIsSpeaking(false);
         };
 
         r.onresult = (event) => {
@@ -227,7 +157,6 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
                 aliasesRef.current,
             );
 
-
             if (command.type === 'save') {
                 onCommandRef.current(command);
                 onFeedbackRef.current({ ok: true, message: 'Saving round…', transcript: displayTranscript, misheardCandidates });
@@ -254,12 +183,18 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
         };
 
         r.onend = () => {
+            clearTimeout(soundFallbackTimerRef.current);
             if (!sessionFeedbackGivenRef.current) {
                 onFeedbackRef.current({ ok: false, message: "Couldn't start listening — try again." });
             }
+            // Discard the spent instance so the next toggle() always creates a fresh one.
+            // Browsers (especially Chrome/Android) do not reliably allow restarting a
+            // SpeechRecognition instance after onend fires, which caused the mic to appear
+            // active (isListening true) while the engine was silently not listening.
+            recognitionRef.current = null;
             setIsListening(false);
             setIsReady(false);
-            stopAudioMonitorRef.current();
+            setIsSpeaking(false);
         };
 
         recognitionRef.current = r;
@@ -285,30 +220,30 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
         if (isListening) {
             // Mark as handled so onend does not fire a spurious fallback message.
             sessionFeedbackGivenRef.current = true;
+            clearTimeout(soundFallbackTimerRef.current);
             recognitionRef.current?.abort();
             setIsListening(false);
             setIsReady(false);
-            stopAudioMonitor();
+            setIsSpeaking(false);
         } else {
             const r = getOrCreate();
             try {
                 sessionFeedbackGivenRef.current = false;
                 r.start();
                 setIsListening(true);
-                startAudioMonitor();
             } catch {
                 // Already started — ignore InvalidStateError.
             }
         }
-    }, [isSupported, isListening, getOrCreate, stopAudioMonitor, startAudioMonitor]);
+    }, [isSupported, isListening, getOrCreate]);
 
-    // Abort recognition and stop audio monitoring on unmount.
+    // Abort recognition on unmount.
     useEffect(() => {
         return () => {
             recognitionRef.current?.abort();
-            stopAudioMonitor();
+            clearTimeout(soundFallbackTimerRef.current);
         };
-    }, [stopAudioMonitor]);
+    }, []);
 
     return { isSupported, isListening, isReady, isSpeaking, toggle };
 }

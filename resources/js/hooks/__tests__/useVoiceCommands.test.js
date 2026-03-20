@@ -24,6 +24,8 @@ function makeMockRecognition() {
         this.start = vi.fn();
         this.abort = vi.fn();
         this.onstart = null;
+        this.onsoundstart = null;
+        this.onsoundend = null;
         this.onresult = null;
         this.onerror = null;
         this.onend = null;
@@ -109,6 +111,32 @@ describe('useVoiceCommands', () => {
         });
 
         expect(result.current.isListening).toBe(false);
+    });
+
+    it('creates a fresh SpeechRecognition instance on each new session after onend fires', () => {
+        // Regression test: the spent instance must be discarded after onend so that
+        // subsequent toggle() calls start a brand new instance. Reusing a finished
+        // instance causes the browser to silently ignore start(), leaving the UI
+        // showing "listening" while the engine is actually idle.
+        const { result } = renderHook(() =>
+            useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
+        );
+
+        // First session.
+        act(() => result.current.toggle());
+        const firstInstance = MockRecognition.instances[0];
+        expect(firstInstance.start).toHaveBeenCalledTimes(1);
+
+        // Natural end — simulates what the browser fires after speech is processed.
+        act(() => { firstInstance.onend(); });
+        expect(result.current.isListening).toBe(false);
+
+        // Second session must use a new instance, not the spent one.
+        act(() => result.current.toggle());
+        expect(MockRecognition.instances.length).toBe(2);
+        const secondInstance = MockRecognition.instances[1];
+        expect(secondInstance.start).toHaveBeenCalledTimes(1);
+        expect(firstInstance.start).toHaveBeenCalledTimes(1); // not called again
     });
 
     it('calls onCommand with a parsed element command when a matching transcript arrives', () => {
@@ -406,59 +434,8 @@ describe('useVoiceCommands', () => {
         });
     });
 
-    describe('isSpeaking / audio monitor', () => {
-        let mockTrack;
-        let mockStream;
-        let mockGetUserMedia;
-        let mockAnalyser;
-        let mockAudioCtx;
-
-        beforeEach(() => {
-            mockTrack = { stop: vi.fn() };
-            mockStream = { getTracks: vi.fn(() => [mockTrack]) };
-            mockGetUserMedia = vi.fn(() => Promise.resolve(mockStream));
-
-            mockAnalyser = {
-                fftSize: 0,
-                smoothingTimeConstant: 0,
-                frequencyBinCount: 4,
-                // Return silent data (all 128 = zero amplitude) by default.
-                getByteTimeDomainData: vi.fn((arr) => arr.fill(128)),
-                connect: vi.fn(),
-            };
-
-            mockAudioCtx = {
-                createAnalyser: vi.fn(() => mockAnalyser),
-                createMediaStreamSource: vi.fn(() => ({ connect: vi.fn() })),
-                close: vi.fn(() => Promise.resolve()),
-            };
-
-            vi.stubGlobal('AudioContext', vi.fn(function () {
-                Object.assign(this, mockAudioCtx);
-            }));
-
-            // rAF returns a handle (99) but does not loop; each poll fires once.
-            vi.stubGlobal('requestAnimationFrame', vi.fn(() => 99));
-            vi.stubGlobal('cancelAnimationFrame', vi.fn());
-
-            // Patch navigator.mediaDevices without replacing the whole navigator.
-            Object.defineProperty(window.navigator, 'mediaDevices', {
-                value: { getUserMedia: mockGetUserMedia },
-                configurable: true,
-                writable: true,
-            });
-        });
-
-        afterEach(() => {
-            // Remove the patched mediaDevices so other tests are unaffected.
-            Object.defineProperty(window.navigator, 'mediaDevices', {
-                value: undefined,
-                configurable: true,
-                writable: true,
-            });
-        });
-
-        it('isSpeaking starts as false', () => {
+    describe('isSpeaking', () => {
+        it('starts as false', () => {
             const { result } = renderHook(() =>
                 useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
             );
@@ -466,66 +443,132 @@ describe('useVoiceCommands', () => {
             expect(result.current.isSpeaking).toBe(false);
         });
 
-        it('calls getUserMedia when toggle starts listening', async () => {
+        it('becomes true when onsoundstart fires', () => {
             const { result } = renderHook(() =>
                 useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
             );
 
-            await act(async () => {
-                result.current.toggle();
-            });
+            act(() => result.current.toggle());
+            act(() => { MockRecognition.instances[0].onsoundstart(); });
 
-            expect(mockGetUserMedia).toHaveBeenCalledWith({ audio: true, video: false });
+            expect(result.current.isSpeaking).toBe(true);
         });
 
-        it('stops stream tracks when toggle stops listening', async () => {
+        it('resets to false when onsoundend fires', () => {
             const { result } = renderHook(() =>
                 useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
             );
 
-            await act(async () => { result.current.toggle(); }); // start
-            act(() => { result.current.toggle(); });              // stop
+            act(() => result.current.toggle());
+            act(() => { MockRecognition.instances[0].onsoundstart(); });
+            act(() => { MockRecognition.instances[0].onsoundend(); });
 
-            expect(mockTrack.stop).toHaveBeenCalled();
+            expect(result.current.isSpeaking).toBe(false);
         });
 
-        it('stops stream tracks and cancels rAF on unmount', async () => {
-            const { result, unmount } = renderHook(() =>
-                useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
-            );
-
-            await act(async () => { result.current.toggle(); });
-
-            unmount();
-
-            expect(mockTrack.stop).toHaveBeenCalled();
-            expect(window.cancelAnimationFrame).toHaveBeenCalledWith(99);
-        });
-
-        it('stops stream tracks when recognition ends naturally via onend', async () => {
+        it('resets to false when recognition ends naturally via onend', () => {
             const { result } = renderHook(() =>
                 useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
             );
 
-            await act(async () => { result.current.toggle(); });
-
+            act(() => result.current.toggle());
+            act(() => { MockRecognition.instances[0].onsoundstart(); });
             act(() => { MockRecognition.instances[0].onend(); });
 
-            expect(mockTrack.stop).toHaveBeenCalled();
+            expect(result.current.isSpeaking).toBe(false);
         });
 
-        it('does not throw when getUserMedia is not available', () => {
-            Object.defineProperty(window.navigator, 'mediaDevices', {
-                value: undefined,
-                configurable: true,
-                writable: true,
-            });
-
+        it('resets to false when the user manually toggles off while speaking', () => {
             const { result } = renderHook(() =>
                 useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
             );
 
-            expect(() => act(() => { result.current.toggle(); })).not.toThrow();
+            act(() => result.current.toggle()); // start
+            act(() => { MockRecognition.instances[0].onsoundstart(); });
+            act(() => result.current.toggle()); // user stops
+
+            expect(result.current.isSpeaking).toBe(false);
+        });
+
+        describe('iOS Safari fallback (onsoundstart never fires)', () => {
+            it('becomes true after 300 ms if onsoundstart never fires', () => {
+                vi.useFakeTimers();
+
+                const { result } = renderHook(() =>
+                    useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
+                );
+
+                act(() => result.current.toggle());
+                act(() => { MockRecognition.instances[0].onstart(); });
+
+                // Before the fallback timer fires isSpeaking is still false.
+                expect(result.current.isSpeaking).toBe(false);
+
+                act(() => { vi.advanceTimersByTime(300); });
+
+                expect(result.current.isSpeaking).toBe(true);
+
+                vi.useRealTimers();
+            });
+
+            it('cancels the fallback timer when onsoundstart fires first', () => {
+                vi.useFakeTimers();
+
+                const { result } = renderHook(() =>
+                    useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
+                );
+
+                act(() => result.current.toggle());
+                act(() => { MockRecognition.instances[0].onstart(); });
+                // Real sound event before the 300 ms window.
+                act(() => { MockRecognition.instances[0].onsoundstart(); });
+
+                expect(result.current.isSpeaking).toBe(true);
+
+                // Advancing past the timer should not cause any additional state change.
+                act(() => { vi.advanceTimersByTime(300); });
+
+                expect(result.current.isSpeaking).toBe(true);
+
+                vi.useRealTimers();
+            });
+
+            it('cancels the fallback timer when onend fires before 300 ms', () => {
+                vi.useFakeTimers();
+
+                const { result } = renderHook(() =>
+                    useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
+                );
+
+                act(() => result.current.toggle());
+                act(() => { MockRecognition.instances[0].onstart(); });
+                act(() => { MockRecognition.instances[0].onend(); });
+
+                // Timer fires after recognition is already over — isSpeaking must stay false.
+                act(() => { vi.advanceTimersByTime(300); });
+
+                expect(result.current.isSpeaking).toBe(false);
+
+                vi.useRealTimers();
+            });
+
+            it('cancels the fallback timer when the user manually stops before 300 ms', () => {
+                vi.useFakeTimers();
+
+                const { result } = renderHook(() =>
+                    useVoiceCommands({ elements, teams, onCommand: vi.fn(), onFeedback: vi.fn() }),
+                );
+
+                act(() => result.current.toggle()); // start
+                act(() => { MockRecognition.instances[0].onstart(); });
+                act(() => result.current.toggle()); // user stops before timer
+
+                act(() => { vi.advanceTimersByTime(300); });
+
+                expect(result.current.isSpeaking).toBe(false);
+
+                vi.useRealTimers();
+            });
         });
     });
 
