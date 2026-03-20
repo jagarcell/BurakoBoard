@@ -25,6 +25,24 @@ class UserVoiceAliasRepository
     }
 
     /**
+     * Find an existing voice alias for a user by alias word.
+     *
+     * @param int    $userId The ID of the user who owns the alias.
+     * @param string $alias  The alias word to look up (normalised before querying).
+     * @return UserVoiceAlias|null The matching alias, or null if none exists.
+     *
+     * Logic: Normalises the alias to lowercase before querying so the lookup is
+     *   consistent with how aliases are stored. Returns null when no match is found.
+     */
+    public function findByUserAndAlias(int $userId, string $alias): ?UserVoiceAlias
+    {
+        return UserVoiceAlias::where('user_id', $userId)
+            ->where('alias', strtolower(trim($alias)))
+            ->select(['id', 'user_id', 'alias', 'keyword'])
+            ->first();
+    }
+
+    /**
      * Create a new voice alias for a user.
      *
      * @param int    $userId  The ID of the user who owns this alias.
@@ -34,10 +52,6 @@ class UserVoiceAliasRepository
      *
      * Logic: Normalises both strings to lowercase and trims whitespace before
      *   persisting, so comparisons are consistent regardless of input casing.
-     *   The unique constraint on (user_id, alias) is the authoritative guard
-     *   against duplicates — callers should catch UniqueConstraintViolationException
-     *   if they need to surface a duplicate error (the FormRequest validation rule
-     *   catches this first in normal request flows).
      */
     public function create(int $userId, string $alias, string $keyword): UserVoiceAlias
     {

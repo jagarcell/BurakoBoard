@@ -33,20 +33,29 @@ class UserVoiceAliasService
     }
 
     /**
-     * Add a new voice alias for the given user.
+     * Find an existing alias or create a new one for the given user.
      *
      * @param int    $userId  The authenticated user's ID.
      * @param string $alias   The misheard word from voice recognition.
      * @param string $keyword The intended word the user meant to say.
-     * @return UserVoiceAlias The newly created alias.
+     * @return array{0: UserVoiceAlias, 1: bool} Tuple of [alias model, wasCreated].
+     *   wasCreated is true when a new record was inserted, false when the alias
+     *   already existed and the existing record was returned instead.
      *
-     * Logic: Delegates creation to the repository, which normalises case before
-     *   persisting. The unique (user_id, alias) DB constraint prevents duplicates;
-     *   the FormRequest validation rule is the primary guard in request flows.
+     * Logic: Checks the repository for an existing alias matching the user_id and
+     *   alias word (after normalisation). Returns the existing record unchanged when
+     *   found, or delegates creation to the repository when no match exists.
+     *   The bool flag lets callers distinguish 200 (existing) from 201 (new).
      */
-    public function addAlias(int $userId, string $alias, string $keyword): UserVoiceAlias
+    public function findOrCreateAlias(int $userId, string $alias, string $keyword): array
     {
-        return $this->repository->create($userId, $alias, $keyword);
+        $existing = $this->repository->findByUserAndAlias($userId, $alias);
+
+        if ($existing) {
+            return [$existing, false];
+        }
+
+        return [$this->repository->create($userId, $alias, $keyword), true];
     }
 
     /**

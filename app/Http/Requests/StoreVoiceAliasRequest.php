@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class StoreVoiceAliasRequest extends FormRequest
 {
@@ -47,13 +46,7 @@ class StoreVoiceAliasRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'alias' => [
-                'required',
-                'string',
-                'max:100',
-                Rule::unique('user_voice_aliases', 'alias')
-                    ->where('user_id', $this->user()->id),
-            ],
+            'alias'   => ['required', 'string', 'max:100'],
             'keyword' => ['required', 'string', 'max:100'],
         ];
     }
