@@ -545,14 +545,17 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
      * @param {{ ok: boolean, message: string }} feedback - Result of the last recognition attempt.
      * @return {void}
      *
-     * Logic: Sets voiceFeedback state then clears it after 3.5 seconds so the toast
-     * disappears without user interaction.
+     * Logic: Successful feedback (`ok: true`) auto-dismisses after 3.5 seconds.
+     * Error feedback (`ok: false`) persists on screen until the user clicks the mic
+     * button again (it is cleared in handleMicToggle).
      */
     const handleVoiceFeedback = (feedback) => {
         setVoiceFeedback(feedback);
         if (feedback.misheardCandidates) setLastMisheardCandidates(feedback.misheardCandidates);
         if (voiceFeedbackTimerRef.current) clearTimeout(voiceFeedbackTimerRef.current);
-        voiceFeedbackTimerRef.current = setTimeout(() => setVoiceFeedback(null), 3500);
+        if (feedback.ok) {
+            voiceFeedbackTimerRef.current = setTimeout(() => setVoiceFeedback(null), 3500);
+        }
     };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- voiceFeedbackTimerRef is a stable ref
@@ -567,6 +570,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         onFeedback: handleVoiceFeedback,
         aliases,
     });
+
+    const handleMicToggle = () => {
+        setVoiceFeedback(null);
+        if (voiceFeedbackTimerRef.current) clearTimeout(voiceFeedbackTimerRef.current);
+        toggleMic();
+    };
 
     const getAccruedScore = (teamId) =>
         rounds.reduce((sum, round) => {
@@ -724,7 +733,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                         isReady={micReady}
                                         isSpeaking={isSpeaking}
                                         isSupported={voiceSupported}
-                                        onToggle={toggleMic}
+                                        onToggle={handleMicToggle}
                                     />
                                     {voiceSupported && (
                                         <button
