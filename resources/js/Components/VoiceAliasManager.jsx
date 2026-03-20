@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 /**
  * A single row in the alias list showing a misheard → keyword mapping.
@@ -52,6 +52,9 @@ function AliasRow({ alias, keyword, onDelete, isDeleting }) {
  *     error message from the server (e.g. "You already have an alias for that word.").
  *   - Each existing alias is shown as an AliasRow with an optimistic delete button.
  *   - Tracks which alias is being deleted to show a disabled state on that row.
+ *   - Uses a ref-based in-flight guard (`isAddingRef`) in addition to the
+ *     `isAdding` state so that rapid clicks cannot fire concurrent POST requests
+ *     before React has a chance to re-render and disable the button.
  */
 export default function VoiceAliasManager({ aliases = [], isLoading, error, misheardOptions = [], onAdd, onRemove }) {
     const [misheard, setMisheard] = useState('');
@@ -60,8 +63,21 @@ export default function VoiceAliasManager({ aliases = [], isLoading, error, mish
     const [isAdding, setIsAdding] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
 
+    /**
+     * Synchronous in-flight guard. React state updates (`setIsAdding`) are
+     * batched and applied asynchronously, so rapid repeat clicks can reach
+     * `handleAdd` a second time before the button re-renders as disabled.
+     * This ref is read and written synchronously so the check is always current.
+     */
+    const isAddingRef = useRef(false);
+
     const handleAdd = async (e) => {
         e.preventDefault();
+
+        // Synchronous guard — prevents concurrent submissions regardless of
+        // how quickly React processes the isAdding state update.
+        if (isAddingRef.current) return;
+
         const trimmedMisheard = misheard.trim();
         const trimmedIntended = intended.trim();
 
@@ -70,6 +86,7 @@ export default function VoiceAliasManager({ aliases = [], isLoading, error, mish
             return;
         }
 
+        isAddingRef.current = true;
         setAddError('');
         setIsAdding(true);
         try {
@@ -83,6 +100,7 @@ export default function VoiceAliasManager({ aliases = [], isLoading, error, mish
                 'Failed to add alias.';
             setAddError(msg);
         } finally {
+            isAddingRef.current = false;
             setIsAdding(false);
         }
     };
