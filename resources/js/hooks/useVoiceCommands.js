@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { parseVoiceCommand } from '@/utils/voiceCommandParser';
+import { parseVoiceCommand, applyAliases } from '@/utils/voiceCommandParser';
 
 /**
  * A React hook that wraps the Web Speech API's SpeechRecognition interface to
@@ -30,8 +30,11 @@ import { parseVoiceCommand } from '@/utils/voiceCommandParser';
  * Logic:
  *   - Creates a single SpeechRecognition instance lazily on first `toggle()` call.
  *   - `toggle()` starts recognition when idle and aborts it when active.
- *   - `onresult` fires after the browser finalises speech; `parseVoiceCommand` maps
- *     the transcript to a structured command using fuzzy element/team matching.
+ *   - `onresult` fires after the browser finalises speech; alias substitution is
+ *     applied first (case-insensitive), then `parseVoiceCommand` maps the result
+ *     to a structured command using fuzzy element/team matching. The alias-substituted
+ *     transcript is surfaced in `onFeedback` for all outcomes (success and failure)
+ *     so the user always sees what the system acted on, not the raw misheard word.
  *   - `onerror` surfaces 'not-allowed' (permission denied) and 'no-speech' to the UI.
  *   - `onend` resets the listening flag and stops audio monitoring.
  *   - All mutable callbacks (`onCommand`, `onFeedback`, `elements`, `teams`) are kept
@@ -213,6 +216,10 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
             }
             const misheardCandidates = [...wordSet].sort();
 
+            // Apply aliases before parsing and before feedback so the substituted
+            // word is shown in ALL feedback paths (success and failure alike).
+            const displayTranscript = applyAliases(transcript, aliasesRef.current);
+
             const command = parseVoiceCommand(
                 transcript,
                 elementsRef.current,
@@ -220,14 +227,15 @@ export default function useVoiceCommands({ elements, teams, onCommand, onFeedbac
                 aliasesRef.current,
             );
 
+
             if (command.type === 'save') {
                 onCommandRef.current(command);
-                onFeedbackRef.current({ ok: true, message: 'Saving round…', transcript, misheardCandidates });
+                onFeedbackRef.current({ ok: true, message: 'Saving round…', transcript: displayTranscript, misheardCandidates });
             } else if (command.type === 'element') {
                 onCommandRef.current(command);
-                onFeedbackRef.current({ ok: true, message: `✓ ${transcript}`, transcript, misheardCandidates });
+                onFeedbackRef.current({ ok: true, message: `✓ ${displayTranscript}`, transcript: displayTranscript, misheardCandidates });
             } else {
-                onFeedbackRef.current({ ok: false, message: command.reason, transcript, misheardCandidates });
+                onFeedbackRef.current({ ok: false, message: command.reason, transcript: displayTranscript, misheardCandidates });
             }
         };
 
