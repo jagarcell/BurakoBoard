@@ -2007,7 +2007,7 @@ describe('RoundsCard', () => {
             });
 
             // The feedback should be gone after 3.5 s.
-            act(() => { vi.advanceTimersByTime(3500); });
+            await act(async () => { vi.advanceTimersByTime(3500); });
 
             expect(screen.queryByText('Done!')).not.toBeInTheDocument();
 
