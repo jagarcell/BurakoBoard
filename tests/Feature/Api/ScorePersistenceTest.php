@@ -4,6 +4,7 @@ namespace Tests\Feature\Api;
 
 use App\Models\Game;
 use App\Models\Team;
+use App\Models\User;
 use App\Repositories\BurakoGameRepository;
 use App\Services\BurakoGameService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,19 +17,22 @@ class ScorePersistenceTest extends TestCase
 
     private BurakoGameRepository $repository;
     private BurakoGameService $service;
+    private User $user;
 
     /**
-     * Boot the repository and service once per test.
+     * Boot the repository, service, and a shared authenticated user once per test.
      *
      * @return void
-     * Logic: resolve concrete instances from the container so they use the same database connection as the test.
+     * Logic: resolve concrete instances from the container so they use the same database
+     *   connection as the test; create one User so createGameAndGetId can authenticate.
      */
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->repository = $this->app->make(BurakoGameRepository::class);
-        $this->service = $this->app->make(BurakoGameService::class);
+        $this->service    = $this->app->make(BurakoGameService::class);
+        $this->user       = User::factory()->create();
     }
 
     /**
@@ -217,9 +221,17 @@ class ScorePersistenceTest extends TestCase
      * @return int Created game id.
      * Logic: use the games API to create a real persisted game so all downstream helpers work against the same DB row.
      */
+    /**
+     * Create a game and return its id for test setup.
+     *
+     * @param  int  $targetPoints  Winning threshold for the created game.
+     * @return int Created game id.
+     * Logic: authenticate as the shared test user and POST to the games endpoint;
+     *   return the id from the response for subsequent test steps.
+     */
     private function createGameAndGetId(int $targetPoints = 2000): int
     {
-        $response = $this->postJson('/api/v1/games', [
+        $response = $this->actingAs($this->user)->postJson('/api/v1/games', [
             'name' => 'Score Test Game',
             'target_points' => $targetPoints,
         ]);

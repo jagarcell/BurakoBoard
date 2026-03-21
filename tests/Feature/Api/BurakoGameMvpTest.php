@@ -10,6 +10,22 @@ class BurakoGameMvpTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
+    /**
+     * Boot a shared authenticated user once per test.
+     *
+     * @return void
+     * Logic: create one User model so every helper that calls POST /api/v1/games can
+     *   call $this->actingAs($this->user) without repeating factory creation.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->user = User::factory()->create();
+    }
+
     /**
      * Ensure a game can be created with name and target points.
      *
@@ -17,7 +33,7 @@ class BurakoGameMvpTest extends TestCase
      */
     public function test_can_create_a_game(): void
     {
-        $response = $this->postJson('/api/v1/games', [
+        $response = $this->actingAs($this->user)->postJson('/api/v1/games', [
             'name' => 'Friday Burako',
             'target_points' => 2000,
         ]);
@@ -227,10 +243,12 @@ class BurakoGameMvpTest extends TestCase
      *
      * @param  int  $targetPoints  Winning threshold for the created game.
      * @return int Created game id.
+     * Logic: authenticate as the shared test user and POST to the games endpoint;
+     *   return the id from the response for subsequent test steps.
      */
     private function createGameAndGetId(int $targetPoints = 2000): int
     {
-        $response = $this->postJson('/api/v1/games', [
+        $response = $this->actingAs($this->user)->postJson('/api/v1/games', [
             'name' => 'MVP Game',
             'target_points' => $targetPoints,
         ]);
