@@ -61,4 +61,20 @@ class Game extends Model
     {
         return $this->hasMany(Round::class, 'game_id');
     }
+
+    /**
+     * Get the users associated with this game.
+     *
+     * @param  none
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<\App\Models\User, $this> Users linked to the game with their role.
+     * Logic: exposes the many-to-many link via the game_user pivot table; the role column
+     *   (creator | pending_invitee | viewer) is always eager-loaded on the pivot so callers
+     *   can inspect each user's relationship to the game without extra queries.
+     */
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'game_user')
+            ->withPivot('role')
+            ->withTimestamps();
+    }
 }
