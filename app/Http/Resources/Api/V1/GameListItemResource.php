@@ -17,12 +17,13 @@ class GameListItemResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => (int) $this->resource->id,
-            'name' => $this->resource->name,
-            'target_points' => (int) $this->resource->target_points,
-            'status' => $this->resource->status,
-            'winning_team_id' => $this->resource->winning_team_id === null ? null : (int) $this->resource->winning_team_id,
+            'id'                   => (int) $this->resource->id,
+            'name'                 => $this->resource->name,
+            'target_points'        => (int) $this->resource->target_points,
+            'status'               => $this->resource->status,
+            'winning_team_id'      => $this->resource->winning_team_id === null ? null : (int) $this->resource->winning_team_id,
             'current_round_number' => (int) $this->resource->current_round_number,
+            'user_role'            => $this->resource->user_role,
         ];
     }
 }

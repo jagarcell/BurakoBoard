@@ -40,24 +40,51 @@ class BurakoGameRepository
     }
 
     /**
-     * Return the existing games for dashboard selection.
+     * Return the games linked to a specific user for dashboard selection.
      *
-     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Existing games ordered from newest to oldest.
-     * Logic: fetch a lightweight ordered game list so the dashboard selector can render choices without assembling full score history payloads.
+     * @param  int  $userId  Identifier of the authenticated user.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Games the user has access to, ordered from newest to oldest.
+     * Logic: join the game_user pivot to filter to only the games the given user is enrolled in, and
+     *   surface the user's role for each game as the `user_role` attribute so the dashboard selector
+     *   can render a descriptive role indicator without extra queries.
      */
-    public function getGameList(): Collection
+    public function getGameList(int $userId): Collection
     {
         return Game::query()
+            ->join('game_user', 'game_user.game_id', '=', 'games.id')
+            ->where('game_user.user_id', $userId)
             ->select([
-                'id',
-                'name',
-                'target_points',
-                'status',
-                'winning_team_id',
-                'current_round_number',
+                'games.id',
+                'games.name',
+                'games.target_points',
+                'games.status',
+                'games.winning_team_id',
+                'games.current_round_number',
+                'game_user.role as user_role',
             ])
-            ->orderByDesc('id')
+            ->orderByDesc('games.id')
             ->get();
+    }
+
+    /**
+     * Link a user to a game with a given role in the game_user pivot table.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $userId  Identifier of the user to link.
+     * @param  string  $role  Role assigned to the user: creator, pending_invitee, or viewer.
+     * @return void
+     * Logic: insert a single pivot row with a role and timestamps; DB::table() is used here
+     *   because no model hydration is needed for a straightforward pivot insert.
+     */
+    public function attachUserToGame(int $gameId, int $userId, string $role): void
+    {
+        DB::table('game_user')->insert([
+            'game_id'    => $gameId,
+            'user_id'    => $userId,
+            'role'       => $role,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**

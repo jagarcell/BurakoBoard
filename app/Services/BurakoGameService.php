@@ -24,24 +24,28 @@ class BurakoGameService
     }
 
     /**
-     * Return the existing games for dashboard selection.
+     * Return the games linked to a specific user for dashboard selection.
      *
-     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Existing games ordered for selector display.
-     * Logic: delegate the lightweight game listing query to the repository so the dashboard can populate its selector without loading full summaries.
+     * @param  int  $userId  Identifier of the authenticated user requesting the list.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Games the user has access to, ordered for selector display.
+     * Logic: delegate the user-scoped game listing query to the repository so the dashboard
+     *   can populate its selector with only the games the current user is enrolled in.
      */
-    public function listGames(): Collection
+    public function listGames(int $userId): Collection
     {
-        return $this->repository->getGameList();
+        return $this->repository->getGameList($userId);
     }
 
     /**
-     * Create a new game in progress.
+     * Create a new game in progress and enrol the creator in the game_user pivot.
      *
      * @param  array<string, mixed>  $payload  Validated game data with name and target points.
+     * @param  int  $userId  Identifier of the authenticated user creating the game.
      * @return array<string, mixed> Game summary payload.
-     * Logic: persist a game with default status and round counters, then return a normalized summary payload.
+     * Logic: persist the game record, attach the creating user with the 'creator' role so the
+     *   game appears in their filtered dashboard list, then return the full summary payload.
      */
-    public function createGame(array $payload): array
+    public function createGame(array $payload, int $userId): array
     {
         $game = $this->repository->createGame([
             'name' => $payload['name'],
@@ -51,6 +55,8 @@ class BurakoGameService
             'current_round_number' => 0,
             'initial_shuffler_seat_number' => null,
         ]);
+
+        $this->repository->attachUserToGame($game->id, $userId, 'creator');
 
         return $this->repository->getGameSummary($game->id);
     }
