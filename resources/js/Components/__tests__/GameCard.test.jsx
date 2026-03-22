@@ -175,6 +175,7 @@ describe('GameCard', () => {
 
         await userEvent.click(screen.getByRole('button', { name: 'New' }));
 
+        await userEvent.clear(screen.getByLabelText('Game name'));
         await userEvent.type(screen.getByLabelText('Game name'), 'Finals Table');
         await userEvent.clear(screen.getByLabelText('Winning score'));
         await userEvent.type(screen.getByLabelText('Winning score'), '3000');
