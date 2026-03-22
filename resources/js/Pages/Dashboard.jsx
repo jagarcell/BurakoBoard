@@ -10,6 +10,11 @@ import useConfetti from '@/hooks/useConfetti';
 import useWinnerSound from '@/hooks/useWinnerSound';
 
 export default function Dashboard() {
+    const [preselectedGameId] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('game') ?? null;
+    });
+
     const [selectedGame, setSelectedGame] = useState(null);
     const [gameSummary, setGameSummary] = useState(null);
     const [scoreUpdate, setScoreUpdate] = useState(null);
@@ -112,7 +117,7 @@ export default function Dashboard() {
 
             <div className="bg-slate-100 py-12">
                 <div className="mx-auto max-w-6xl space-y-6 px-4 sm:px-6 lg:px-8">
-                    <GameCard onGameSelect={setSelectedGame} />
+                    <GameCard onGameSelect={setSelectedGame} preselectedGameId={preselectedGameId} />
 
                     <TeamsCard
                         gameSummary={gameSummary}

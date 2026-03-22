@@ -17,7 +17,7 @@ const defaultForm = {
 
 const STORAGE_KEY = 'burako_selected_game_id';
 
-export default function GameCard({ onGameSelect = () => {} }) {
+export default function GameCard({ onGameSelect = () => {}, preselectedGameId = null }) {
     const [games, setGames] = useState([]);
     const [selectedGameId, setSelectedGameId] = useState(
         () => localStorage.getItem(STORAGE_KEY) ?? '',
@@ -40,6 +40,12 @@ export default function GameCard({ onGameSelect = () => {} }) {
     const [isInviteLoading, setIsInviteLoading] = useState(false);
     const [inviteLoadError, setInviteLoadError] = useState('');
     const [selectedInviteUserIds, setSelectedInviteUserIds] = useState(new Set());
+    const [isSendingInvites, setIsSendingInvites] = useState(false);
+    const [inviteSendError, setInviteSendError] = useState('');
+    const [inviteSendSuccess, setInviteSendSuccess] = useState('');
+
+    const [isAcceptingInvite, setIsAcceptingInvite] = useState(false);
+    const [acceptInviteError, setAcceptInviteError] = useState('');
 
     const selectedGame = games.find((g) => String(g.id) === selectedGameId) ?? null;
 
@@ -61,6 +67,16 @@ export default function GameCard({ onGameSelect = () => {} }) {
                 startTransition(() => {
                     setGames(availableGames);
                     setSelectedGameId((currentGameId) => {
+                        // URL-specified preselect takes priority over localStorage.
+                        if (
+                            preselectedGameId !== null &&
+                            availableGames.some(
+                                (game) => String(game.id) === String(preselectedGameId),
+                            )
+                        ) {
+                            return String(preselectedGameId);
+                        }
+
                         if (
                             currentGameId !== '' &&
                             availableGames.some(
@@ -102,7 +118,15 @@ export default function GameCard({ onGameSelect = () => {} }) {
     }, [selectedGameId]);
 
     useEffect(() => {
-        onGameSelect(selectedGame);
+        // Do not surface a pending-invite game to the parent until the user accepts it.
+        // Passing null keeps the dashboard blank so no game data is shown prematurely.
+        setAcceptInviteError('');
+
+        if (selectedGame?.user_role === 'pending_invitee') {
+            onGameSelect(null);
+        } else {
+            onGameSelect(selectedGame);
+        }
     }, [selectedGame, onGameSelect]);
 
     const resetForm = () => {
@@ -175,12 +199,48 @@ export default function GameCard({ onGameSelect = () => {} }) {
         setSelectedInviteUserIds(new Set());
         setInviteUsers([]);
         setInviteMeta({ current_page: 1, last_page: 1 });
+        setInviteSendError('');
+        setInviteSendSuccess('');
         setIsInviteModalOpen(true);
         fetchInviteUsers(selectedGame.id, 1);
     };
 
     const closeInviteModal = () => {
+        if (isSendingInvites) {
+            return;
+        }
+
         setIsInviteModalOpen(false);
+    };
+
+    const handleAcceptInvite = async () => {
+        if (! selectedGame || isAcceptingInvite) {
+            return;
+        }
+
+        setIsAcceptingInvite(true);
+        setAcceptInviteError('');
+
+        try {
+            const response = await axios.put(`/api/v1/games/${selectedGame.id}/invitation`);
+            const updatedGame = response.data?.data?.game;
+
+            if (! updatedGame) {
+                throw new Error('Game payload missing from response.');
+            }
+
+            startTransition(() => {
+                setGames((currentGames) =>
+                    currentGames.map((game) =>
+                        String(game.id) === String(updatedGame.id) ? updatedGame : game,
+                    ),
+                );
+            });
+        } catch {
+            setAcceptInviteError('Unable to accept the invitation right now. Please try again.');
+        } finally {
+            setIsAcceptingInvite(false);
+        }
     };
 
     const handleInvitePageChange = (newPage) => {
@@ -189,6 +249,39 @@ export default function GameCard({ onGameSelect = () => {} }) {
         }
 
         fetchInviteUsers(selectedGame.id, newPage);
+    };
+
+    const handleSendInvitations = async () => {
+        if (! selectedGame || selectedInviteUserIds.size === 0 || isSendingInvites) {
+            return;
+        }
+
+        setIsSendingInvites(true);
+        setInviteSendError('');
+        setInviteSendSuccess('');
+
+        try {
+            const response = await axios.post(
+                `/api/v1/games/${selectedGame.id}/invitations`,
+                { user_ids: Array.from(selectedInviteUserIds) },
+            );
+            const count = response.data?.data?.invited_count ?? 0;
+
+            startTransition(() => {
+                setInviteSendSuccess(
+                    count === 0
+                        ? 'All selected users are already invited or members of this game.'
+                        : `${count} invitation${count === 1 ? '' : 's'} sent successfully.`,
+                );
+                setSelectedInviteUserIds(new Set());
+                // Refresh the user list to remove the newly-invited users.
+                fetchInviteUsers(selectedGame.id, 1);
+            });
+        } catch {
+            setInviteSendError('Unable to send invitations right now. Please try again.');
+        } finally {
+            setIsSendingInvites(false);
+        }
     };
 
     const toggleInviteUser = (userId) => {
@@ -424,20 +517,39 @@ export default function GameCard({ onGameSelect = () => {} }) {
                     {selectedGame?.user_role === 'pending_invitee' && (
                         <button
                             aria-label="Accept invitation to this game"
-                            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300 sm:right-6 sm:top-6"
+                            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-60 sm:right-6 sm:top-6"
+                            disabled={isAcceptingInvite}
+                            onClick={handleAcceptInvite}
                             type="button"
                         >
-                            <svg
-                                aria-hidden="true"
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                viewBox="0 0 24 24"
-                            >
-                                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            Accept Invite
+                            {isAcceptingInvite ? (
+                                <>
+                                    <svg
+                                        aria-hidden="true"
+                                        className="h-3.5 w-3.5 animate-spin"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" />
+                                    </svg>
+                                    Accepting…
+                                </>
+                            ) : (
+                                <>
+                                    <svg
+                                        aria-hidden="true"
+                                        className="h-3.5 w-3.5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    Accept Invite
+                                </>
+                            )}
                         </button>
                     )}
 
@@ -596,6 +708,12 @@ export default function GameCard({ onGameSelect = () => {} }) {
                     {loadError !== '' ? (
                         <p className="mt-4 text-sm font-medium text-red-600">
                             {loadError}
+                        </p>
+                    ) : null}
+
+                    {acceptInviteError !== '' ? (
+                        <p className="mt-4 text-sm font-medium text-red-600">
+                            {acceptInviteError}
                         </p>
                     ) : null}
                 </div>
@@ -845,14 +963,34 @@ export default function GameCard({ onGameSelect = () => {} }) {
                     )}
 
                     <div className="flex justify-end gap-3 pt-1">
-                        <SecondaryButton onClick={closeInviteModal} type="button">
+                        <SecondaryButton
+                            disabled={isSendingInvites}
+                            onClick={closeInviteModal}
+                            type="button"
+                        >
                             Close
                         </SecondaryButton>
 
-                        <PrimaryButton type="button">
-                            Send
+                        <PrimaryButton
+                            disabled={selectedInviteUserIds.size === 0 || isSendingInvites}
+                            onClick={handleSendInvitations}
+                            type="button"
+                        >
+                            {isSendingInvites ? 'Sending…' : 'Send'}
                         </PrimaryButton>
                     </div>
+
+                    {inviteSendError !== '' && (
+                        <p className="text-sm font-medium text-red-600">
+                            {inviteSendError}
+                        </p>
+                    )}
+
+                    {inviteSendSuccess !== '' && (
+                        <p className="text-sm font-medium text-emerald-600">
+                            {inviteSendSuccess}
+                        </p>
+                    )}
                 </div>
             </Modal>
         </>
