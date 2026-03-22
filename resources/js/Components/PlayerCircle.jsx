@@ -6,7 +6,6 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
  * @type {Record<string, string>}
  */
 const ROLE_LABELS = {
-    shuffler: 'Shuffler',
     cutter: 'Cutter',
     dealer: 'Dealer',
     first_draw: 'First Draw',
@@ -18,16 +17,15 @@ const ROLE_LABELS = {
  * @type {Record<string, string>}
  */
 const ROLE_COLORS = {
-    shuffler: 'bg-violet-100 text-violet-700 border-violet-200',
-    cutter: 'bg-amber-100 text-amber-700 border-amber-200',
-    dealer: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    first_draw: 'bg-rose-100 text-rose-700 border-rose-200',
+    cutter: 'bg-blue-100 text-blue-700 border-blue-200',
+    dealer: 'bg-amber-100 text-amber-700 border-amber-200',
+    first_draw: 'bg-green-100 text-green-700 border-green-200',
 };
 
 /**
  * Build a map from player_id to role key for a given round's role assignment.
  *
- * @param {object|null} roundRoles - Round roles object with shuffler/cutter/dealer/first_draw entries.
+ * @param {object|null} roundRoles - Round roles object with cutter/dealer/first_draw entries.
  * @return {Record<number, string>} Map of player_id → role key.
  * Logic: iterate over every known role key, extract the player_id from each
  * entry and store the reverse mapping so chips can look up their role in O(1).
@@ -35,7 +33,7 @@ const ROLE_COLORS = {
 function buildRoleMap(roundRoles) {
     if (!roundRoles) return {};
     const map = {};
-    for (const roleKey of ['shuffler', 'cutter', 'dealer', 'first_draw']) {
+    for (const roleKey of ['cutter', 'dealer', 'first_draw']) {
         const entry = roundRoles[roleKey];
         if (entry?.player_id != null) {
             map[entry.player_id] = roleKey;
@@ -56,7 +54,7 @@ function buildRoleMap(roundRoles) {
  *   All players with assigned seat numbers from both teams.
  * @param {object|null} props.roundRoles
  *   Role assignment for the round being displayed:
- *   `{ round_number, shuffler, cutter, dealer, first_draw }`.
+ *   `{ round_number, cutter, dealer, first_draw }`.
  * @param {number|null} props.roundNumber - Round number shown in the centre of the circle.
  * @param {boolean}     [props.isOpen=true] - When true plays the genie-open animation;
  *   when false plays the genie-close animation so the caller can keep the element

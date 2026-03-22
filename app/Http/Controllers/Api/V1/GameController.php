@@ -107,12 +107,12 @@ class GameController extends Controller
     }
 
     /**
-     * Set the initial shuffler player before round 1 starts.
+     * Set the initial cutter player before round 1 starts.
      *
      * @param  \App\Http\Requests\Api\V1\SetInitialShufflerRequest  $request  Validated request with selected player id.
      * @param  int  $gameId  Identifier of the game.
      * @return \Illuminate\Http\JsonResponse Updated game summary response.
-     * Logic: delegate shuffler selection rules to the service and return the refreshed summary payload.
+     * Logic: delegate cutter selection rules to the service and return the refreshed summary payload.
      */
     public function setInitialShuffler(SetInitialShufflerRequest $request, int $gameId): JsonResponse
     {

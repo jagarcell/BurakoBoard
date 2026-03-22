@@ -296,13 +296,13 @@ class BurakoGameService
     }
 
     /**
-     * Set the initial shuffler by selecting one seated player in the game.
+     * Set the initial cutter by selecting one seated player in the game.
      *
      * @param  int  $gameId  Identifier of the game.
-     * @param  int  $playerId  Identifier of the selected shuffler player.
+     * @param  int  $playerId  Identifier of the selected cutter player.
      * @return array<string, mixed> Updated game summary payload.
      * Logic: enforce in-progress and pre-round constraints, validate the selected player is seated
-     * in the game, persist that player's seat as the initial shuffler reference, then return summary.
+     * in the game, persist that player's seat as the initial cutter anchor, then return summary.
      */
     public function setInitialShuffler(int $gameId, int $playerId): array
     {
@@ -310,13 +310,13 @@ class BurakoGameService
 
         if ($game->status !== 'in_progress') {
             throw ValidationException::withMessages([
-                'game' => 'Cannot set shuffler for a finished game.',
+                'game' => 'Cannot set cutter for a finished game.',
             ]);
         }
 
         if ((int) $game->current_round_number > 0) {
             throw ValidationException::withMessages([
-                'game' => 'Initial shuffler can only be set before recording the first round.',
+                'game' => 'Initial cutter can only be set before recording the first round.',
             ]);
         }
 

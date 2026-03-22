@@ -89,7 +89,7 @@ describe('PlayerOrderCard', () => {
         expect(container.firstChild).toBeNull();
     });
 
-    it('shows shuffler selector buttons even when players do not have seat numbers', () => {
+    it('shows cutter selector buttons even when players do not have seat numbers', () => {
         const teams = [
             makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos' }]),
             makeTeam(11, 'Team Beta', [{ id: 2, user_id: null, display_name: 'Bruno' }]),
@@ -103,12 +103,12 @@ describe('PlayerOrderCard', () => {
             />,
         );
 
-        expect(screen.getByText('Round 1 shuffler')).toBeInTheDocument();
+        expect(screen.getByText('Round 1 cutter')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Carlos' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Bruno' })).toBeInTheDocument();
     });
 
-    it('sets the initial shuffler from the UI', async () => {
+    it('sets the initial cutter from the UI', async () => {
         const teams = [
             makeTeam(10, 'Team Alpha', [
                 { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
@@ -130,10 +130,9 @@ describe('PlayerOrderCard', () => {
                         round_roles: [
                             {
                                 round_number: 1,
-                                shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                                cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                                dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                                first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                                cutter: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                                dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                                first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
                             },
                         ],
                     },
@@ -149,7 +148,7 @@ describe('PlayerOrderCard', () => {
             />,
         );
 
-        expect(screen.getByText('Round 1 shuffler')).toBeInTheDocument();
+        expect(screen.getByText('Round 1 cutter')).toBeInTheDocument();
 
         await userEvent.click(screen.getByRole('button', { name: 'Seat 1 · Carlos' }));
 
@@ -177,21 +176,20 @@ describe('PlayerOrderCard', () => {
             round_roles: [
                 {
                     round_number: 1,
-                    shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                    cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                    dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                    first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                    cutter: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                    dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                    first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
                 },
             ],
         });
 
         render(<PlayerOrderCard gameSummary={gameSummary} selectedGame={selectedGame} teams={teams} />);
 
-        expect(screen.getByText('Round 1 shuffler')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Seat 1 · Carlos · Shuffler' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Cutter' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Seat 3 · Diana · Dealer' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Seat 4 · Elisa · First Draw' })).toBeInTheDocument();
+        expect(screen.getByText('Round 1 cutter')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Seat 1 · Carlos · Cutter' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Dealer' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Seat 3 · Diana · First Draw' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Seat 4 · Elisa' })).toBeInTheDocument();
     });
 
     it('shows round N player order heading and correct roles after a round is recorded', () => {
@@ -211,17 +209,15 @@ describe('PlayerOrderCard', () => {
             round_roles: [
                 {
                     round_number: 1,
-                    shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                    cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                    dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                    first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                    cutter: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                    dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                    first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
                 },
                 {
                     round_number: 2,
-                    shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                    cutter: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                    dealer: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
-                    first_draw: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                    cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                    dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                    first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
                 },
             ],
         });
@@ -229,9 +225,9 @@ describe('PlayerOrderCard', () => {
         render(<PlayerOrderCard gameSummary={gameSummary} selectedGame={selectedGame} teams={teams} />);
 
         expect(screen.getByText('Round 2 player order')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Shuffler' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Seat 1 · Carlos · Shuffler' })).not.toBeInTheDocument();
-        expect(screen.queryByText('R1 Shuffler')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Seat 2 · Bruno · Cutter' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Seat 1 · Carlos · Cutter' })).not.toBeInTheDocument();
+        expect(screen.queryByText('R1 Cutter')).not.toBeInTheDocument();
         expect(screen.queryByText('R2 Dealer')).not.toBeInTheDocument();
     });
 
@@ -252,17 +248,15 @@ describe('PlayerOrderCard', () => {
             round_roles: [
                 {
                     round_number: 1,
-                    shuffler: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
-                    cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                    dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                    first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
+                    cutter: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                    dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                    first_draw: { player_id: 3, display_name: 'Diana', seat_number: 3 },
                 },
                 {
                     round_number: 2,
-                    shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                    cutter: { player_id: 3, display_name: 'Diana', seat_number: 3 },
-                    dealer: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
-                    first_draw: { player_id: 1, display_name: 'Carlos', seat_number: 1 },
+                    cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                    dealer: { player_id: 3, display_name: 'Diana', seat_number: 3 },
+                    first_draw: { player_id: 4, display_name: 'Elisa', seat_number: 4 },
                 },
             ],
         });
@@ -272,18 +266,18 @@ describe('PlayerOrderCard', () => {
         expect(screen.getByText('Round 2 player order')).toBeInTheDocument();
         expect(screen.getByText('These are the players roles for this round.')).toBeInTheDocument();
 
-        const brunoChip = screen.getByRole('button', { name: 'Seat 2 · Bruno · Shuffler' });
-        const dianaChip = screen.getByRole('button', { name: 'Seat 3 · Diana · Cutter' });
-        const elisaChip = screen.getByRole('button', { name: 'Seat 4 · Elisa · Dealer' });
-        const carlosChip = screen.getByRole('button', { name: 'Seat 1 · Carlos · First Draw' });
+        const brunoChip = screen.getByRole('button', { name: 'Seat 2 · Bruno · Cutter' });
+        const dianaChip = screen.getByRole('button', { name: 'Seat 3 · Diana · Dealer' });
+        const elisaChip = screen.getByRole('button', { name: 'Seat 4 · Elisa · First Draw' });
+        const carlosChip = screen.getByRole('button', { name: 'Seat 1 · Carlos' });
 
         expect(brunoChip).toBeDisabled();
         expect(dianaChip).toBeDisabled();
         expect(elisaChip).toBeDisabled();
         expect(carlosChip).toBeDisabled();
-        expect(brunoChip).toHaveClass('bg-indigo-600');
-        expect(dianaChip).toHaveClass('bg-white');
-        expect(elisaChip).toHaveClass('bg-white');
+        expect(brunoChip).toHaveClass('bg-blue-100');
+        expect(dianaChip).toHaveClass('bg-amber-100');
+        expect(elisaChip).toHaveClass('bg-green-100');
         expect(carlosChip).toHaveClass('bg-white');
 
         await userEvent.click(brunoChip);
@@ -304,7 +298,7 @@ describe('PlayerOrderCard', () => {
             />,
         );
 
-        expect(screen.getByText('Add at least one player to assign the initial shuffler.')).toBeInTheDocument();
+        expect(screen.getByText('Add at least one player to assign the initial cutter.')).toBeInTheDocument();
     });
 
     it('renders a collapse button in the header on mobile', () => {

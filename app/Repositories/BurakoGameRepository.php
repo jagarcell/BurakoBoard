@@ -697,14 +697,14 @@ class BurakoGameRepository
     }
 
     /**
-     * Compute seat-based round roles (shuffler, cutter, dealer, first draw) for each played and upcoming round.
+     * Compute seat-based round roles (cutter, dealer, first draw) for each played and upcoming round.
      *
      * @param  array<int, array<string, mixed>>  $teams  Team payload with players that include seat numbers.
      * @param  int  $currentRoundNumber  Last completed round number from the game row.
-     * @param  int|null  $initialShufflerSeatNumber  Seat number selected as the initial shuffler.
+     * @param  int|null  $initialShufflerSeatNumber  Seat number selected as the initial cutter anchor.
      * @return array<int, array<string, mixed>> Round role assignments ordered by round number.
-     * Logic: flatten seated players ordered by seat, locate the initial shuffler index, then rotate
-     * indices by one seat each round so cutter is next seat, dealer is the seat after cutter, and first draw is the seat after dealer.
+     * Logic: flatten seated players ordered by seat, locate the anchor index, then rotate
+     * indices by one seat each round so dealer is the next seat and first draw is the seat after dealer.
      */
     private function buildRoundRoles(array $teams, int $currentRoundNumber, ?int $initialShufflerSeatNumber): array
     {
@@ -731,18 +731,12 @@ class BurakoGameRepository
         $roundRoles = [];
 
         for ($roundOffset = 0; $roundOffset < $roundCount; $roundOffset++) {
-            $shuffler = $seatedPlayers[($initialIndex + $roundOffset) % $totalPlayers];
-            $cutter = $seatedPlayers[($initialIndex + $roundOffset + 1) % $totalPlayers];
-            $dealer = $seatedPlayers[($initialIndex + $roundOffset + 2) % $totalPlayers];
-            $firstDraw = $seatedPlayers[($initialIndex + $roundOffset + 3) % $totalPlayers];
+            $cutter = $seatedPlayers[($initialIndex + $roundOffset) % $totalPlayers];
+            $dealer = $seatedPlayers[($initialIndex + $roundOffset + 1) % $totalPlayers];
+            $firstDraw = $seatedPlayers[($initialIndex + $roundOffset + 2) % $totalPlayers];
 
             $roundRoles[] = [
                 'round_number' => $roundOffset + 1,
-                'shuffler' => [
-                    'player_id' => (int) $shuffler['id'],
-                    'display_name' => $shuffler['display_name'],
-                    'seat_number' => (int) $shuffler['seat_number'],
-                ],
                 'cutter' => [
                     'player_id' => (int) $cutter['id'],
                     'display_name' => $cutter['display_name'],

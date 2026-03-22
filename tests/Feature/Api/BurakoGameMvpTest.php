@@ -184,9 +184,9 @@ class BurakoGameMvpTest extends TestCase
     }
 
     /**
-     * Ensure setting the initial shuffler computes seat-based round roles in order.
+     * Ensure setting the initial cutter computes seat-based round roles in order.
      *
-     * @return void Verifies shuffler/dealer/first-draw rotation by sequential seat across rounds.
+     * @return void Verifies cutter/dealer/first-draw rotation by sequential seat across rounds.
      */
     public function test_initial_shuffler_selection_computes_round_roles_from_seats(): void
     {
@@ -217,10 +217,9 @@ class BurakoGameMvpTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.game.game.initial_shuffler_seat_number', 1)
             ->assertJsonPath('data.game.round_roles.0.round_number', 1)
-            ->assertJsonPath('data.game.round_roles.0.shuffler.display_name', 'Carlos')
-            ->assertJsonPath('data.game.round_roles.0.cutter.display_name', 'Bruno')
-            ->assertJsonPath('data.game.round_roles.0.dealer.display_name', 'Diana')
-            ->assertJsonPath('data.game.round_roles.0.first_draw.display_name', 'Elisa');
+            ->assertJsonPath('data.game.round_roles.0.cutter.display_name', 'Carlos')
+            ->assertJsonPath('data.game.round_roles.0.dealer.display_name', 'Bruno')
+            ->assertJsonPath('data.game.round_roles.0.first_draw.display_name', 'Diana');
 
         $this->postJson("/api/v1/games/{$gameId}/rounds", [
             'scores' => [
@@ -232,10 +231,9 @@ class BurakoGameMvpTest extends TestCase
         $this->getJson("/api/v1/games/{$gameId}")
             ->assertOk()
             ->assertJsonPath('data.game.round_roles.1.round_number', 2)
-            ->assertJsonPath('data.game.round_roles.1.shuffler.display_name', 'Bruno')
-            ->assertJsonPath('data.game.round_roles.1.cutter.display_name', 'Diana')
-            ->assertJsonPath('data.game.round_roles.1.dealer.display_name', 'Elisa')
-            ->assertJsonPath('data.game.round_roles.1.first_draw.display_name', 'Carlos');
+            ->assertJsonPath('data.game.round_roles.1.cutter.display_name', 'Bruno')
+            ->assertJsonPath('data.game.round_roles.1.dealer.display_name', 'Diana')
+            ->assertJsonPath('data.game.round_roles.1.first_draw.display_name', 'Elisa');
     }
 
     /**
