@@ -36,6 +36,36 @@ const oneGame = [
     },
 ];
 
+const gamesWithRoles = [
+    {
+        id: 10,
+        name: 'My Game',
+        target_points: 2000,
+        status: 'in_progress',
+        winning_team_id: null,
+        current_round_number: 0,
+        user_role: 'creator',
+    },
+    {
+        id: 11,
+        name: 'Their Game',
+        target_points: 2000,
+        status: 'in_progress',
+        winning_team_id: null,
+        current_round_number: 0,
+        user_role: 'viewer',
+    },
+    {
+        id: 12,
+        name: 'Pending Game',
+        target_points: 2000,
+        status: 'in_progress',
+        winning_team_id: null,
+        current_round_number: 0,
+        user_role: 'pending_invitee',
+    },
+];
+
 describe('GameCard', () => {
     beforeEach(() => {
         localStorage.clear();
@@ -50,11 +80,10 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={onGameSelect} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findByRole('option', { name: 'Select a game' });
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).toHaveTextContent('Select a game'));
 
-        await waitFor(() => expect(selector).toHaveValue(''));
-        expect(screen.getByRole('option', { name: 'Select a game' })).toBeInTheDocument();
+        expect(trigger).toHaveTextContent('Select a game');
 
         await waitFor(() =>
             expect(onGameSelect).toHaveBeenLastCalledWith(null),
@@ -68,14 +97,14 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findByRole('option', { name: 'Select a game' });
-
-        await waitFor(() => expect(selector).toHaveValue(''));
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        expect(trigger).toHaveTextContent('Select a game');
         expect(screen.getByRole('button', { name: 'New' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
 
-        await userEvent.selectOptions(selector, '8');
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Late Table (2000 pts)' }));
 
         expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'New' })).not.toBeInTheDocument();
@@ -90,21 +119,21 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={onGameSelect} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findAllByRole('option', { name: /pts/ });
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
 
-        await userEvent.selectOptions(selector, '8');
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Late Table (2000 pts)' }));
 
-        expect(selector).toHaveValue('8');
         await waitFor(() =>
             expect(onGameSelect).toHaveBeenLastCalledWith(
                 expect.objectContaining({ id: 8, name: 'Late Table' }),
             ),
         );
 
-        await userEvent.selectOptions(selector, '3');
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Early Table (1500 pts)' }));
 
-        expect(selector).toHaveValue('3');
         await waitFor(() =>
             expect(onGameSelect).toHaveBeenLastCalledWith(
                 expect.objectContaining({ id: 3, name: 'Early Table' }),
@@ -140,8 +169,8 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={onGameSelect} />);
 
-        await screen.findByRole('combobox');
-        await screen.findByRole('option', { name: 'Select a game' });
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).toHaveTextContent('Select a game'));
 
         await userEvent.click(screen.getByRole('button', { name: 'New' }));
 
@@ -161,10 +190,14 @@ describe('GameCard', () => {
             expect(screen.queryByText('Create a new game')).not.toBeInTheDocument(),
         );
 
-        expect(screen.getByRole('combobox')).toHaveValue('12');
+        await waitFor(() => expect(trigger).toHaveTextContent(/Finals Table/));
+
+        // Role indicator must appear immediately without a page refresh.
+        expect(trigger.querySelector('[title="Creator"]')).toBeInTheDocument();
+
         await waitFor(() =>
             expect(onGameSelect).toHaveBeenLastCalledWith(
-                expect.objectContaining({ id: 12, name: 'Finals Table' }),
+                expect.objectContaining({ id: 12, name: 'Finals Table', user_role: 'creator' }),
             ),
         );
     });
@@ -193,9 +226,11 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={onGameSelect} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findAllByRole('option', { name: /pts/ });
-        await userEvent.selectOptions(selector, '8');
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Late Table (2000 pts)' }));
 
         await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
@@ -225,6 +260,9 @@ describe('GameCard', () => {
             expect(screen.queryByText('Edit game')).not.toBeInTheDocument(),
         );
 
+        await waitFor(() => expect(trigger).toHaveTextContent(/Late Table Renamed/));
+
+        await userEvent.click(trigger);
         expect(
             screen.getByRole('option', { name: 'Late Table Renamed (2500 pts)' }),
         ).toBeInTheDocument();
@@ -237,14 +275,16 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findAllByRole('option', { name: /pts/ });
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
 
-        await userEvent.selectOptions(selector, '8');
-        expect(selector).toHaveValue('8');
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Late Table (2000 pts)' }));
+        expect(trigger).toHaveTextContent(/Late Table/);
 
-        await userEvent.selectOptions(selector, '');
-        expect(selector).toHaveValue('');
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Select a game' }));
+        expect(trigger).toHaveTextContent('Select a game');
         expect(screen.getByRole('button', { name: 'New' })).toBeInTheDocument();
     });
 
@@ -255,10 +295,11 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findAllByRole('option', { name: /pts/ });
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
 
-        await userEvent.selectOptions(selector, '8');
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Late Table (2000 pts)' }));
 
         expect(localStorage.getItem('burako_selected_game_id')).toBe('8');
     });
@@ -274,10 +315,8 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={onGameSelect} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findAllByRole('option', { name: /pts/ });
-
-        await waitFor(() => expect(selector).toHaveValue('8'));
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).toHaveTextContent(/Late Table/));
         await waitFor(() =>
             expect(onGameSelect).toHaveBeenLastCalledWith(
                 expect.objectContaining({ id: 8, name: 'Late Table' }),
@@ -296,10 +335,8 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={onGameSelect} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findAllByRole('option', { name: /pts/ });
-
-        await waitFor(() => expect(selector).toHaveValue(''));
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).toHaveTextContent('Select a game'));
         await waitFor(() =>
             expect(onGameSelect).toHaveBeenLastCalledWith(null),
         );
@@ -314,13 +351,540 @@ describe('GameCard', () => {
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
-        const selector = await screen.findByRole('combobox');
-        await screen.findAllByRole('option', { name: /pts/ });
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).toHaveTextContent(/Late Table/));
 
-        await waitFor(() => expect(selector).toHaveValue('8'));
-
-        await userEvent.selectOptions(selector, '');
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Select a game' }));
 
         expect(localStorage.getItem('burako_selected_game_id')).toBeNull();
+    });
+
+    it('shows role icon badges in the open dropdown for creator, viewer, and pending_invitee', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+
+        expect(screen.getByTitle('Creator')).toBeInTheDocument();
+        expect(screen.getByTitle('Viewer')).toBeInTheDocument();
+        expect(screen.getByTitle('Pending invite')).toBeInTheDocument();
+    });
+
+    it('shows the creator icon in the trigger after selecting a creator game', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        expect(screen.getByTitle('Creator')).toBeInTheDocument();
+    });
+
+    it('shows the viewer icon in the trigger after selecting a viewer game', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Their Game (2000 pts)' }));
+
+        expect(screen.getByTitle('Viewer')).toBeInTheDocument();
+    });
+
+    it('shows the pending invite icon in the trigger after selecting a pending_invitee game', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Pending Game (2000 pts)' }));
+
+        expect(screen.getByTitle('Pending invite')).toBeInTheDocument();
+    });
+
+    it('shows the Invite Viewer button when a creator game is selected', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        expect(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        ).toBeInTheDocument();
+    });
+
+    it('does not show the Invite Viewer button when a non-creator game is selected', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Their Game (2000 pts)' }));
+
+        expect(
+            screen.queryByRole('button', { name: 'Invite a viewer to this game' }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('does not show the Invite Viewer button when no game is selected', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('combobox');
+
+        expect(
+            screen.queryByRole('button', { name: 'Invite a viewer to this game' }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('shows the Accept Invite button when a pending_invitee game is selected', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Pending Game (2000 pts)' }));
+
+        expect(
+            screen.getByRole('button', { name: 'Accept invitation to this game' }),
+        ).toBeInTheDocument();
+    });
+
+    it('does not show the Accept Invite button when a non-pending game is selected', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        expect(
+            screen.queryByRole('button', { name: 'Accept invitation to this game' }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('does not show the Accept Invite button when no game is selected', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('combobox');
+
+        expect(
+            screen.queryByRole('button', { name: 'Accept invitation to this game' }),
+        ).not.toBeInTheDocument();
+    });
+
+    // -------------------------------------------------------------------------
+    // Invite Viewer modal
+    // -------------------------------------------------------------------------
+
+    it('opens the invite modal and shows a loading spinner when Invite Viewer is clicked', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        // Delay the invitable-users response so the spinner is visible
+        axios.get.mockReturnValueOnce(new Promise(() => {}));
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        expect(screen.getByText('Invite a Viewer')).toBeInTheDocument();
+        expect(screen.getByLabelText('Loading users')).toBeInTheDocument();
+    });
+
+    it('shows the list of invitable users with checkboxes after the modal loads', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: [
+                            { id: 101, name: 'Alice' },
+                            { id: 102, name: 'Bob' },
+                        ],
+                        meta: { current_page: 1, last_page: 1, total: 2, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        await waitFor(() =>
+            expect(screen.getByText('Alice')).toBeInTheDocument(),
+        );
+
+        expect(screen.getByText('Bob')).toBeInTheDocument();
+
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes).toHaveLength(2);
+        checkboxes.forEach((cb) => expect(cb).not.toBeChecked());
+    });
+
+    it('fetches invitable users from the correct game endpoint when the modal opens', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: [],
+                        meta: { current_page: 1, last_page: 1, total: 0, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        await waitFor(() =>
+            expect(axios.get).toHaveBeenCalledWith(
+                '/api/v1/games/10/invitable-users',
+                expect.objectContaining({ params: { page: 1 } }),
+            ),
+        );
+    });
+
+    it('toggles a user checkbox on and off when clicked', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: [{ id: 101, name: 'Alice' }],
+                        meta: { current_page: 1, last_page: 1, total: 1, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        const checkbox = await screen.findByRole('checkbox');
+        expect(checkbox).not.toBeChecked();
+
+        await userEvent.click(checkbox);
+        expect(checkbox).toBeChecked();
+
+        await userEvent.click(checkbox);
+        expect(checkbox).not.toBeChecked();
+    });
+
+    it('shows an empty state message when there are no invitable users', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: [],
+                        meta: { current_page: 1, last_page: 1, total: 0, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        await waitFor(() =>
+            expect(screen.getByText('No users available to invite.')).toBeInTheDocument(),
+        );
+    });
+
+    it('shows an error message when the invitable users request fails', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.get.mockRejectedValueOnce(new Error('Network Error'));
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        await waitFor(() =>
+            expect(screen.getByText('Unable to load users right now.')).toBeInTheDocument(),
+        );
+    });
+
+    it('shows pagination controls when there are multiple pages of invitable users', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: Array.from({ length: 10 }, (_, i) => ({
+                            id: i + 1,
+                            name: `User ${i + 1}`,
+                        })),
+                        meta: { current_page: 1, last_page: 3, total: 25, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        await waitFor(() =>
+            expect(screen.getByText('Page 1 of 3')).toBeInTheDocument(),
+        );
+
+        expect(screen.getByRole('button', { name: /Prev/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Next/i })).not.toBeDisabled();
+    });
+
+    it('fetches the next page when the Next button is clicked', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        // Page 1
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: Array.from({ length: 10 }, (_, i) => ({
+                            id: i + 1,
+                            name: `User ${i + 1}`,
+                        })),
+                        meta: { current_page: 1, last_page: 2, total: 11, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        // Page 2
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: [{ id: 11, name: 'User 11' }],
+                        meta: { current_page: 2, last_page: 2, total: 11, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        await waitFor(() =>
+            expect(screen.getByText('Page 1 of 2')).toBeInTheDocument(),
+        );
+
+        await userEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+        await waitFor(() =>
+            expect(screen.getByText('Page 2 of 2')).toBeInTheDocument(),
+        );
+
+        expect(screen.getByText('User 11')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Next/i })).toBeDisabled();
+    });
+
+    it('does not show pagination controls when there is only one page', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: [{ id: 1, name: 'Alice' }],
+                        meta: { current_page: 1, last_page: 1, total: 1, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        await waitFor(() =>
+            expect(screen.getByText('Alice')).toBeInTheDocument(),
+        );
+
+        expect(screen.queryByText(/Page \d+ of \d+/)).not.toBeInTheDocument();
+    });
+
+    it('closes the invite modal when the Close button is clicked', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.get.mockResolvedValueOnce({
+            data: {
+                data: {
+                    users: {
+                        data: [{ id: 1, name: 'Alice' }],
+                        meta: { current_page: 1, last_page: 1, total: 1, per_page: 10 },
+                        links: {},
+                    },
+                },
+            },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Invite a viewer to this game' }),
+        );
+
+        await waitFor(() =>
+            expect(screen.getByText('Alice')).toBeInTheDocument(),
+        );
+
+        await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+        await waitFor(() =>
+            expect(screen.queryByText('Invite a Viewer')).not.toBeInTheDocument(),
+        );
     });
 });

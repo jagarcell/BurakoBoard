@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Role Icons – Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: ui-sans-serif, system-ui, sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50 p-10">
+
+<h1 class="mb-2 text-xl font-bold text-slate-800">Game Role Icons — Preview</h1>
+<p class="mb-10 text-sm text-slate-500">
+    Each row is a role. Each card shows one icon option with its Tailwind classes.
+    The icon that fits best with the existing codebase style (<code>h-4 w-4 fill-current</code> inline SVGs) is marked ★.
+</p>
+
+<!-- ──────────────────────────────────────────────────
+     ROLE: creator
+────────────────────────────────────────────────── -->
+<section class="mb-12">
+    <h2 class="mb-1 text-xs font-semibold uppercase tracking-widest text-amber-600">creator</h2>
+    <p class="mb-4 text-xs text-slate-400">The user who owns / created the game.</p>
+    <div class="flex flex-wrap gap-5">
+
+        <!-- Option A: Crown -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-amber-500">A · Crown ★</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-amber-600 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 19h20v2H2v-2zM3 8l4 5 5-8 5 8 4-5v9H3V8z"/>
+                </svg>
+                Creator
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-amber-600
+            </code>
+        </div>
+
+        <!-- Option B: Star -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-amber-500">B · Star</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-amber-600 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                Creator
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-amber-600
+            </code>
+        </div>
+
+        <!-- Option C: Key -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-amber-500">C · Key</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-amber-600 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12.65 10A6 6 0 1 0 3 15a6 6 0 0 0 5.65-4H17v4h4v-4h-2v-1h-6.35zm-6.15 7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+                </svg>
+                Creator
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-amber-600
+            </code>
+        </div>
+
+        <!-- Option D: Shield -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-amber-500">D · Shield</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-amber-600 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                </svg>
+                Creator
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-amber-600
+            </code>
+        </div>
+
+    </div>
+</section>
+
+<!-- ──────────────────────────────────────────────────
+     ROLE: viewer
+────────────────────────────────────────────────── -->
+<section class="mb-12">
+    <h2 class="mb-1 text-xs font-semibold uppercase tracking-widest text-indigo-600">viewer</h2>
+    <p class="mb-4 text-xs text-slate-400">A confirmed member who can watch but is not the owner.</p>
+    <div class="flex flex-wrap gap-5">
+
+        <!-- Option A: Eye ★ -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-indigo-500">A · Eye ★</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-indigo-600 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                </svg>
+                Viewer
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-indigo-600
+            </code>
+        </div>
+
+        <!-- Option B: Person / User -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-indigo-500">B · Person</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-indigo-600 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                </svg>
+                Viewer
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-indigo-600
+            </code>
+        </div>
+
+        <!-- Option C: Binoculars -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-indigo-500">C · Binoculars</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-indigo-600 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 3H5L3 9v2a4 4 0 0 0 4 4 4 4 0 0 0 4-4V9L9 3zm10 0h-4l-2 6v2a4 4 0 0 0 4 4 4 4 0 0 0 4-4V9l-2-6zM7 18v3h10v-3"/>
+                </svg>
+                Viewer
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-indigo-600
+            </code>
+        </div>
+
+    </div>
+</section>
+
+<!-- ──────────────────────────────────────────────────
+     ROLE: pending_invitee
+────────────────────────────────────────────────── -->
+<section class="mb-12">
+    <h2 class="mb-1 text-xs font-semibold uppercase tracking-widest text-slate-500">pending_invitee</h2>
+    <p class="mb-4 text-xs text-slate-400">Invited but hasn't accepted yet.</p>
+    <div class="flex flex-wrap gap-5">
+
+        <!-- Option A: Clock ★ -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-slate-500">A · Clock ★</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                </svg>
+                Pending
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-slate-500
+            </code>
+        </div>
+
+        <!-- Option B: Hourglass -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-slate-500">B · Hourglass</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 2v6l4 4-4 4v6h12v-6l-4-4 4-4V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5-4-4V4h8v3.5l-4 4z"/>
+                </svg>
+                Pending
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-slate-500
+            </code>
+        </div>
+
+        <!-- Option C: Envelope -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-slate-500">C · Envelope</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
+                </svg>
+                Pending
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-slate-500
+            </code>
+        </div>
+
+        <!-- Option D: Bell -->
+        <div class="flex w-44 flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-5 shadow-sm">
+            <span class="text-[10px] font-semibold text-slate-500">D · Bell</span>
+            <div class="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow">
+                <svg class="h-4 w-4 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6V11c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+                </svg>
+                Pending
+            </div>
+            <code class="text-center text-[9px] leading-snug text-slate-400">
+                h-4 w-4 fill-current<br>text-slate-500
+            </code>
+        </div>
+
+    </div>
+</section>
+
+<!-- ──────────────────────────────────────────────────
+     RECOMMENDED COMBINATION (icon-only badges, no text)
+────────────────────────────────────────────────── -->
+<section class="mb-12">
+    <h2 class="mb-1 text-xs font-semibold uppercase tracking-widest text-slate-700">Recommended set — icon-only pill badges</h2>
+    <p class="mb-4 text-xs text-slate-400">
+        Use these as small coloured pill badges next to each game name in a custom (non-native) dropdown.
+        Hover reveals a tooltip with the role name.
+    </p>
+    <div class="flex flex-wrap items-center gap-4">
+
+        <!-- creator -->
+        <div class="group relative">
+            <span title="creator"
+                  class="flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-amber-600 ring-1 ring-amber-300">
+                <!-- Crown -->
+                <svg class="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 19h20v2H2v-2zM3 8l4 5 5-8 5 8 4-5v9H3V8z"/>
+                </svg>
+            </span>
+            <span class="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                creator
+            </span>
+        </div>
+
+        <!-- viewer -->
+        <div class="group relative">
+            <span title="viewer"
+                  class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 ring-1 ring-indigo-300">
+                <!-- Eye -->
+                <svg class="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                </svg>
+            </span>
+            <span class="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                viewer
+            </span>
+        </div>
+
+        <!-- pending_invitee -->
+        <div class="group relative">
+            <span title="pending_invitee"
+                  class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-300">
+                <!-- Clock -->
+                <svg class="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                </svg>
+            </span>
+            <span class="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                pending invitee
+            </span>
+        </div>
+
+        <p class="text-xs text-slate-500 italic ml-6">← hover each badge to see the role label tooltip</p>
+    </div>
+
+    <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm max-w-sm">
+        <p class="mb-3 text-xs font-semibold text-slate-500">Example game row in a custom dropdown</p>
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
+            <span class="text-sm font-medium text-slate-800">Sunday Night Game</span>
+            <div class="flex shrink-0 items-center gap-2 text-xs text-slate-400">
+                <span>2000 pts</span>
+                <span title="creator"
+                      class="flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-amber-600 ring-1 ring-amber-300">
+                    <svg class="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M2 19h20v2H2v-2zM3 8l4 5 5-8 5 8 4-5v9H3V8z"/>
+                    </svg>
+                </span>
+            </div>
+        </div>
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-2.5 hover:bg-slate-50 cursor-pointer mt-1">
+            <span class="text-sm font-medium text-slate-800">Club Championship</span>
+            <div class="flex shrink-0 items-center gap-2 text-xs text-slate-400">
+                <span>3000 pts</span>
+                <span title="viewer"
+                      class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 ring-1 ring-indigo-300">
+                    <svg class="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                    </svg>
+                </span>
+            </div>
+        </div>
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-2.5 hover:bg-slate-50 cursor-pointer mt-1">
+            <span class="text-sm font-medium text-slate-500 italic">Weekend Invitational</span>
+            <div class="flex shrink-0 items-center gap-2 text-xs text-slate-400">
+                <span>2000 pts</span>
+                <span title="pending invitee"
+                      class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-300">
+                    <svg class="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                    </svg>
+                </span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<hr class="my-10 border-slate-200"/>
+<p class="text-[11px] text-slate-400">
+    All SVG paths use <code>viewBox="0 0 24 24"</code> — consistent with the existing inline-SVG pattern in this project.
+    No icon library dependency required.
+</p>
+
+</body>
+</html>
