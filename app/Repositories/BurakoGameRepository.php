@@ -546,6 +546,50 @@ class BurakoGameRepository
     }
 
     /**
+     * Return a collection of User models for a given set of IDs.
+     *
+     * @param  array<int>  $userIds  IDs of the users to load.
+     * @return \Illuminate\Support\Collection<int, \App\Models\User> Matched users with id, name, and email.
+     * Logic: fetch only the columns needed for mail dispatch; using `whereIn` keeps the query
+     *   to a single round-trip regardless of how many IDs are supplied.
+     */
+    public function getUsersByIds(array $userIds): Collection
+    {
+        return User::query()
+            ->select(['id', 'name', 'email'])
+            ->whereIn('id', $userIds)
+            ->get();
+    }
+
+    /**
+     * Insert pending-invitee pivot rows for multiple users in a single database round-trip.
+     *
+     * @param  int          $gameId   Identifier of the game.
+     * @param  array<int>   $userIds  IDs of the users being invited.
+     * @return void
+     * Logic: build an insert batch with a `pending_invitee` role and current timestamps for every
+     *   supplied user ID. Users already present in the game_user pivot for this game are excluded
+     *   before calling this method (handled at the service layer) to avoid composite-primary-key
+     *   violations.
+     */
+    public function bulkAttachPendingInviteesToGame(int $gameId, array $userIds): void
+    {
+        $now  = now();
+        $rows = array_map(
+            static fn (int $userId): array => [
+                'game_id'    => $gameId,
+                'user_id'    => $userId,
+                'role'       => 'pending_invitee',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            $userIds,
+        );
+
+        DB::table('game_user')->insert($rows);
+    }
+
+    /**
      * Find a seated player in the context of a specific game.
      *
      * @param  int  $gameId    Identifier of the game.
@@ -1078,5 +1122,71 @@ class BurakoGameRepository
     public function deleteGame(int $gameId): void
     {
         Game::query()->where('id', $gameId)->delete();
+    }
+
+    /**
+     * Return the set of user IDs that are already linked to a given game (any role).
+     *
+     * @param  int         $gameId   Identifier of the game.
+     * @param  array<int>  $userIds  Candidate user IDs to check.
+     * @return array<int>  User IDs from the candidate list that already exist in the pivot.
+     * Logic: query the game_user pivot for the given game, restrict to the supplied IDs, and
+     *   return the intersection so the service can exclude already-enrolled users before
+     *   performing a bulk insert — preventing composite-primary-key violations.
+     */
+    public function getExistingGameUserIds(int $gameId, array $userIds): array
+    {
+        return DB::table('game_user')
+            ->where('game_id', $gameId)
+            ->whereIn('user_id', $userIds)
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Upgrade a pending_invitee pivot row to the viewer role.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $userId  Identifier of the user accepting the invitation.
+     * @return bool True when a pending_invitee row was found and updated, false otherwise.
+     * Logic: update the game_user pivot row that matches the (game_id, user_id) pair and
+     *   currently holds the pending_invitee role; returns false when no such row exists so
+     *   the service layer can raise a validation error without an extra existence query.
+     */
+    public function upgradeInvitationToViewer(int $gameId, int $userId): bool
+    {
+        return (bool) DB::table('game_user')
+            ->where('game_id', $gameId)
+            ->where('user_id', $userId)
+            ->where('role', 'pending_invitee')
+            ->update(['role' => 'viewer', 'updated_at' => now()]);
+    }
+
+    /**
+     * Return a single game with the requesting user's role attached.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $userId  Identifier of the authenticated user.
+     * @return \App\Models\Game The game model with a user_role attribute set from the pivot.
+     * Logic: join game_user for the specific (game_id, user_id) pair and surface the role as
+     *   user_role so callers can serialize a GameListItemResource without a separate query.
+     */
+    public function getGameWithUserRole(int $gameId, int $userId): Game
+    {
+        return Game::query()
+            ->join('game_user', 'game_user.game_id', '=', 'games.id')
+            ->where('games.id', $gameId)
+            ->where('game_user.user_id', $userId)
+            ->select([
+                'games.id',
+                'games.name',
+                'games.target_points',
+                'games.status',
+                'games.winning_team_id',
+                'games.current_round_number',
+                'game_user.role as user_role',
+            ])
+            ->firstOrFail();
     }
 }
