@@ -2,6 +2,7 @@ import axios from 'axios';
 import { createPortal } from 'react-dom';
 import { startTransition, useEffect, useRef, useState } from 'react';
 import Checkbox from '@/Components/Checkbox';
+import DangerButton from '@/Components/DangerButton';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -26,6 +27,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [form, setForm] = useState(defaultForm);
     const [errors, setErrors] = useState({});
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -133,7 +135,7 @@ export default function GameCard({ onGameSelect = () => {} }) {
     };
 
     const closeEditModal = () => {
-        if (isSaving) {
+        if (isSaving || isDeleting) {
             return;
         }
 
@@ -258,6 +260,35 @@ export default function GameCard({ onGameSelect = () => {} }) {
             });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleDeleteGame = async () => {
+        if (! window.confirm('Are you sure you want to delete this game? This action cannot be undone.')) {
+            return;
+        }
+
+        setIsDeleting(true);
+        setErrors({});
+
+        try {
+            await axios.delete(`/api/v1/games/${selectedGameId}`);
+
+            startTransition(() => {
+                setGames((currentGames) =>
+                    currentGames.filter((game) => String(game.id) !== selectedGameId),
+                );
+                setSelectedGameId('');
+            });
+
+            setIsEditModalOpen(false);
+            resetForm();
+        } catch {
+            setErrors({
+                general: 'Unable to delete the game right now.',
+            });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -623,18 +654,30 @@ export default function GameCard({ onGameSelect = () => {} }) {
 
                     <InputError message={errors.general} />
 
-                    <div className="flex justify-end gap-3">
-                        <SecondaryButton
-                            disabled={isSaving}
-                            onClick={closeEditModal}
-                            type="button"
-                        >
-                            Cancel
-                        </SecondaryButton>
+                    <div className="flex items-center gap-3">
+                        {selectedGame?.user_role === 'creator' && (selectedGame?.current_round_number ?? 1) === 0 && (
+                            <DangerButton
+                                disabled={isSaving || isDeleting}
+                                onClick={handleDeleteGame}
+                                type="button"
+                            >
+                                {isDeleting ? 'Deleting…' : 'Delete'}
+                            </DangerButton>
+                        )}
 
-                        <PrimaryButton disabled={isSaving} type="submit">
-                            Save
-                        </PrimaryButton>
+                        <div className="ml-auto flex gap-3">
+                            <SecondaryButton
+                                disabled={isSaving || isDeleting}
+                                onClick={closeEditModal}
+                                type="button"
+                            >
+                                Cancel
+                            </SecondaryButton>
+
+                            <PrimaryButton disabled={isSaving || isDeleting} type="submit">
+                                Save
+                            </PrimaryButton>
+                        </div>
                     </div>
                 </form>
             </Modal>
