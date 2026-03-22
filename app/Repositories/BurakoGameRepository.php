@@ -10,6 +10,7 @@ use App\Models\RoundDraft;
 use App\Models\RoundScore;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -40,24 +41,51 @@ class BurakoGameRepository
     }
 
     /**
-     * Return the existing games for dashboard selection.
+     * Return the games linked to a specific user for dashboard selection.
      *
-     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Existing games ordered from newest to oldest.
-     * Logic: fetch a lightweight ordered game list so the dashboard selector can render choices without assembling full score history payloads.
+     * @param  int  $userId  Identifier of the authenticated user.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Games the user has access to, ordered from newest to oldest.
+     * Logic: join the game_user pivot to filter to only the games the given user is enrolled in, and
+     *   surface the user's role for each game as the `user_role` attribute so the dashboard selector
+     *   can render a descriptive role indicator without extra queries.
      */
-    public function getGameList(): Collection
+    public function getGameList(int $userId): Collection
     {
         return Game::query()
+            ->join('game_user', 'game_user.game_id', '=', 'games.id')
+            ->where('game_user.user_id', $userId)
             ->select([
-                'id',
-                'name',
-                'target_points',
-                'status',
-                'winning_team_id',
-                'current_round_number',
+                'games.id',
+                'games.name',
+                'games.target_points',
+                'games.status',
+                'games.winning_team_id',
+                'games.current_round_number',
+                'game_user.role as user_role',
             ])
-            ->orderByDesc('id')
+            ->orderByDesc('games.id')
             ->get();
+    }
+
+    /**
+     * Link a user to a game with a given role in the game_user pivot table.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $userId  Identifier of the user to link.
+     * @param  string  $role  Role assigned to the user: creator, pending_invitee, or viewer.
+     * @return void
+     * Logic: insert a single pivot row with a role and timestamps; DB::table() is used here
+     *   because no model hydration is needed for a straightforward pivot insert.
+     */
+    public function attachUserToGame(int $gameId, int $userId, string $role): void
+    {
+        DB::table('game_user')->insert([
+            'game_id'    => $gameId,
+            'user_id'    => $userId,
+            'role'       => $role,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**
@@ -491,6 +519,33 @@ class BurakoGameRepository
     }
 
     /**
+     * Return a paginated list of users eligible to receive a viewer invite for a game.
+     *
+     * @param  int  $gameId         Identifier of the game for which invites would be sent.
+     * @param  int  $excludeUserId  Identifier of the authenticated user who must not appear in the list.
+     * @param  int  $page           1-based page number requested by the caller.
+     * @param  int  $perPage        Number of records per page.
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<\App\Models\User> Paginated users ordered alphabetically by name.
+     * Logic: exclude the authenticated user and any user that already holds a pending_invitee
+     *   entry on the game_user pivot for this specific game, then paginate the remaining
+     *   users alphabetically so the invite dialog can render an incrementally-loadable list.
+     */
+    public function getInvitableUsersForGame(int $gameId, int $excludeUserId, int $page, int $perPage): LengthAwarePaginator
+    {
+        return User::query()
+            ->select(['users.id', 'users.name'])
+            ->where('users.id', '!=', $excludeUserId)
+            ->whereNotIn('users.id', function ($subquery) use ($gameId): void {
+                $subquery->select('user_id')
+                    ->from('game_user')
+                    ->where('game_id', $gameId)
+                    ->where('role', 'pending_invitee');
+            })
+            ->orderBy('users.name')
+            ->paginate($perPage, ['*'], 'page', $page);
+    }
+
+    /**
      * Find a seated player in the context of a specific game.
      *
      * @param  int  $gameId    Identifier of the game.
@@ -670,14 +725,14 @@ class BurakoGameRepository
     }
 
     /**
-     * Compute seat-based round roles (shuffler, cutter, dealer, first draw) for each played and upcoming round.
+     * Compute seat-based round roles (cutter, dealer, first draw) for each played and upcoming round.
      *
      * @param  array<int, array<string, mixed>>  $teams  Team payload with players that include seat numbers.
      * @param  int  $currentRoundNumber  Last completed round number from the game row.
-     * @param  int|null  $initialShufflerSeatNumber  Seat number selected as the initial shuffler.
+     * @param  int|null  $initialShufflerSeatNumber  Seat number selected as the initial cutter anchor.
      * @return array<int, array<string, mixed>> Round role assignments ordered by round number.
-     * Logic: flatten seated players ordered by seat, locate the initial shuffler index, then rotate
-     * indices by one seat each round so cutter is next seat, dealer is the seat after cutter, and first draw is the seat after dealer.
+     * Logic: flatten seated players ordered by seat, locate the anchor index, then rotate
+     * indices by one seat each round so dealer is the next seat and first draw is the seat after dealer.
      */
     private function buildRoundRoles(array $teams, int $currentRoundNumber, ?int $initialShufflerSeatNumber): array
     {
@@ -704,18 +759,12 @@ class BurakoGameRepository
         $roundRoles = [];
 
         for ($roundOffset = 0; $roundOffset < $roundCount; $roundOffset++) {
-            $shuffler = $seatedPlayers[($initialIndex + $roundOffset) % $totalPlayers];
-            $cutter = $seatedPlayers[($initialIndex + $roundOffset + 1) % $totalPlayers];
-            $dealer = $seatedPlayers[($initialIndex + $roundOffset + 2) % $totalPlayers];
-            $firstDraw = $seatedPlayers[($initialIndex + $roundOffset + 3) % $totalPlayers];
+            $cutter = $seatedPlayers[($initialIndex + $roundOffset) % $totalPlayers];
+            $dealer = $seatedPlayers[($initialIndex + $roundOffset + 1) % $totalPlayers];
+            $firstDraw = $seatedPlayers[($initialIndex + $roundOffset + 2) % $totalPlayers];
 
             $roundRoles[] = [
                 'round_number' => $roundOffset + 1,
-                'shuffler' => [
-                    'player_id' => (int) $shuffler['id'],
-                    'display_name' => $shuffler['display_name'],
-                    'seat_number' => (int) $shuffler['seat_number'],
-                ],
                 'cutter' => [
                     'player_id' => (int) $cutter['id'],
                     'display_name' => $cutter['display_name'],

@@ -2,10 +2,21 @@ import axios from 'axios';
 import { useState } from 'react';
 
 /**
+ * Tailwind colour classes for each round role chip, mirroring PlayerCircle's ROLE_COLORS.
+ *
+ * @type {Record<string, string>}
+ */
+const ROLE_CHIP_COLORS = {
+    Cutter: 'bg-blue-100 text-blue-700 border-blue-200',
+    Dealer: 'bg-amber-100 text-amber-700 border-amber-200',
+    'First Draw': 'bg-green-100 text-green-700 border-green-200',
+};
+
+/**
  * PlayerOrderCard
  *
  * Standalone card section that displays the round player order assignment panel.
- * For round 1 it allows picking the initial shuffler; for subsequent rounds it
+ * For round 1 it allows picking the initial cutter; for subsequent rounds it
  * shows the assigned roles in read-only chip form.
  *
  * @param {Object}   props
@@ -13,23 +24,23 @@ import { useState } from 'react';
  * @param {Array}    props.teams          - Array of team objects (each with a `players` array).
  * @param {Object}   props.gameSummary    - Full game summary including round_roles and game meta.
  * @param {Function} props.onTeamsChange  - Callback invoked with (newTeams, newSummary) after
- *                                          the shuffler is updated via the API.
+ *                                          the cutter is updated via the API.
  * @return {JSX.Element|null} The card section, or null when not applicable.
  *
- * Logic: Derives all display values (active round, shuffler candidates, current roles) from the
+ * Logic: Derives all display values (active round, cutter candidates, current roles) from the
  * received props without managing external state. Renders a card section matching the visual
  * style of the other board cards. Returns null when the game is not in progress, when the two
  * teams have different player counts, or when there is no active round to display.
  */
 export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary = null, onTeamsChange }) {
-    const [shufflerError, setShufflerError] = useState('');
+    const [cutterError, setCutterError] = useState('');
     const [collapsed, setCollapsed] = useState(false);
 
     const roundRoles = gameSummary?.round_roles ?? [];
     const lastCompletedRoundNumber = Number(
         gameSummary?.game?.current_round_number ?? selectedGame?.current_round_number ?? 0,
     );
-    const initialShufflerSeatNumber = gameSummary?.game?.initial_shuffler_seat_number ?? null;
+    const initialCutterSeatNumber = gameSummary?.game?.initial_shuffler_seat_number ?? null;
     const isFirstRound = lastCompletedRoundNumber === 0;
     const activeRoundNumber = selectedGame?.status === 'in_progress'
         ? lastCompletedRoundNumber + 1
@@ -44,10 +55,10 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
         .flatMap((team) => team.players)
         .sort((a, b) => a.id - b.id);
 
-    const shufflerCandidates = allSeatedPlayers.length > 0 ? allSeatedPlayers : allPlayers;
+    const cutterCandidates = allSeatedPlayers.length > 0 ? allSeatedPlayers : allPlayers;
 
-    const initialShufflerPlayer =
-        allSeatedPlayers.find((player) => player.seat_number === initialShufflerSeatNumber) ?? null;
+    const initialCutterPlayer =
+        allSeatedPlayers.find((player) => player.seat_number === initialCutterSeatNumber) ?? null;
 
     const currentRoundRoles =
         roundRoles.find((roundRole) => Number(roundRole.round_number) === activeRoundNumber) ?? null;
@@ -76,7 +87,6 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
             return null;
         }
 
-        if (currentRoundRoles.shuffler?.player_id === playerId) return 'Shuffler';
         if (currentRoundRoles.cutter?.player_id === playerId) return 'Cutter';
         if (currentRoundRoles.dealer?.player_id === playerId) return 'Dealer';
         if (currentRoundRoles.first_draw?.player_id === playerId) return 'First Draw';
@@ -85,16 +95,16 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
     };
 
     /**
-     * Sends a PUT request to set the initial shuffler for the game.
+     * Sends a PUT request to set the initial cutter for the game.
      *
-     * @param {number} playerId - The ID of the player to designate as the initial shuffler.
+     * @param {number} playerId - The ID of the player to designate as the initial cutter.
      * @return {Promise<void>}
      *
-     * Logic: Calls the shuffler API endpoint, then propagates the updated game summary to the
+     * Logic: Calls the cutter API endpoint, then propagates the updated game summary to the
      * parent via onTeamsChange. On failure, extracts the first API error message and stores it
      * in local state for display.
      */
-    const handleSetInitialShuffler = async (playerId) => {
+    const handleSetInitialCutter = async (playerId) => {
         try {
             const response = await axios.put(`/api/v1/games/${selectedGame.id}/shuffler`, {
                 player_id: playerId,
@@ -103,11 +113,11 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
             const summary = response.data?.data?.game ?? {};
             const newTeams = summary.teams ?? [];
             onTeamsChange?.(newTeams, summary);
-            setShufflerError('');
+            setCutterError('');
         } catch (error) {
             const apiErrors = error.response?.data?.data?.errors ?? {};
             const firstApiError = Object.values(apiErrors).flat()[0];
-            setShufflerError(firstApiError || 'Unable to set the initial shuffler right now.');
+            setCutterError(firstApiError || 'Unable to set the initial cutter right now.');
         }
     };
 
@@ -127,11 +137,11 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
                             Player Order
                         </p>
                         <h3 className="mt-2 text-2xl font-semibold text-slate-900">
-                            {isFirstRound ? 'Round 1 shuffler' : `Round ${activeRoundNumber} player order`}
+                            {isFirstRound ? 'Round 1 cutter' : `Round ${activeRoundNumber} player order`}
                         </h3>
                         <p className="mt-1 text-sm text-slate-600">
                             {isFirstRound
-                                ? 'Choose who shuffles in round 1. Cutter, dealer, and first draw are assigned to the next sequential seats.'
+                                ? 'Choose who cuts in round 1. Dealer and first draw are assigned to the next sequential seats.'
                                 : 'These are the players roles for this round.'}
                         </p>
                     </div>
@@ -159,24 +169,26 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
             </div>
 
             {!collapsed && (<div className="px-6 py-5">
-                {shufflerCandidates.length > 0 ? (
+                {cutterCandidates.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
-                        {shufflerCandidates.map((player) => {
+                        {cutterCandidates.map((player) => {
                             const currentRole = getCurrentRoundRoleForPlayer(player.id);
                             const isHighlightedPlayer = isFirstRound
-                                ? currentRole === 'Shuffler' || initialShufflerPlayer?.id === player.id
-                                : currentRole === 'Shuffler';
+                                ? currentRole === 'Cutter' || initialCutterPlayer?.id === player.id
+                                : currentRole === 'Cutter';
 
                             return (
                                 <button
                                     key={player.id}
                                     className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                                        isHighlightedPlayer
-                                            ? 'border-indigo-300 bg-indigo-600 text-white'
-                                            : 'border-indigo-200 bg-white text-indigo-700'
-                                    } ${isFirstRound ? 'hover:border-indigo-300 hover:bg-indigo-100' : 'cursor-default opacity-80'}`}
+                                        currentRole
+                                            ? ROLE_CHIP_COLORS[currentRole] ?? 'border-slate-200 bg-white text-slate-700'
+                                            : isHighlightedPlayer
+                                                ? ROLE_CHIP_COLORS.Cutter
+                                                : 'border-indigo-200 bg-white text-indigo-700'
+                                    } ${isFirstRound ? 'hover:border-blue-300 hover:bg-blue-200' : 'cursor-default opacity-80'}`}
                                     disabled={! isFirstRound}
-                                    onClick={isFirstRound ? () => handleSetInitialShuffler(player.id) : undefined}
+                                    onClick={isFirstRound ? () => handleSetInitialCutter(player.id) : undefined}
                                     type="button"
                                 >
                                     {player.seat_number != null
@@ -189,12 +201,12 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
                     </div>
                 ) : (
                     <p className="text-sm text-indigo-700">
-                        Add at least one player to assign the initial shuffler.
+                        Add at least one player to assign the initial cutter.
                     </p>
                 )}
 
-                {isFirstRound && shufflerError ? (
-                    <p className="mt-2 text-sm text-red-600">{shufflerError}</p>
+                {isFirstRound && cutterError ? (
+                    <p className="mt-2 text-sm text-red-600">{cutterError}</p>
                 ) : null}
             </div>)}
         </section>

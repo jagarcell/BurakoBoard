@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -88,5 +89,20 @@ class User extends Authenticatable
     public function voiceAliases(): HasMany
     {
         return $this->hasMany(UserVoiceAlias::class);
+    }
+
+    /**
+     * Get the games associated with this user.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<\App\Models\Game, $this> Games the user is linked to with their role.
+     * Logic: exposes the many-to-many link via the game_user pivot table; the role column
+     *   (creator | pending_invitee | viewer) is always eager-loaded on the pivot so callers
+     *   can determine the user's relationship to each game without extra queries.
+     */
+    public function games(): BelongsToMany
+    {
+        return $this->belongsToMany(Game::class, 'game_user')
+            ->withPivot('role')
+            ->withTimestamps();
     }
 }

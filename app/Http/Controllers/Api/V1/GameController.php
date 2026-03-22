@@ -25,14 +25,15 @@ class GameController extends Controller
     }
 
     /**
-     * Return the existing games available on the dashboard.
+     * Return the authenticated user's games for the dashboard selector.
      *
-     * @return \Illuminate\Http\JsonResponse Game list response.
-     * Logic: delegate list retrieval to the service and serialize each game through a dedicated API resource for selector consumption.
+     * @return \Illuminate\Http\JsonResponse Game list response scoped to the current user.
+     * Logic: pass the authenticated user's id to the service so only games where the user
+     *   has a game_user pivot entry are returned, each carrying the user's role.
      */
     public function index(): JsonResponse
     {
-        $games = $this->service->listGames();
+        $games = $this->service->listGames((int) auth()->id());
 
         return response()->json([
             'games' => GameListItemResource::collection($games),
@@ -40,15 +41,16 @@ class GameController extends Controller
     }
 
     /**
-     * Create a new Burako game.
+     * Create a new Burako game and enrol the authenticated user as creator.
      *
      * @param  \App\Http\Requests\Api\V1\StoreGameRequest  $request  Validated request for game creation.
      * @return \Illuminate\Http\JsonResponse Created game summary response.
-     * Logic: forward validated input to the service and return the summary through the API response envelope.
+     * Logic: forward validated input and the authenticated user's id to the service so the
+     *   creator is added to the game_user pivot immediately after creation.
      */
     public function store(StoreGameRequest $request): JsonResponse
     {
-        $summary = $this->service->createGame($request->validated());
+        $summary = $this->service->createGame($request->validated(), (int) auth()->id());
 
         return response()->json([
             'game' => new GameSummaryResource($summary),
@@ -105,12 +107,12 @@ class GameController extends Controller
     }
 
     /**
-     * Set the initial shuffler player before round 1 starts.
+     * Set the initial cutter player before round 1 starts.
      *
      * @param  \App\Http\Requests\Api\V1\SetInitialShufflerRequest  $request  Validated request with selected player id.
      * @param  int  $gameId  Identifier of the game.
      * @return \Illuminate\Http\JsonResponse Updated game summary response.
-     * Logic: delegate shuffler selection rules to the service and return the refreshed summary payload.
+     * Logic: delegate cutter selection rules to the service and return the refreshed summary payload.
      */
     public function setInitialShuffler(SetInitialShufflerRequest $request, int $gameId): JsonResponse
     {

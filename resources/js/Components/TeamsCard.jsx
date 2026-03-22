@@ -405,10 +405,6 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
             return null;
         }
 
-        if (currentRoundRoles.shuffler?.player_id === playerId) {
-            return 'Shuffler';
-        }
-
         if (currentRoundRoles.cutter?.player_id === playerId) {
             return 'Cutter';
         }

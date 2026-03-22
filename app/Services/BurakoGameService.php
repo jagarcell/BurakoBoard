@@ -6,6 +6,7 @@ use App\Models\Game;
 use App\Models\Player;
 use App\Models\RoundDraft;
 use App\Repositories\BurakoGameRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -24,24 +25,28 @@ class BurakoGameService
     }
 
     /**
-     * Return the existing games for dashboard selection.
+     * Return the games linked to a specific user for dashboard selection.
      *
-     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Existing games ordered for selector display.
-     * Logic: delegate the lightweight game listing query to the repository so the dashboard can populate its selector without loading full summaries.
+     * @param  int  $userId  Identifier of the authenticated user requesting the list.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Games the user has access to, ordered for selector display.
+     * Logic: delegate the user-scoped game listing query to the repository so the dashboard
+     *   can populate its selector with only the games the current user is enrolled in.
      */
-    public function listGames(): Collection
+    public function listGames(int $userId): Collection
     {
-        return $this->repository->getGameList();
+        return $this->repository->getGameList($userId);
     }
 
     /**
-     * Create a new game in progress.
+     * Create a new game in progress and enrol the creator in the game_user pivot.
      *
      * @param  array<string, mixed>  $payload  Validated game data with name and target points.
+     * @param  int  $userId  Identifier of the authenticated user creating the game.
      * @return array<string, mixed> Game summary payload.
-     * Logic: persist a game with default status and round counters, then return a normalized summary payload.
+     * Logic: persist the game record, attach the creating user with the 'creator' role so the
+     *   game appears in their filtered dashboard list, then return the full summary payload.
      */
-    public function createGame(array $payload): array
+    public function createGame(array $payload, int $userId): array
     {
         $game = $this->repository->createGame([
             'name' => $payload['name'],
@@ -51,6 +56,8 @@ class BurakoGameService
             'current_round_number' => 0,
             'initial_shuffler_seat_number' => null,
         ]);
+
+        $this->repository->attachUserToGame($game->id, $userId, 'creator');
 
         return $this->repository->getGameSummary($game->id);
     }
@@ -80,6 +87,22 @@ class BurakoGameService
     public function listUsers(): Collection
     {
         return $this->repository->getUserList();
+    }
+
+    /**
+     * Return a paginated list of users eligible to receive a viewer invite for a game.
+     *
+     * @param  int  $gameId         Identifier of the game for which invites would be sent.
+     * @param  int  $excludeUserId  Identifier of the current authenticated user to exclude from results.
+     * @param  int  $page           1-based page number requested by the caller.
+     * @param  int  $perPage        Number of users per page; defaults to 10.
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<\App\Models\User> Paginated invitable users.
+     * Logic: delegate to the repository so the invite dialog has a filtered, paginated user source
+     *   without the service layer containing any query logic.
+     */
+    public function listInvitableUsers(int $gameId, int $excludeUserId, int $page, int $perPage = 10): LengthAwarePaginator
+    {
+        return $this->repository->getInvitableUsersForGame($gameId, $excludeUserId, $page, $perPage);
     }
 
     /**
@@ -290,13 +313,13 @@ class BurakoGameService
     }
 
     /**
-     * Set the initial shuffler by selecting one seated player in the game.
+     * Set the initial cutter by selecting one seated player in the game.
      *
      * @param  int  $gameId  Identifier of the game.
-     * @param  int  $playerId  Identifier of the selected shuffler player.
+     * @param  int  $playerId  Identifier of the selected cutter player.
      * @return array<string, mixed> Updated game summary payload.
      * Logic: enforce in-progress and pre-round constraints, validate the selected player is seated
-     * in the game, persist that player's seat as the initial shuffler reference, then return summary.
+     * in the game, persist that player's seat as the initial cutter anchor, then return summary.
      */
     public function setInitialShuffler(int $gameId, int $playerId): array
     {
@@ -304,13 +327,13 @@ class BurakoGameService
 
         if ($game->status !== 'in_progress') {
             throw ValidationException::withMessages([
-                'game' => 'Cannot set shuffler for a finished game.',
+                'game' => 'Cannot set cutter for a finished game.',
             ]);
         }
 
         if ((int) $game->current_round_number > 0) {
             throw ValidationException::withMessages([
-                'game' => 'Initial shuffler can only be set before recording the first round.',
+                'game' => 'Initial cutter can only be set before recording the first round.',
             ]);
         }
 

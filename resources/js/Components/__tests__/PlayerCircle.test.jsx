@@ -11,10 +11,9 @@ const players = [
 
 const roundRoles = {
     round_number: 1,
-    shuffler: { player_id: 1, display_name: 'Alice', seat_number: 1 },
-    cutter: { player_id: 2, display_name: 'Bob', seat_number: 2 },
-    dealer: { player_id: 3, display_name: 'Charlie', seat_number: 3 },
-    first_draw: { player_id: 4, display_name: 'Diana', seat_number: 4 },
+    cutter: { player_id: 1, display_name: 'Alice', seat_number: 1 },
+    dealer: { player_id: 2, display_name: 'Bob', seat_number: 2 },
+    first_draw: { player_id: 3, display_name: 'Charlie', seat_number: 3 },
 };
 
 describe('PlayerCircle', () => {
@@ -39,7 +38,6 @@ describe('PlayerCircle', () => {
     it('shows role badges for players with assigned roles', () => {
         render(<PlayerCircle players={players} roundNumber={1} roundRoles={roundRoles} />);
 
-        expect(screen.getAllByText('Shuffler').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('Cutter').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('Dealer').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('First Draw').length).toBeGreaterThanOrEqual(1);
@@ -63,17 +61,15 @@ describe('PlayerCircle', () => {
     it('shows no role badge for players without a role assignment', () => {
         const partialRoles = {
             round_number: 1,
-            shuffler: { player_id: 1, display_name: 'Alice', seat_number: 1 },
-            cutter: null,
+            cutter: { player_id: 1, display_name: 'Alice', seat_number: 1 },
             dealer: null,
             first_draw: null,
         };
         render(<PlayerCircle players={players} roundNumber={1} roundRoles={partialRoles} />);
 
-        // Only Alice (player 1) is the Shuffler — exactly one badge
-        expect(screen.getAllByText('Shuffler').length).toBe(1);
-        // Cutter / Dealer / First Draw are unassigned — no badges for them
-        expect(screen.queryByText('Cutter')).not.toBeInTheDocument();
+        // Only Alice (player 1) is the Cutter — exactly one badge
+        expect(screen.getAllByText('Cutter').length).toBe(1);
+        // Dealer / First Draw are unassigned — no badges for them
         expect(screen.queryByText('Dealer')).not.toBeInTheDocument();
         expect(screen.queryByText('First Draw')).not.toBeInTheDocument();
     });
@@ -112,7 +108,7 @@ describe('PlayerCircle', () => {
 
         expect(screen.getByText('Alice')).toBeInTheDocument();
         // No role badges when roundRoles is null
-        expect(screen.queryByText('Shuffler')).not.toBeInTheDocument();
+        expect(screen.queryByText('Cutter')).not.toBeInTheDocument();
     });
 
     it('applies open animation class when isOpen is true', () => {

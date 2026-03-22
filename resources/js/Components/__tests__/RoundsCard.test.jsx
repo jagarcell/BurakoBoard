@@ -1421,10 +1421,9 @@ describe('RoundsCard', () => {
         const roundRoles = [
             {
                 round_number: 1,
-                shuffler: { player_id: 1, display_name: 'Alice', seat_number: 1 },
-                cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                dealer: { player_id: 3, display_name: 'Carlos', seat_number: 3 },
-                first_draw: { player_id: 4, display_name: 'Diana', seat_number: 4 },
+                cutter: { player_id: 1, display_name: 'Alice', seat_number: 1 },
+                dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                first_draw: { player_id: 3, display_name: 'Carlos', seat_number: 3 },
             },
         ];
 
@@ -1503,7 +1502,6 @@ describe('RoundsCard', () => {
                 await screen.findByRole('button', { name: 'Show seating circle for round 1' }),
             );
 
-            expect(screen.getByText('Shuffler')).toBeInTheDocument();
             expect(screen.getByText('Cutter')).toBeInTheDocument();
             expect(screen.getByText('Dealer')).toBeInTheDocument();
             expect(screen.getByText('First Draw')).toBeInTheDocument();
@@ -1550,7 +1548,7 @@ describe('RoundsCard', () => {
             // Players should appear
             expect(screen.getByText('Alice')).toBeInTheDocument();
             // But no role badges
-            expect(screen.queryByText('Shuffler')).not.toBeInTheDocument();
+            expect(screen.queryByText('Cutter')).not.toBeInTheDocument();
         });
 
         describe('current round (scoring form)', () => {
@@ -1558,10 +1556,9 @@ describe('RoundsCard', () => {
                 ...roundRoles,
                 {
                     round_number: 2,
-                    shuffler: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
-                    cutter: { player_id: 3, display_name: 'Carlos', seat_number: 3 },
-                    dealer: { player_id: 4, display_name: 'Diana', seat_number: 4 },
-                    first_draw: { player_id: 1, display_name: 'Alice', seat_number: 1 },
+                    cutter: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                    dealer: { player_id: 3, display_name: 'Carlos', seat_number: 3 },
+                    first_draw: { player_id: 4, display_name: 'Diana', seat_number: 4 },
                 },
             ];
 
@@ -1639,7 +1636,6 @@ describe('RoundsCard', () => {
                     await screen.findByRole('button', { name: 'Show seating circle for round 2' }),
                 );
 
-                expect(screen.getByText('Shuffler')).toBeInTheDocument();
                 expect(screen.getByText('Cutter')).toBeInTheDocument();
                 expect(screen.getByText('Dealer')).toBeInTheDocument();
                 expect(screen.getByText('First Draw')).toBeInTheDocument();

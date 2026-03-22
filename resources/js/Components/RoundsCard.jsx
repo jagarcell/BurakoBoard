@@ -10,7 +10,6 @@ import useVoiceCommands from '@/hooks/useVoiceCommands';
 
 /** Human-readable labels for each round role key, used in the player order reference strip. */
 const PLAYER_ROLE_LABEL_MAP = {
-    shuffler: 'Shuffler',
     cutter: 'Cutter',
     dealer: 'Dealer',
     first_draw: 'First Draw',
