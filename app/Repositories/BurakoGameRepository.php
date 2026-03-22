@@ -1034,4 +1034,49 @@ class BurakoGameRepository
                 ->update(['seat_number' => $seatB]);
         });
     }
+
+    /**
+     * Determine whether a game has any recorded rounds.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return bool True when at least one round row is linked to this game.
+     * Logic: perform an existence check on the rounds table filtered by game_id;
+     *   used to guard the delete operation so games with history are never removed.
+     */
+    public function gameHasRounds(int $gameId): bool
+    {
+        return Round::query()->where('game_id', $gameId)->exists();
+    }
+
+    /**
+     * Check whether a user holds the creator role for a given game.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $userId  Identifier of the user.
+     * @return bool True when the game_user pivot has a creator row for this pair.
+     * Logic: query the game_user pivot for the exact (game_id, user_id, role=creator) tuple
+     *   without hydrating a model, since only a boolean result is needed.
+     */
+    public function isGameCreator(int $gameId, int $userId): bool
+    {
+        return DB::table('game_user')
+            ->where('game_id', $gameId)
+            ->where('user_id', $userId)
+            ->where('role', 'creator')
+            ->exists();
+    }
+
+    /**
+     * Permanently remove a game record and let the database cascade to all related rows.
+     *
+     * @param  int  $gameId  Identifier of the game to delete.
+     * @return void
+     * Logic: issue a single delete on the games table; all dependent tables (rounds, round_scores,
+     *   game_team, game_user, game_player_seat, round_drafts) are set up with cascadeOnDelete foreign
+     *   keys so the database handles cleanup automatically.
+     */
+    public function deleteGame(int $gameId): void
+    {
+        Game::query()->where('id', $gameId)->delete();
+    }
 }

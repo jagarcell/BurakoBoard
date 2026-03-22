@@ -69,6 +69,7 @@ const gamesWithRoles = [
 describe('GameCard', () => {
     beforeEach(() => {
         localStorage.clear();
+        vi.clearAllMocks();
     });
 
     it('shows the Select a game placeholder and no auto-selection on load', async () => {
@@ -886,5 +887,159 @@ describe('GameCard', () => {
         await waitFor(() =>
             expect(screen.queryByText('Invite a Viewer')).not.toBeInTheDocument(),
         );
+    });
+
+    it('shows the Delete button in the edit modal for a creator game with no recorded rounds', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+        expect(screen.getByText('Edit game')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    });
+
+    it('does not show the Delete button in the edit modal for a viewer game', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Their Game (2000 pts)' }));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+        expect(screen.getByText('Edit game')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    });
+
+    it('does not show the Delete button in the edit modal for a creator game with recorded rounds', async () => {
+        const creatorGameWithRounds = [
+            {
+                id: 20,
+                name: 'Ongoing Game',
+                target_points: 2000,
+                status: 'in_progress',
+                winning_team_id: null,
+                current_round_number: 3,
+                user_role: 'creator',
+            },
+        ];
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: creatorGameWithRounds } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Ongoing Game (2000 pts)' }));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+        expect(screen.getByText('Edit game')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    });
+
+    it('deletes the game, removes it from the list, and resets the selector on confirmation', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.delete.mockResolvedValueOnce({
+            data: { status: 'success', data: { game_id: 10 } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        await waitFor(() =>
+            expect(axios.delete).toHaveBeenCalledWith('/api/v1/games/10'),
+        );
+
+        await waitFor(() =>
+            expect(screen.queryByText('Edit game')).not.toBeInTheDocument(),
+        );
+
+        expect(trigger).toHaveTextContent('Select a game');
+
+        await userEvent.click(trigger);
+        expect(screen.queryByRole('option', { name: 'My Game (2000 pts)' })).not.toBeInTheDocument();
+
+        vi.restoreAllMocks();
+    });
+
+    it('shows a general error when the delete request fails', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.delete.mockRejectedValueOnce(new Error('Server error'));
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        await waitFor(() =>
+            expect(screen.getByText('Unable to delete the game right now.')).toBeInTheDocument(),
+        );
+
+        expect(screen.getByText('Edit game')).toBeInTheDocument();
+
+        vi.restoreAllMocks();
+    });
+
+    it('does not delete the game when the confirmation dialog is dismissed', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        expect(axios.delete).not.toHaveBeenCalled();
+        expect(screen.getByText('Edit game')).toBeInTheDocument();
+
+        vi.restoreAllMocks();
     });
 });

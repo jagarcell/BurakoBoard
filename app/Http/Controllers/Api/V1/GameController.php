@@ -122,4 +122,23 @@ class GameController extends Controller
             'game' => new GameSummaryResource($summary),
         ]);
     }
+
+    /**
+     * Permanently delete a game that has no recorded rounds.
+     *
+     * @param  int  $gameId  Identifier of the game to delete.
+     * @return \Illuminate\Http\JsonResponse 200 response confirming the deletion.
+     * Logic: delegate ownership and round-count validation to the service, which aborts with
+     *   403 if the caller is not the creator and throws a validation exception if rounds exist;
+     *   on success return a 200 envelope with the deleted game id for client-side list removal.
+     */
+    public function destroy(int $gameId): JsonResponse
+    {
+        $this->service->deleteGame($gameId, (int) auth()->id());
+
+        return response()->json([
+            'message' => 'Game deleted successfully.',
+            'game_id' => $gameId,
+        ]);
+    }
 }

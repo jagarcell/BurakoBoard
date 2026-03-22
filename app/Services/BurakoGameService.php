@@ -547,6 +547,36 @@ class BurakoGameService
     }
 
     /**
+     * Delete a game that has no recorded rounds, enforcing creator-only access.
+     *
+     * @param  int  $gameId  Identifier of the game to delete.
+     * @param  int  $userId  Identifier of the authenticated user requesting the deletion.
+     * @return void
+     * Logic:
+     *   1. Resolve the game or fail with 404.
+     *   2. Verify the requesting user is the creator via the game_user pivot; abort 403 if not.
+     *   3. Guard against deletion when rounds have already been recorded; throw a validation
+     *      exception so the HTTP layer converts it to a 422 with a descriptive message.
+     *   4. Delegate the permanent removal to the repository, relying on DB cascade for related rows.
+     */
+    public function deleteGame(int $gameId, int $userId): void
+    {
+        $this->repository->findGameOrFail($gameId);
+
+        if (! $this->repository->isGameCreator($gameId, $userId)) {
+            abort(403, 'Only the game creator can delete this game.');
+        }
+
+        if ($this->repository->gameHasRounds($gameId)) {
+            throw ValidationException::withMessages([
+                'game' => ['This game cannot be deleted because it already has recorded rounds.'],
+            ]);
+        }
+
+        $this->repository->deleteGame($gameId);
+    }
+
+    /**
      * Resolve the winner based on target points and highest current score.
      *
      * @param  \Illuminate\Support\Collection<int, object>  $teams  Score rows updated after the round (stdClass with id, name, current_score).
