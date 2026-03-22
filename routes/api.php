@@ -39,6 +39,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/games', [GameController::class, 'index']);
         Route::post('/games', [GameController::class, 'store']);
+        Route::delete('/games/{gameId}', [GameController::class, 'destroy']);
 
         Route::get('/games/{gameId}/invitable-users', [UserController::class, 'indexInvitable']);
 
