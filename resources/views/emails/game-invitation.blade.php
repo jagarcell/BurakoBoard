@@ -129,7 +129,7 @@
             </div>
 
             <div class="cta-wrapper">
-                <a class="cta-button" href="{{ config('app.url') }}/dashboard?game={{ $game->id }}">
+                <a class="cta-button" href="{{ config('app.url') }}/login?email={{ rawurlencode($invitee->email) }}&game={{ $game->id }}">
                     Open BurakoBoard
                 </a>
             </div>

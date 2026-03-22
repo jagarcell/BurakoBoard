@@ -8,9 +8,9 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 
-export default function Login({ status, error, canResetPassword }) {
+export default function Login({ status, error, canResetPassword, email: prefillEmail = '' }) {
     const { data, setData, post, processing, errors, reset } = useForm({
-        email: '',
+        email: prefillEmail,
         password: '',
         remember: false,
     });
@@ -50,7 +50,7 @@ export default function Login({ status, error, canResetPassword }) {
                         value={data.email}
                         className="mt-1 block w-full"
                         autoComplete="username"
-                        isFocused={true}
+                        isFocused={!prefillEmail}
                         onChange={(e) => setData('email', e.target.value)}
                     />
 
@@ -67,6 +67,7 @@ export default function Login({ status, error, canResetPassword }) {
                         value={data.password}
                         className="mt-1 block w-full"
                         autoComplete="current-password"
+                        isFocused={!!prefillEmail}
                         onChange={(e) => setData('password', e.target.value)}
                     />
 
