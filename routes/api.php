@@ -42,6 +42,8 @@ Route::prefix('v1')->group(function () {
         Route::delete('/games/{gameId}', [GameController::class, 'destroy']);
 
         Route::get('/games/{gameId}/invitable-users', [UserController::class, 'indexInvitable']);
+        Route::post('/games/{gameId}/invitations', [GameController::class, 'storeInvitations']);
+        Route::put('/games/{gameId}/invitation', [GameController::class, 'acceptInvitation']);
 
         Route::get('/user', function (Request $request) {
             return [
