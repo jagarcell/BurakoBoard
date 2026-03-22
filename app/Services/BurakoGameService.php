@@ -6,6 +6,7 @@ use App\Models\Game;
 use App\Models\Player;
 use App\Models\RoundDraft;
 use App\Repositories\BurakoGameRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -86,6 +87,22 @@ class BurakoGameService
     public function listUsers(): Collection
     {
         return $this->repository->getUserList();
+    }
+
+    /**
+     * Return a paginated list of users eligible to receive a viewer invite for a game.
+     *
+     * @param  int  $gameId         Identifier of the game for which invites would be sent.
+     * @param  int  $excludeUserId  Identifier of the current authenticated user to exclude from results.
+     * @param  int  $page           1-based page number requested by the caller.
+     * @param  int  $perPage        Number of users per page; defaults to 10.
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<\App\Models\User> Paginated invitable users.
+     * Logic: delegate to the repository so the invite dialog has a filtered, paginated user source
+     *   without the service layer containing any query logic.
+     */
+    public function listInvitableUsers(int $gameId, int $excludeUserId, int $page, int $perPage = 10): LengthAwarePaginator
+    {
+        return $this->repository->getInvitableUsersForGame($gameId, $excludeUserId, $page, $perPage);
     }
 
     /**

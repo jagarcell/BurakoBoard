@@ -10,6 +10,7 @@ use App\Models\RoundDraft;
 use App\Models\RoundScore;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -515,6 +516,33 @@ class BurakoGameRepository
             ->select(['id', 'name'])
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * Return a paginated list of users eligible to receive a viewer invite for a game.
+     *
+     * @param  int  $gameId         Identifier of the game for which invites would be sent.
+     * @param  int  $excludeUserId  Identifier of the authenticated user who must not appear in the list.
+     * @param  int  $page           1-based page number requested by the caller.
+     * @param  int  $perPage        Number of records per page.
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<\App\Models\User> Paginated users ordered alphabetically by name.
+     * Logic: exclude the authenticated user and any user that already holds a pending_invitee
+     *   entry on the game_user pivot for this specific game, then paginate the remaining
+     *   users alphabetically so the invite dialog can render an incrementally-loadable list.
+     */
+    public function getInvitableUsersForGame(int $gameId, int $excludeUserId, int $page, int $perPage): LengthAwarePaginator
+    {
+        return User::query()
+            ->select(['users.id', 'users.name'])
+            ->where('users.id', '!=', $excludeUserId)
+            ->whereNotIn('users.id', function ($subquery) use ($gameId): void {
+                $subquery->select('user_id')
+                    ->from('game_user')
+                    ->where('game_id', $gameId)
+                    ->where('role', 'pending_invitee');
+            })
+            ->orderBy('users.name')
+            ->paginate($perPage, ['*'], 'page', $page);
     }
 
     /**

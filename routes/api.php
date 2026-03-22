@@ -40,6 +40,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/games', [GameController::class, 'index']);
         Route::post('/games', [GameController::class, 'store']);
 
+        Route::get('/games/{gameId}/invitable-users', [UserController::class, 'indexInvitable']);
+
         Route::get('/user', function (Request $request) {
             return [
                 'user' => $request->user(),
