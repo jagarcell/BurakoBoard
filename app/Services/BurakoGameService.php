@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\GameInvitationSent;
 use App\Mail\GameInvitationMail;
 use App\Models\Game;
 use App\Models\Player;
@@ -613,7 +614,9 @@ class BurakoGameService
      *   4. Bulk-insert `pending_invitee` rows in one query.
      *   5. Dispatch one GameInvitationMail per invitee; each mail carries the game, invitee,
      *      and inviter context needed to render the Blade email template.
-     *   6. Return the count of new invitations created so the controller can include it in the response.
+     *   6. Broadcast GameInvitationSent on each invitee's private channel so the frontend
+     *      notification bell updates in real time without a page reload.
+     *   7. Return the count of new invitations created so the controller can include it in the response.
      */
     public function sendInvitations(int $gameId, array $userIds, User $inviter): int
     {
@@ -632,6 +635,12 @@ class BurakoGameService
 
         foreach ($invitees as $invitee) {
             Mail::to($invitee->email)->send(new GameInvitationMail($game, $invitee, $inviter));
+            broadcast(new GameInvitationSent(
+                inviteeId:   $invitee->id,
+                gameId:      $game->id,
+                gameName:    $game->name,
+                inviterName: $inviter->name,
+            ))->toOthers();
         }
 
         return count($newUserIds);
