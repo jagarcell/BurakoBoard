@@ -1,11 +1,13 @@
 import axios from 'axios';
 import { createPortal } from 'react-dom';
 import { startTransition, useEffect, useRef, useState } from 'react';
+import { usePage } from '@inertiajs/react';
 import Checkbox from '@/Components/Checkbox';
 import DangerButton from '@/Components/DangerButton';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
+import NotificationBell from '@/Components/NotificationBell';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import TextInput from '@/Components/TextInput';
@@ -18,6 +20,7 @@ const defaultForm = {
 const STORAGE_KEY = 'burako_selected_game_id';
 
 export default function GameCard({ onGameSelect = () => {}, preselectedGameId = null }) {
+    const { auth: { user }, hasPendingInvitations } = usePage().props;
     const [games, setGames] = useState([]);
     const [selectedGameId, setSelectedGameId] = useState(
         () => localStorage.getItem(STORAGE_KEY) ?? '',
@@ -45,6 +48,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     const [inviteSendSuccess, setInviteSendSuccess] = useState('');
 
     const [isAcceptingInvite, setIsAcceptingInvite] = useState(false);
+    const [hasPending, setHasPending] = useState(hasPendingInvitations);
     const [acceptInviteError, setAcceptInviteError] = useState('');
 
     const selectedGame = games.find((g) => String(g.id) === selectedGameId) ?? null;
@@ -238,11 +242,14 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
             }
 
             startTransition(() => {
-                setGames((currentGames) =>
-                    currentGames.map((game) =>
+                setGames((currentGames) => {
+                    const updated = currentGames.map((game) =>
                         String(game.id) === String(updatedGame.id) ? updatedGame : game,
-                    ),
-                );
+                    );
+                    const stillPending = updated.some((g) => g.user_role === 'pending_invitee');
+                    setHasPending(stillPending);
+                    return updated;
+                });
             });
         } catch {
             setAcceptInviteError('Unable to accept the invitation right now. Please try again.');
@@ -563,9 +570,16 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                         <div className="max-w-2xl space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
-                                Game Hub
-                            </p>
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+                                    Game Hub
+                                </p>
+                                <NotificationBell
+                                    userId={user?.id}
+                                    hasPending={hasPending}
+                                    onNewInvitation={() => setHasPending(true)}
+                                />
+                            </div>
                             <h3 className="text-2xl font-semibold text-slate-900">
                                 Choose an existing game or open a fresh table.
                             </h3>

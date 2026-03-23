@@ -2,9 +2,19 @@ import '@testing-library/jest-dom/vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axios from 'axios';
+import { usePage } from '@inertiajs/react';
 import GameCard from '@/Components/GameCard';
 
 vi.mock('axios');
+
+vi.mock('@inertiajs/react', () => ({
+    usePage: vi.fn(() => ({
+        props: {
+            auth: { user: { id: 1 } },
+            hasPendingInvitations: false,
+        },
+    })),
+}));
 
 const twoGames = [
     {
@@ -70,6 +80,26 @@ describe('GameCard', () => {
     beforeEach(() => {
         localStorage.clear();
         vi.clearAllMocks();
+
+        const channelStub = {
+            listen: vi.fn().mockReturnThis(),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn(() => channelStub),
+            leave: vi.fn(),
+        };
+
+        usePage.mockReturnValue({
+            props: {
+                auth: { user: { id: 1 } },
+                hasPendingInvitations: false,
+            },
+        });
+    });
+
+    afterEach(() => {
+        delete window.Echo;
     });
 
     it('shows the Select a game placeholder and no auto-selection on load', async () => {
@@ -516,6 +546,45 @@ describe('GameCard', () => {
 
         expect(
             screen.queryByRole('button', { name: 'Accept invitation to this game' }),
+        ).not.toBeInTheDocument();
+    });
+
+    // -------------------------------------------------------------------------
+    // Bell notification icon
+    // -------------------------------------------------------------------------
+
+    it('shows the bell notification icon next to Game Hub when hasPendingInvitations is true', async () => {
+        usePage.mockReturnValue({
+            props: {
+                auth: { user: { id: 1 } },
+                hasPendingInvitations: true,
+            },
+        });
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('combobox');
+
+        expect(
+            screen.getByTitle('You have pending game invitations'),
+        ).toBeInTheDocument();
+    });
+
+    it('does not show the bell notification icon when hasPendingInvitations is false', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('combobox');
+
+        expect(
+            screen.queryByTitle('You have pending game invitations'),
         ).not.toBeInTheDocument();
     });
 
@@ -1470,6 +1539,47 @@ describe('GameCard', () => {
         );
 
         expect(screen.getByTitle('Viewer')).toBeInTheDocument();
+    });
+
+    it('clears the bell notification icon after accepting the only pending invitation', async () => {
+        usePage.mockReturnValue({
+            props: {
+                auth: { user: { id: 1 } },
+                hasPendingInvitations: true,
+            },
+        });
+
+        const updatedGame = { ...gamesWithRoles[2], user_role: 'viewer' };
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        axios.put.mockResolvedValueOnce({
+            data: { data: { game: updatedGame } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+
+        // Bell is visible before accepting
+        expect(screen.getByTitle('You have pending game invitations')).toBeInTheDocument();
+
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Pending Game (2000 pts)' }));
+
+        await userEvent.click(
+            screen.getByRole('button', { name: 'Accept invitation to this game' }),
+        );
+
+        // Bell should disappear because no more pending_invitee games remain
+        await waitFor(() =>
+            expect(
+                screen.queryByTitle('You have pending game invitations'),
+            ).not.toBeInTheDocument(),
+        );
     });
 
     it('disables the Accept Invite button while the request is in flight', async () => {
