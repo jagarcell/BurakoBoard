@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SetInitialShufflerRequest;
+use App\Http\Requests\Api\V1\StoreGameInviteRequest;
 use App\Http\Requests\Api\V1\StoreGameRequest;
 use App\Http\Requests\Api\V1\UpdateGameRequest;
 use App\Http\Resources\Api\V1\GameListItemResource;
@@ -139,6 +140,48 @@ class GameController extends Controller
         return response()->json([
             'message' => 'Game deleted successfully.',
             'game_id' => $gameId,
+        ]);
+    }
+
+    /**
+     * Send viewer invitations to one or more users for a specific game.
+     *
+     * @param  \App\Http\Requests\Api\V1\StoreGameInviteRequest  $request  Validated request containing an array of user IDs.
+     * @param  int  $gameId  Identifier of the game for which invitations are being sent.
+     * @return \Illuminate\Http\JsonResponse 201 response with the count of new invitations created.
+     * Logic: extract the validated user_ids array, delegate persistence and mail dispatch to the
+     *   service, and return the number of newly-created pending_invitee rows so the client can
+     *   confirm success without a full re-fetch.
+     */
+    public function storeInvitations(StoreGameInviteRequest $request, int $gameId): JsonResponse
+    {
+        $count = $this->service->sendInvitations(
+            $gameId,
+            $request->validated('user_ids'),
+            $request->user(),
+        );
+
+        return response()->json([
+            'invited_count' => $count,
+            'message'       => "Invitations sent to {$count} user(s).",
+        ], 201);
+    }
+
+    /**
+     * Accept a pending game invitation for the authenticated user.
+     *
+     * @param  int  $gameId  Identifier of the game whose invitation is being accepted.
+     * @return \Illuminate\Http\JsonResponse Updated game list-item response with viewer role.
+     * Logic: delegate role promotion from pending_invitee to viewer to the service layer;
+     *   return a GameListItemResource carrying user_role='viewer' so the frontend can
+     *   update the game entry in-place without re-fetching the full games list.
+     */
+    public function acceptInvitation(int $gameId): JsonResponse
+    {
+        $game = $this->service->acceptInvitation($gameId, (int) auth()->id());
+
+        return response()->json([
+            'game' => new GameListItemResource($game),
         ]);
     }
 }

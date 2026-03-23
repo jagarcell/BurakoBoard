@@ -2,13 +2,16 @@
 
 namespace App\Services;
 
+use App\Mail\GameInvitationMail;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\RoundDraft;
+use App\Models\User;
 use App\Repositories\BurakoGameRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 class BurakoGameService
@@ -593,5 +596,71 @@ class BurakoGameService
                 ['id', 'asc'],
             ])
             ->first();
+    }
+
+    /**
+     * Persist pending invitations and dispatch invitation emails to the selected users.
+     *
+     * @param  int              $gameId   Identifier of the game the users are being invited to watch.
+     * @param  array<int>       $userIds  IDs of the users who should receive invitations.
+     * @param  \App\Models\User $inviter  The authenticated user (creator) sending the invitations.
+     * @return int Number of new invitation rows created and emailed.
+     * Logic:
+     *   1. Verify the game exists; abort with 404 if missing.
+     *   2. Filter out any user IDs already enrolled in the game (any role) to prevent
+     *      composite-primary-key violations on the pivot table.
+     *   3. Load the target User models so we have name + email for mail dispatch.
+     *   4. Bulk-insert `pending_invitee` rows in one query.
+     *   5. Dispatch one GameInvitationMail per invitee; each mail carries the game, invitee,
+     *      and inviter context needed to render the Blade email template.
+     *   6. Return the count of new invitations created so the controller can include it in the response.
+     */
+    public function sendInvitations(int $gameId, array $userIds, User $inviter): int
+    {
+        $game = $this->repository->findGameOrFail($gameId);
+
+        $existingIds = $this->repository->getExistingGameUserIds($gameId, $userIds);
+        $newUserIds  = array_values(array_diff($userIds, $existingIds));
+
+        if (empty($newUserIds)) {
+            return 0;
+        }
+
+        $this->repository->bulkAttachPendingInviteesToGame($gameId, $newUserIds);
+
+        $invitees = $this->repository->getUsersByIds($newUserIds);
+
+        foreach ($invitees as $invitee) {
+            Mail::to($invitee->email)->send(new GameInvitationMail($game, $invitee, $inviter));
+        }
+
+        return count($newUserIds);
+    }
+
+    /**
+     * Accept a pending game invitation, upgrading the user's role from pending_invitee to viewer.
+     *
+     * @param  int  $gameId  Identifier of the game whose invitation should be accepted.
+     * @param  int  $userId  Identifier of the authenticated user accepting the invitation.
+     * @return \App\Models\Game The game model with user_role set to 'viewer'.
+     * Logic: verify the game exists (404 if not), attempt to upgrade the pivot row from
+     *   pending_invitee to viewer, and throw a validation exception when no matching row
+     *   is found (user was never invited or already accepted). Finally, return the
+     *   game record with the updated role attached so the controller can serialize
+     *   a GameListItemResource without an additional query.
+     */
+    public function acceptInvitation(int $gameId, int $userId): Game
+    {
+        $this->repository->findGameOrFail($gameId);
+
+        $upgraded = $this->repository->upgradeInvitationToViewer($gameId, $userId);
+
+        if (! $upgraded) {
+            throw ValidationException::withMessages([
+                'invitation' => 'No pending invitation found for this game.',
+            ]);
+        }
+
+        return $this->repository->getGameWithUserRole($gameId, $userId);
     }
 }
