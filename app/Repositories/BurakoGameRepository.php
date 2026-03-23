@@ -68,6 +68,34 @@ class BurakoGameRepository
     }
 
     /**
+     * Return only the games for which the given user holds a pending_invitee role.
+     *
+     * @param  int  $userId  Identifier of the authenticated user.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Games where the user has a pending invitation, newest first.
+     * Logic: join the game_user pivot and filter to rows where user_id matches and role is
+     *   pending_invitee, selecting only the columns needed to render an invitation card in the
+     *   bell popup, ordered newest first so the most recent invitation appears at the top.
+     */
+    public function getPendingInvitations(int $userId): Collection
+    {
+        return Game::query()
+            ->join('game_user', 'game_user.game_id', '=', 'games.id')
+            ->where('game_user.user_id', $userId)
+            ->where('game_user.role', 'pending_invitee')
+            ->select([
+                'games.id',
+                'games.name',
+                'games.target_points',
+                'games.status',
+                'games.winning_team_id',
+                'games.current_round_number',
+                'game_user.role as user_role',
+            ])
+            ->orderByDesc('games.id')
+            ->get();
+    }
+
+    /**
      * Determine whether a user has at least one pending game invitation.
      *
      * @param  int  $userId  Identifier of the authenticated user.

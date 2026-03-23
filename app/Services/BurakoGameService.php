@@ -42,6 +42,20 @@ class BurakoGameService
     }
 
     /**
+     * Return the games for which the authenticated user has a pending invitation.
+     *
+     * @param  int  $userId  Identifier of the authenticated user.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Pending-invitation games.
+     * Logic: delegate to the repository to retrieve only the games where the user holds a
+     *   pending_invitee pivot row, providing a focused payload for the bell popup refresh
+     *   on each bell click so the list is always up to date.
+     */
+    public function listPendingInvitations(int $userId): Collection
+    {
+        return $this->repository->getPendingInvitations($userId);
+    }
+
+    /**
      * Create a new game in progress and enrol the creator in the game_user pivot.
      *
      * @param  array<string, mixed>  $payload  Validated game data with name and target points.
