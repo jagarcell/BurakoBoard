@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\GameInvitationSent;
 use App\Mail\GameInvitationMail;
 use App\Models\Game;
 use App\Models\Player;
@@ -38,6 +39,20 @@ class BurakoGameService
     public function listGames(int $userId): Collection
     {
         return $this->repository->getGameList($userId);
+    }
+
+    /**
+     * Return the games for which the authenticated user has a pending invitation.
+     *
+     * @param  int  $userId  Identifier of the authenticated user.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Pending-invitation games.
+     * Logic: delegate to the repository to retrieve only the games where the user holds a
+     *   pending_invitee pivot row, providing a focused payload for the bell popup refresh
+     *   on each bell click so the list is always up to date.
+     */
+    public function listPendingInvitations(int $userId): Collection
+    {
+        return $this->repository->getPendingInvitations($userId);
     }
 
     /**
@@ -613,7 +628,9 @@ class BurakoGameService
      *   4. Bulk-insert `pending_invitee` rows in one query.
      *   5. Dispatch one GameInvitationMail per invitee; each mail carries the game, invitee,
      *      and inviter context needed to render the Blade email template.
-     *   6. Return the count of new invitations created so the controller can include it in the response.
+     *   6. Broadcast GameInvitationSent on each invitee's private channel so the frontend
+     *      notification bell updates in real time without a page reload.
+     *   7. Return the count of new invitations created so the controller can include it in the response.
      */
     public function sendInvitations(int $gameId, array $userIds, User $inviter): int
     {
@@ -632,6 +649,12 @@ class BurakoGameService
 
         foreach ($invitees as $invitee) {
             Mail::to($invitee->email)->send(new GameInvitationMail($game, $invitee, $inviter));
+            broadcast(new GameInvitationSent(
+                inviteeId:   $invitee->id,
+                gameId:      $game->id,
+                gameName:    $game->name,
+                inviterName: $inviter->name,
+            ))->toOthers();
         }
 
         return count($newUserIds);

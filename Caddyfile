@@ -4,5 +4,8 @@ localhost {
 }
 
 jagarcell.ddns.net {
+    @reverb path /app/* /apps/*
+    reverse_proxy @reverb reverb:8080
+
     reverse_proxy app:80
 }

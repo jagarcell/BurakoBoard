@@ -29,6 +29,8 @@
         "vitest": "^4.0.18"
     },
     "dependencies": {
-        "canvas-confetti": "^1.9.4"
+        "canvas-confetti": "^1.9.4",
+        "laravel-echo": "^2.3.1",
+        "pusher-js": "^8.4.3"
     }
 }

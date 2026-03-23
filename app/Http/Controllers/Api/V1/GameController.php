@@ -168,6 +168,23 @@ class GameController extends Controller
     }
 
     /**
+     * Return the authenticated user's pending game invitations.
+     *
+     * @return \Illuminate\Http\JsonResponse Pending invitation games serialised as list-item resources.
+     * Logic: pass the authenticated user's id to the service, which retrieves only games where
+     *   the user holds a pending_invitee pivot role; the response is fetched on each bell click
+     *   so the popup always reflects the live server state.
+     */
+    public function pendingInvitations(): JsonResponse
+    {
+        $invitations = $this->service->listPendingInvitations((int) auth()->id());
+
+        return response()->json([
+            'invitations' => GameListItemResource::collection($invitations),
+        ]);
+    }
+
+    /**
      * Accept a pending game invitation for the authenticated user.
      *
      * @param  int  $gameId  Identifier of the game whose invitation is being accepted.
