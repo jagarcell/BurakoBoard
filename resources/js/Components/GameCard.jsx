@@ -47,9 +47,10 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     const [inviteSendError, setInviteSendError] = useState('');
     const [inviteSendSuccess, setInviteSendSuccess] = useState('');
 
-    const [isAcceptingInvite, setIsAcceptingInvite] = useState(false);
+    const [acceptingGameIds, setAcceptingGameIds] = useState(() => new Set());
     const [hasPending, setHasPending] = useState(hasPendingInvitations);
     const [acceptInviteError, setAcceptInviteError] = useState('');
+    const [isFetchingInvitations, setIsFetchingInvitations] = useState(false);
 
     const selectedGame = games.find((g) => String(g.id) === selectedGameId) ?? null;
 
@@ -225,16 +226,44 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setIsInviteModalOpen(false);
     };
 
-    const handleAcceptInvite = async () => {
-        if (! selectedGame || isAcceptingInvite) {
+    const fetchPendingInvitations = async () => {
+        setIsFetchingInvitations(true);
+
+        try {
+            const response = await axios.get('/api/v1/invitations');
+            const freshPending = response.data?.data?.invitations ?? [];
+
+            startTransition(() => {
+                setGames((currentGames) => {
+                    const freshIds = new Set(freshPending.map((g) => g.id));
+                    // Keep non-pending games and pending games still present in fresh list.
+                    const retained = currentGames.filter(
+                        (g) => g.user_role !== 'pending_invitee' || freshIds.has(g.id),
+                    );
+                    // Add any newly arrived pending games not yet in state.
+                    const existingIds = new Set(retained.map((g) => g.id));
+                    const added = freshPending.filter((g) => !existingIds.has(g.id));
+                    return [...retained, ...added];
+                });
+                setHasPending(freshPending.length > 0);
+            });
+        } catch {
+            // Silent failure — existing list remains displayed.
+        } finally {
+            setIsFetchingInvitations(false);
+        }
+    };
+
+    const handleAcceptInvite = async (gameId) => {
+        if (acceptingGameIds.has(gameId)) {
             return;
         }
 
-        setIsAcceptingInvite(true);
+        setAcceptingGameIds((prev) => new Set([...prev, gameId]));
         setAcceptInviteError('');
 
         try {
-            const response = await axios.put(`/api/v1/games/${selectedGame.id}/invitation`);
+            const response = await axios.put(`/api/v1/games/${gameId}/invitation`);
             const updatedGame = response.data?.data?.game;
 
             if (! updatedGame) {
@@ -254,7 +283,11 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         } catch {
             setAcceptInviteError('Unable to accept the invitation right now. Please try again.');
         } finally {
-            setIsAcceptingInvite(false);
+            setAcceptingGameIds((prev) => {
+                const next = new Set(prev);
+                next.delete(gameId);
+                return next;
+            });
         }
     };
 
@@ -533,11 +566,11 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                         <button
                             aria-label="Accept invitation to this game"
                             className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-60 sm:right-6 sm:top-6"
-                            disabled={isAcceptingInvite}
-                            onClick={handleAcceptInvite}
+                            disabled={acceptingGameIds.has(selectedGame?.id)}
+                            onClick={() => handleAcceptInvite(selectedGame.id)}
                             type="button"
                         >
-                            {isAcceptingInvite ? (
+                            {acceptingGameIds.has(selectedGame?.id) ? (
                                 <>
                                     <svg
                                         aria-hidden="true"
@@ -577,7 +610,12 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                 <NotificationBell
                                     userId={user?.id}
                                     hasPending={hasPending}
+                                    pendingGames={games.filter((g) => g.user_role === 'pending_invitee')}
                                     onNewInvitation={() => setHasPending(true)}
+                                    onAcceptInvitation={handleAcceptInvite}
+                                    acceptingGameIds={acceptingGameIds}
+                                    onOpen={fetchPendingInvitations}
+                                    isLoadingGames={isFetchingInvitations}
                                 />
                             </div>
                             <h3 className="text-2xl font-semibold text-slate-900">
