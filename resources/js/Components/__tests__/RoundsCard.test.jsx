@@ -2011,5 +2011,318 @@ describe('RoundsCard', () => {
         });
     });
 
+    it('shows live read-only scoring preview and hides Record Round button when user role is viewer', async () => {
+        const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+        render(
+            <RoundsCard
+                hasTwoTeams
+                initialRounds={[]}
+                initialTeams={[teamA, teamB]}
+                selectedGame={viewerGame}
+            />,
+        );
+
+        // The "Live" badge is rendered in the viewer mode header.
+        await screen.findByText('Live');
+        // No editable Record Round button is present for viewers.
+        expect(screen.queryByRole('button', { name: 'Record Round' })).not.toBeInTheDocument();
+        // Read-only inputs are rendered (no stepper buttons visible).
+        expect(screen.queryByRole('button', { name: /increase|decrease/i })).not.toBeInTheDocument();
+        // Round and Total score labels are shown in each team card.
+        const roundLabels = screen.getAllByText('Round:');
+        const totalLabels = screen.getAllByText('Total:');
+        expect(roundLabels).toHaveLength(2);
+        expect(totalLabels).toHaveLength(2);
+    });
+
+    it('shows correct round and total score chips in the viewer UI based on accrued rounds and live draft', async () => {
+        const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+        // Burako (100 pts boolean) checked for teamA in the draft
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/round-draft')) {
+                return Promise.resolve({
+                    data: {
+                        data: {
+                            round_draft: {
+                                base_inputs: {
+                                    [teamA.id]: { [baseElements[0].id]: true, [baseElements[1].id]: 0 },
+                                    [teamB.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 0 },
+                                },
+                                card_inputs: {
+                                    [teamA.id]: { cardsInHand: 0, cardsOnTable: 0 },
+                                    [teamB.id]: { cardsInHand: 0, cardsOnTable: 0 },
+                                },
+                            },
+                        },
+                    },
+                });
+            }
+            return Promise.resolve(elementsResponse);
+        });
+
+        render(
+            <RoundsCard
+                hasTwoTeams
+                initialRounds={[round1]}
+                initialTeams={[teamA, teamB]}
+                selectedGame={viewerGame}
+            />,
+        );
+
+        await screen.findByText('Live');
+
+        // teamA accrued = 100 (round1), roundScore = 100 (burako checked), total = 200
+        // teamB accrued = 400 (round1), roundScore = 0 (nothing checked), total = 400
+        await waitFor(() => {
+            const chips = screen.getAllByTitle('This round\'s score');
+            expect(chips[0]).toHaveTextContent('100');
+            expect(chips[1]).toHaveTextContent('0');
+        });
+
+        await waitFor(() => {
+            const totalChips = screen.getAllByTitle('Accrued score + this round');
+            expect(totalChips[0]).toHaveTextContent('200');
+            expect(totalChips[1]).toHaveTextContent('400');
+        });
+    });
+
+    describe('viewer circle toggle', () => {
+        const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+        const teamAWithPlayers = {
+            ...teamA,
+            players: [
+                { id: 1, user_id: null, display_name: 'Alice', seat_number: 1 },
+                { id: 3, user_id: null, display_name: 'Carlos', seat_number: 3 },
+            ],
+        };
+        const teamBWithPlayers = {
+            ...teamB,
+            players: [
+                { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                { id: 4, user_id: null, display_name: 'Diana', seat_number: 4 },
+            ],
+        };
+
+        const roundRolesForNext = [
+            {
+                round_number: 1,
+                cutter: { player_id: 1, display_name: 'Alice', seat_number: 1 },
+                dealer: { player_id: 2, display_name: 'Bruno', seat_number: 2 },
+                first_draw: { player_id: 3, display_name: 'Carlos', seat_number: 3 },
+            },
+        ];
+
+        it('renders a circle toggle button for the current round in the viewer live panel', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    roundRoles={roundRolesForNext}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            await screen.findByText('Live');
+            const circleBtn = screen.getByRole('button', {
+                name: 'Show seating circle for round 1',
+            });
+            expect(circleBtn).toBeInTheDocument();
+        });
+
+        it('shows player names after clicking the circle toggle button in the viewer live panel', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    roundRoles={roundRolesForNext}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            await screen.findByText('Live');
+            await user.click(screen.getByRole('button', { name: 'Show seating circle for round 1' }));
+
+            expect(screen.getByText('Alice')).toBeInTheDocument();
+            expect(screen.getByText('Bruno')).toBeInTheDocument();
+            expect(screen.getByText('Carlos')).toBeInTheDocument();
+            expect(screen.getByText('Diana')).toBeInTheDocument();
+        });
+
+        it('circle toggle button label switches to "Hide" when viewer circle is open', async () => {
+            const user = userEvent.setup();
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamAWithPlayers, teamBWithPlayers]}
+                    roundRoles={roundRolesForNext}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            await screen.findByText('Live');
+            await user.click(screen.getByRole('button', { name: 'Show seating circle for round 1' }));
+
+            expect(
+                screen.getByRole('button', { name: 'Hide seating circle for round 1' }),
+            ).toBeInTheDocument();
+        });
+    });
+
+    describe('real-time draft updates via Echo', () => {
+        let echoListenCallback;
+        let mockLeave;
+        let mockListen;
+        let mockPrivate;
+
+        beforeEach(() => {
+            echoListenCallback = null;
+            mockLeave = vi.fn();
+            mockListen = vi.fn().mockImplementation((_event, cb) => {
+                echoListenCallback = cb;
+                return { listen: mockListen };
+            });
+            mockPrivate = vi.fn().mockReturnValue({ listen: mockListen });
+            window.Echo = { private: mockPrivate, leave: mockLeave };
+        });
+
+        afterEach(() => {
+            delete window.Echo;
+        });
+
+        it('subscribes to the private game channel on mount', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            expect(mockPrivate).toHaveBeenCalledWith(`game.${selectedGame.id}`);
+            expect(mockListen).toHaveBeenCalledWith('.round.draft.updated', expect.any(Function));
+        });
+
+        it('leaves the game channel on unmount', async () => {
+            const { unmount } = render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+            unmount();
+
+            expect(mockLeave).toHaveBeenCalledWith(`game.${selectedGame.id}`);
+        });
+
+        it('updates base inputs when a round.draft.updated event is received', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+            expect(burakoCheckboxes[0]).not.toBeChecked();
+
+            // Simulate receiving a real-time draft update with Burako checked for team A.
+            await act(async () => {
+                echoListenCallback({
+                    base_inputs: {
+                        [teamA.id]: { [baseElements[0].id]: true, [baseElements[1].id]: 0 },
+                        [teamB.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 0 },
+                    },
+                    card_inputs: {
+                        [teamA.id]: { cardsInHand: 0, cardsOnTable: 0 },
+                        [teamB.id]: { cardsInHand: 0, cardsOnTable: 0 },
+                    },
+                });
+            });
+
+            await waitFor(() => expect(burakoCheckboxes[0]).toBeChecked());
+        });
+
+        it('updates card inputs when a round.draft.updated event is received', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            const inHandInputs = await screen.findAllByLabelText('Points in Hand');
+            expect(inHandInputs[0]).toHaveValue(0);
+
+            await act(async () => {
+                echoListenCallback({
+                    base_inputs: {
+                        [teamA.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 0 },
+                        [teamB.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 0 },
+                    },
+                    card_inputs: {
+                        [teamA.id]: { cardsInHand: 15, cardsOnTable: 0 },
+                        [teamB.id]: { cardsInHand: 0, cardsOnTable: 0 },
+                    },
+                });
+            });
+
+            await waitFor(() => expect(inHandInputs[0]).toHaveValue(15));
+        });
+
+        it('shows updated values in the viewer read-only preview when an event arrives', async () => {
+            const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            await screen.findByText('Live');
+
+            await act(async () => {
+                echoListenCallback({
+                    base_inputs: {
+                        [teamA.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 0 },
+                        [teamB.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 0 },
+                    },
+                    card_inputs: {
+                        [teamA.id]: { cardsInHand: 7, cardsOnTable: 0 },
+                        [teamB.id]: { cardsInHand: 0, cardsOnTable: 0 },
+                    },
+                });
+            });
+
+            // The read-only inputs should display the updated values.
+            await waitFor(() => {
+                const inHandInputs = screen.getAllByLabelText('Points in Hand');
+                expect(inHandInputs[0]).toHaveValue(7);
+            });
+        });
+    });
+
 });
 

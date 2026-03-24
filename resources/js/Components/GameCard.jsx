@@ -51,6 +51,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     const [hasPending, setHasPending] = useState(hasPendingInvitations);
     const [acceptInviteError, setAcceptInviteError] = useState('');
     const [isFetchingInvitations, setIsFetchingInvitations] = useState(false);
+    const [pendingGames, setPendingGames] = useState([]);
 
     const selectedGame = games.find((g) => String(g.id) === selectedGameId) ?? null;
 
@@ -123,15 +124,8 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     }, [selectedGameId]);
 
     useEffect(() => {
-        // Do not surface a pending-invite game to the parent until the user accepts it.
-        // Passing null keeps the dashboard blank so no game data is shown prematurely.
         setAcceptInviteError('');
-
-        if (selectedGame?.user_role === 'pending_invitee') {
-            onGameSelect(null);
-        } else {
-            onGameSelect(selectedGame);
-        }
+        onGameSelect(selectedGame);
     }, [selectedGame, onGameSelect]);
 
     const resetForm = () => {
@@ -234,17 +228,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
             const freshPending = response.data?.data?.invitations ?? [];
 
             startTransition(() => {
-                setGames((currentGames) => {
-                    const freshIds = new Set(freshPending.map((g) => g.id));
-                    // Keep non-pending games and pending games still present in fresh list.
-                    const retained = currentGames.filter(
-                        (g) => g.user_role !== 'pending_invitee' || freshIds.has(g.id),
-                    );
-                    // Add any newly arrived pending games not yet in state.
-                    const existingIds = new Set(retained.map((g) => g.id));
-                    const added = freshPending.filter((g) => !existingIds.has(g.id));
-                    return [...retained, ...added];
-                });
+                setPendingGames(freshPending);
                 setHasPending(freshPending.length > 0);
             });
         } catch {
@@ -271,14 +255,23 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
             }
 
             startTransition(() => {
-                setGames((currentGames) => {
-                    const updated = currentGames.map((game) =>
-                        String(game.id) === String(updatedGame.id) ? updatedGame : game,
+                setPendingGames((currentPending) => {
+                    const updated = currentPending.filter(
+                        (g) => String(g.id) !== String(updatedGame.id),
                     );
-                    const stillPending = updated.some((g) => g.user_role === 'pending_invitee');
-                    setHasPending(stillPending);
+                    setHasPending(updated.length > 0);
                     return updated;
                 });
+                setGames((currentGames) => {
+                    if (currentGames.some((g) => String(g.id) === String(updatedGame.id))) {
+                        return currentGames.map((g) =>
+                            String(g.id) === String(updatedGame.id) ? updatedGame : g,
+                        );
+                    }
+
+                    return [updatedGame, ...currentGames];
+                });
+                setSelectedGameId(String(updatedGame.id));
             });
         } catch {
             setAcceptInviteError('Unable to accept the invitation right now. Please try again.');
@@ -520,20 +513,6 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
             );
         }
 
-        if (role === 'pending_invitee') {
-            return (
-                <span
-                    aria-hidden="true"
-                    className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-300"
-                    title="Pending invite"
-                >
-                    <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
-                        <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z" />
-                    </svg>
-                </span>
-            );
-        }
-
         return null;
     };
 
@@ -562,45 +541,6 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                         </button>
                     )}
 
-                    {selectedGame?.user_role === 'pending_invitee' && (
-                        <button
-                            aria-label="Accept invitation to this game"
-                            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-60 sm:right-6 sm:top-6"
-                            disabled={acceptingGameIds.has(selectedGame?.id)}
-                            onClick={() => handleAcceptInvite(selectedGame.id)}
-                            type="button"
-                        >
-                            {acceptingGameIds.has(selectedGame?.id) ? (
-                                <>
-                                    <svg
-                                        aria-hidden="true"
-                                        className="h-3.5 w-3.5 animate-spin"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" />
-                                    </svg>
-                                    Accepting…
-                                </>
-                            ) : (
-                                <>
-                                    <svg
-                                        aria-hidden="true"
-                                        className="h-3.5 w-3.5"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                    Accept Invite
-                                </>
-                            )}
-                        </button>
-                    )}
-
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                         <div className="max-w-2xl space-y-2">
                             <div className="flex items-center gap-2">
@@ -610,7 +550,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                 <NotificationBell
                                     userId={user?.id}
                                     hasPending={hasPending}
-                                    pendingGames={games.filter((g) => g.user_role === 'pending_invitee')}
+                                    pendingGames={pendingGames}
                                     onNewInvitation={() => setHasPending(true)}
                                     onAcceptInvitation={handleAcceptInvite}
                                     acceptingGameIds={acceptingGameIds}
@@ -629,7 +569,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
                         <div className="flex w-full flex-col gap-3 sm:flex-row lg:max-w-2xl lg:items-center">
                             <label className="sr-only" htmlFor="game-selector">
-                                Select a game
+                                Select or create a game
                             </label>
                             <div className="relative w-full" ref={dropdownAnchorRef}>
                                 {isDropdownOpen && (
@@ -666,7 +606,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                                     ? 'Loading games\u2026'
                                                     : games.length === 0
                                                       ? 'No games available'
-                                                      : 'Select a game'}
+                                                      : 'Select or create a game'}
                                             </span>
                                         ) : (
                                             <>
@@ -706,7 +646,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                     >
                                         <li
                                             role="option"
-                                            aria-label="Select a game"
+                                            aria-label="Select or create a game"
                                             aria-selected={selectedGameId === ''}
                                             className={`cursor-pointer px-4 py-2.5 text-sm italic text-slate-400 hover:bg-slate-50 ${selectedGameId === '' ? 'bg-slate-50' : ''}`}
                                             onClick={() => {
@@ -714,7 +654,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                                 setIsDropdownOpen(false);
                                             }}
                                         >
-                                            Select a game
+                                            Select or create a game
                                         </li>
 
                                         {games.map((game) => (
@@ -753,7 +693,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                 >
                                     New
                                 </PrimaryButton>
-                            ) : (
+                            ) : selectedGame?.user_role !== 'viewer' ? (
                                 <PrimaryButton
                                     className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
                                     onClick={openEditModal}
@@ -761,7 +701,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                 >
                                     Edit
                                 </PrimaryButton>
-                            )}
+                            ) : null}
                         </div>
                     </div>
 

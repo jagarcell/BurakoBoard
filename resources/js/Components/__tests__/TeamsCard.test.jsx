@@ -820,6 +820,23 @@ describe('TeamsCard', () => {
         expect(screen.queryByRole('button', { name: 'Edit team' })).not.toBeInTheDocument();
     });
 
+    it('hides Edit team button and team/player creation controls when user is a viewer', async () => {
+        const viewerGame = { ...selectedGame, user_role: 'viewer' };
+        const teams = [
+            makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos' }]),
+            makeTeam(11, 'Team Beta', []),
+        ];
+
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={teams} selectedGame={viewerGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByRole('button', { name: 'Edit team' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Create team' })).not.toBeInTheDocument();
+    });
+
     it('hides Create team and slot selector for empty slots when the game is finished', async () => {
         setupGetMocks();
 
@@ -874,6 +891,21 @@ describe('TeamsCard', () => {
         const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 1500 };
 
         render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={finishedGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByRole('button', { name: 'Team Alpha winner' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Team Beta winner' })).not.toBeInTheDocument();
+    });
+
+    it('does not show a winner badge for a viewer when the game is still in progress even if scores differ', async () => {
+        setupGetMocks();
+
+        const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress', user_role: 'viewer' };
+        const teamA = { ...makeTeam(10, 'Team Alpha'), current_score: 1200 };
+        const teamB = { ...makeTeam(11, 'Team Beta'), current_score: 800 };
+
+        render(<TeamsCard initialTeams={[teamA, teamB]} selectedGame={viewerGame} />);
 
         await screen.findByText('Team Alpha');
 

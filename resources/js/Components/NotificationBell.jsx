@@ -110,7 +110,7 @@ export default function NotificationBell({
             {isOpen && panelRect && createPortal(
                 <div
                     aria-label="Game invitations"
-                    className="z-50 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+                    className="z-50 w-auto overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
                     role="dialog"
                     style={{
                         position: 'fixed',

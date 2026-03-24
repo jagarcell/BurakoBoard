@@ -44,16 +44,19 @@ class BurakoGameRepository
      * Return the games linked to a specific user for dashboard selection.
      *
      * @param  int  $userId  Identifier of the authenticated user.
-     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Games the user has access to, ordered from newest to oldest.
-     * Logic: join the game_user pivot to filter to only the games the given user is enrolled in, and
-     *   surface the user's role for each game as the `user_role` attribute so the dashboard selector
-     *   can render a descriptive role indicator without extra queries.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> Games the user has access to (excluding pending invitations), ordered from newest to oldest.
+     * Logic: join the game_user pivot to filter to only the games the given user is enrolled in,
+     *   exclude rows where the user's role is still pending_invitee (those are surfaced exclusively
+     *   through the notification bell endpoint), and surface the user's role for each game as the
+     *   `user_role` attribute so the dashboard selector can render a descriptive role indicator
+     *   without extra queries.
      */
     public function getGameList(int $userId): Collection
     {
         return Game::query()
             ->join('game_user', 'game_user.game_id', '=', 'games.id')
             ->where('game_user.user_id', $userId)
+            ->where('game_user.role', '!=', 'pending_invitee')
             ->select([
                 'games.id',
                 'games.name',

@@ -2,12 +2,14 @@
 
 namespace Tests\Feature\Api;
 
+use App\Events\RoundDraftUpdated;
 use App\Models\Game;
 use App\Models\RoundDraft;
 use App\Models\Team;
 use App\Repositories\BurakoGameRepository;
 use App\Services\BurakoGameService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class RoundDraftTest extends TestCase
@@ -289,5 +291,77 @@ class RoundDraftTest extends TestCase
             'base_inputs' => [],
             'card_inputs' => [],
         ])->assertUnprocessable();
+    }
+
+    /**
+     * PUT dispatches a RoundDraftUpdated broadcast event after persisting the draft.
+     *
+     * @return void
+     * Logic: verify that saving a draft fires a RoundDraftUpdated event targeting
+     * the correct game so viewers subscribed to the private game channel receive
+     * the new input values in real time.
+     */
+    public function test_upsert_dispatches_round_draft_updated_event(): void
+    {
+        Event::fake([RoundDraftUpdated::class]);
+
+        $payload = [
+            'base_inputs' => [
+                (string) $this->teamA->id => [1 => true, 2 => 3],
+                (string) $this->teamB->id => [1 => false, 2 => 0],
+            ],
+            'card_inputs' => [
+                (string) $this->teamA->id => ['cardsInHand' => 5, 'cardsOnTable' => 0],
+                (string) $this->teamB->id => ['cardsInHand' => 0, 'cardsOnTable' => 2],
+            ],
+        ];
+
+        $this->putJson("/api/v1/games/{$this->game->id}/round-draft", $payload)->assertOk();
+
+        Event::assertDispatched(RoundDraftUpdated::class, function (RoundDraftUpdated $event) {
+            return $event->gameId === $this->game->id;
+        });
+    }
+
+    /**
+     * RoundDraftUpdated event broadcasts on the private game channel.
+     *
+     * @return void
+     * Logic: confirm the event targets the correct private channel name so that
+     * only authenticated members of the game can receive live draft updates.
+     */
+    public function test_round_draft_updated_event_broadcasts_on_correct_channel(): void
+    {
+        $event = new RoundDraftUpdated(
+            $this->game->id,
+            [(string) $this->teamA->id => [1 => true]],
+            [(string) $this->teamA->id => ['cardsInHand' => 3, 'cardsOnTable' => 0]],
+        );
+
+        $channels = $event->broadcastOn();
+
+        $this->assertCount(1, $channels);
+        $this->assertStringEndsWith('game.' . $this->game->id, $channels[0]->name);
+    }
+
+    /**
+     * RoundDraftUpdated broadcastWith returns the expected payload shape.
+     *
+     * @return void
+     * Logic: confirm the broadcast payload contains both input maps so the frontend
+     * can hydrate all team inputs from a single event without an additional HTTP request.
+     */
+    public function test_round_draft_updated_event_broadcast_payload(): void
+    {
+        $baseInputs = [(string) $this->teamA->id => [1 => true]];
+        $cardInputs = [(string) $this->teamA->id => ['cardsInHand' => 7, 'cardsOnTable' => 0]];
+
+        $event = new RoundDraftUpdated($this->game->id, $baseInputs, $cardInputs);
+
+        $this->assertSame('round.draft.updated', $event->broadcastAs());
+        $this->assertSame(
+            ['base_inputs' => $baseInputs, 'card_inputs' => $cardInputs],
+            $event->broadcastWith(),
+        );
     }
 }

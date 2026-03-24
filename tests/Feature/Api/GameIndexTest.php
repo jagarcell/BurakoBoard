@@ -99,13 +99,46 @@ class GameIndexTest extends TestCase
     }
 
     /**
-     * Ensure each game in the index carries the user_role field.
+     * Ensure each game in the index carries the user_role field for enrolled users.
      *
-     * @return void Verifies role is exposed correctly for pending_invitee entries.
-     * Logic: enrol a user as pending_invitee and assert the user_role field in the response
-     *   matches the pivot value so the frontend can render the correct indicator.
+     * @return void Verifies role is exposed correctly for creator entries.
+     * Logic: enrol a user as creator and assert the user_role field in the response matches
+     *   so the frontend can render the correct role indicator.
      */
     public function test_games_index_includes_user_role_per_game(): void
+    {
+        $user = User::factory()->create();
+
+        $game = Game::query()->create([
+            'name'                => 'My Creator Game',
+            'target_points'       => 2000,
+            'status'              => 'in_progress',
+            'winning_team_id'     => null,
+            'current_round_number' => 0,
+        ]);
+
+        DB::table('game_user')->insert([
+            'game_id'    => $game->id,
+            'user_id'    => $user->id,
+            'role'       => 'creator',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($user)->getJson('/api/v1/games')
+            ->assertOk()
+            ->assertJsonPath('data.games.0.user_role', 'creator');
+    }
+
+    /**
+     * Ensure pending_invitee games are excluded from the games index.
+     *
+     * @return void Verifies that games where the user's role is pending_invitee are not returned.
+     * Logic: enrol a user as pending_invitee and assert the games list is empty, because
+     *   pending invitations are surfaced exclusively through the notifications endpoint and
+     *   must not appear in the selector dropdown.
+     */
+    public function test_games_index_excludes_pending_invitee_games(): void
     {
         $user = User::factory()->create();
 
@@ -127,6 +160,6 @@ class GameIndexTest extends TestCase
 
         $this->actingAs($user)->getJson('/api/v1/games')
             ->assertOk()
-            ->assertJsonPath('data.games.0.user_role', 'pending_invitee');
+            ->assertJsonCount(0, 'data.games');
     }
 }
