@@ -2,8 +2,10 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -114,5 +116,90 @@ class AuthenticationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect('/dashboard?game=5');
+    }
+
+    /**
+     * Visiting /login?email=...&game=X stores the game ID in the session so
+     * the post-login handler can auto-accept the invitation.
+     *
+     * @return void Asserts invitation_game_id is present in the session after the login page visit.
+     * Logic: issue a GET to the login route with both email and game params and assert
+     *   that the session contains the invitation_game_id key set to the game's integer ID.
+     */
+    public function test_login_page_with_game_param_stores_invitation_game_id_in_session(): void
+    {
+        $response = $this->get('/login?email=invited%40example.com&game=42');
+
+        $response->assertSessionHas('invitation_game_id', 42);
+    }
+
+    /**
+     * Logging in via an invitation link auto-accepts the pending invitation,
+     * upgrading the user's role from pending_invitee to viewer.
+     *
+     * @return void Asserts the game_user role is updated to viewer after login.
+     * Logic: create a game, attach the user as pending_invitee, visit the login
+     *   page with the game ID in the query string to prime the session, POST
+     *   valid credentials, then assert the pivot row holds the viewer role.
+     */
+    public function test_login_via_invitation_link_auto_accepts_pending_invitation(): void
+    {
+        $user = User::factory()->create();
+
+        $game = Game::query()->create([
+            'name'                         => 'Test Game',
+            'target_points'                => 2000,
+            'status'                       => 'in_progress',
+            'winning_team_id'              => null,
+            'current_round_number'         => 0,
+            'initial_shuffler_seat_number' => null,
+        ]);
+
+        DB::table('game_user')->insert([
+            'game_id'    => $game->id,
+            'user_id'    => $user->id,
+            'role'       => 'pending_invitee',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Prime the session with the invitation game ID.
+        $this->get('/login?email=' . rawurlencode($user->email) . '&game=' . $game->id);
+
+        $this->post('/login', [
+            'email'    => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticated();
+        $this->assertDatabaseHas('game_user', [
+            'game_id' => $game->id,
+            'user_id' => $user->id,
+            'role'    => 'viewer',
+        ]);
+    }
+
+    /**
+     * Logging in without a matching pending invitation does not cause an error.
+     *
+     * @return void Asserts login completes normally when no pending invitation exists.
+     * Logic: visit the login page with a non-existent game ID in the query string,
+     *   POST valid credentials, and confirm the user is authenticated and redirected
+     *   without any exception being raised.
+     */
+    public function test_login_via_invitation_link_without_pending_invitation_succeeds_silently(): void
+    {
+        $user = User::factory()->create();
+
+        // Use a game ID that doesn't exist in game_user.
+        $this->get('/login?email=' . rawurlencode($user->email) . '&game=9999');
+
+        $response = $this->post('/login', [
+            'email'    => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticated();
+        $response->assertRedirect('/dashboard?game=9999');
     }
 }
