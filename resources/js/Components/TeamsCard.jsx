@@ -371,7 +371,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
     };
 
     const teamSlots = [0, 1];
-    const isGameEditable = selectedGame?.status === 'in_progress';
+    const isGameEditable = selectedGame?.status === 'in_progress' && selectedGame?.user_role !== 'viewer';
     const winnerTeamId =
         ! isGameEditable && teams.length === 2 && teams[0].current_score !== teams[1].current_score
             ? (teams[0].current_score > teams[1].current_score ? teams[0].id : teams[1].id)

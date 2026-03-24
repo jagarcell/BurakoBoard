@@ -342,6 +342,36 @@ describe('PlayerOrderCard', () => {
         expect(screen.getByRole('button', { name: 'Expand player order' })).toHaveAttribute('aria-expanded', 'false');
     });
 
+    it('disables all cutter chip buttons when the user is a viewer (even on round 1)', async () => {
+        const viewerGame = { ...selectedGame, user_role: 'viewer' };
+        const teams = [
+            makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                { id: 3, user_id: null, display_name: 'Diana', seat_number: 3 },
+            ]),
+            makeTeam(11, 'Team Beta', [
+                { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                { id: 4, user_id: null, display_name: 'Elisa', seat_number: 4 },
+            ]),
+        ];
+
+        render(
+            <PlayerOrderCard
+                gameSummary={makeGameSummary(teams)}
+                selectedGame={viewerGame}
+                teams={teams}
+            />,
+        );
+
+        expect(screen.getByText('Round 1 cutter')).toBeInTheDocument();
+
+        const chips = screen.getAllByRole('button', { name: /Seat/ });
+        chips.forEach((chip) => expect(chip).toBeDisabled());
+
+        await userEvent.click(chips[0]);
+        expect(axios.put).not.toHaveBeenCalled();
+    });
+
     it('expands the body again when the collapse button is clicked a second time', async () => {
         const teams = [
             makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 }]),

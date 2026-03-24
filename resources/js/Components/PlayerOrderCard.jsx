@@ -64,6 +64,7 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
         roundRoles.find((roundRole) => Number(roundRole.round_number) === activeRoundNumber) ?? null;
 
     const isGameEditable = selectedGame?.status === 'in_progress';
+    const isViewer = selectedGame?.user_role === 'viewer';
     const playerCountMismatch =
         teams.length === 2 && teams[0].players.length !== teams[1].players.length;
 
@@ -187,8 +188,8 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
                                                 ? ROLE_CHIP_COLORS.Cutter
                                                 : 'border-indigo-200 bg-white text-indigo-700'
                                     } ${isFirstRound ? 'hover:border-blue-300 hover:bg-blue-200' : 'cursor-default opacity-80'}`}
-                                    disabled={! isFirstRound}
-                                    onClick={isFirstRound ? () => handleSetInitialCutter(player.id) : undefined}
+                                    disabled={! isFirstRound || isViewer}
+                                    onClick={(isFirstRound && ! isViewer) ? () => handleSetInitialCutter(player.id) : undefined}
                                     type="button"
                                 >
                                     {player.seat_number != null

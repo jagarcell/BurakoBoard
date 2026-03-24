@@ -820,6 +820,23 @@ describe('TeamsCard', () => {
         expect(screen.queryByRole('button', { name: 'Edit team' })).not.toBeInTheDocument();
     });
 
+    it('hides Edit team button and team/player creation controls when user is a viewer', async () => {
+        const viewerGame = { ...selectedGame, user_role: 'viewer' };
+        const teams = [
+            makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos' }]),
+            makeTeam(11, 'Team Beta', []),
+        ];
+
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={teams} selectedGame={viewerGame} />);
+
+        await screen.findByText('Team Alpha');
+
+        expect(screen.queryByRole('button', { name: 'Edit team' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Create team' })).not.toBeInTheDocument();
+    });
+
     it('hides Create team and slot selector for empty slots when the game is finished', async () => {
         setupGetMocks();
 

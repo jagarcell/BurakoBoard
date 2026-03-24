@@ -712,6 +712,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                 This game has concluded — no further rounds can be recorded.
                             </p>
                         </div>
+                    ) : selectedGame?.user_role === 'viewer' ? (
+                        <div className="border-b border-slate-100 px-6 py-5">
+                            <p className="text-sm font-medium text-slate-500">
+                                You are viewing this game — only the game creator can record rounds.
+                            </p>
+                        </div>
                     ) : (
                         <div className="relative border-b border-slate-100 px-6 py-5">
                             {/* In-progress overlay — shown while the round POST is in flight */}

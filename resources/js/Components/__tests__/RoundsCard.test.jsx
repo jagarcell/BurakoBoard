@@ -2011,5 +2011,21 @@ describe('RoundsCard', () => {
         });
     });
 
+    it('shows viewer message and hides Record Round button when user role is viewer', async () => {
+        const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+        render(
+            <RoundsCard
+                hasTwoTeams
+                initialRounds={[]}
+                initialTeams={[teamA, teamB]}
+                selectedGame={viewerGame}
+            />,
+        );
+
+        await screen.findByText('You are viewing this game — only the game creator can record rounds.');
+        expect(screen.queryByRole('button', { name: 'Record Round' })).not.toBeInTheDocument();
+    });
+
 });
 
