@@ -30,10 +30,15 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [draggedPlayerId, setDraggedPlayerId] = useState(null);
     const [dragOverPlayerId, setDragOverPlayerId] = useState(null);
+    const [touchingPlayerId, setTouchingPlayerId] = useState(null);
+    const [touchGhostPos, setTouchGhostPos] = useState(null);
+    const [touchGhostWidth, setTouchGhostWidth] = useState(null);
     const [pendingSeatSwaps, setPendingSeatSwaps] = useState([]);
     const duplicatePlayerErrorTimer = useRef(null);
     const diffLabelRef = useRef(null);
     const [arrowHalfWidth, setArrowHalfWidth] = useState(null);
+    const touchDragRef = useRef({ playerId: null, active: false });
+    const seatSwapCallbackRef = useRef(null);
 
     // Sync teams whenever the parent's initialTeams reference changes (data loaded or game changed)
     useEffect(() => {
@@ -83,6 +88,77 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
         }
     }, [teams.length === 2]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Attach all touch handlers on document so iOS can perform seat-swap drag & drop.
+    // The HTML5 drag API is not supported on iOS Safari. All three listeners live here
+    // (rather than on the <li> as React props) so they fire correctly even when the
+    // player list is rendered inside a headlessui Portal (which is outside the React
+    // root container, causing React synthetic event delegation to miss the events).
+    // The touchmove listener is non-passive so it can call preventDefault() to suppress
+    // page scroll while a drag is in progress.
+    useEffect(() => {
+        const onTouchStart = (e) => {
+            // Only initiate a drag when the touch lands on a seated player row,
+            // identified by the data-player-id attribute that is set exclusively on
+            // rows whose player has a seat_number.
+            const li = e.target?.closest('[data-player-id]');
+            if (!li) return;
+            const pid = Number(li.dataset.playerId);
+            touchDragRef.current = { playerId: pid, active: true };
+            setTouchingPlayerId(pid);
+            setTouchGhostPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+            setTouchGhostWidth(li.getBoundingClientRect().width);
+        };
+
+        const onTouchMove = (e) => {
+            if (!touchDragRef.current.active) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const li = target?.closest('[data-player-id]');
+            const overId = li ? Number(li.dataset.playerId) : null;
+            setDragOverPlayerId(
+                overId !== null && overId !== touchDragRef.current.playerId ? overId : null,
+            );
+            setTouchGhostPos({ x: touch.clientX, y: touch.clientY });
+        };
+
+        const onTouchEnd = (e) => {
+            if (!touchDragRef.current.active) return;
+            const touch = e.changedTouches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const li = target?.closest('[data-player-id]');
+            const targetId = li ? Number(li.dataset.playerId) : null;
+            if (targetId !== null && targetId !== touchDragRef.current.playerId) {
+                seatSwapCallbackRef.current?.(touchDragRef.current.playerId, targetId);
+            }
+            touchDragRef.current = { playerId: null, active: false };
+            setDragOverPlayerId(null);
+            setTouchingPlayerId(null);
+            setTouchGhostPos(null);
+            setTouchGhostWidth(null);
+        };
+
+        const onTouchCancel = () => {
+            touchDragRef.current = { playerId: null, active: false };
+            setDragOverPlayerId(null);
+            setTouchingPlayerId(null);
+            setTouchGhostPos(null);
+            setTouchGhostWidth(null);
+        };
+
+        document.addEventListener('touchstart', onTouchStart, { passive: true });
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', onTouchEnd);
+        document.addEventListener('touchcancel', onTouchCancel);
+
+        return () => {
+            document.removeEventListener('touchstart', onTouchStart);
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+            document.removeEventListener('touchcancel', onTouchCancel);
+        };
+    }, []);
+
     const resetModal = () => {
         clearTimeout(duplicatePlayerErrorTimer.current);
         setTeamForm(defaultTeamForm);
@@ -93,7 +169,11 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
         setCreatingSlot(null);
         setDraggedPlayerId(null);
         setDragOverPlayerId(null);
+        setTouchingPlayerId(null);
+        setTouchGhostPos(null);
+        setTouchGhostWidth(null);
         setPendingSeatSwaps([]);
+        touchDragRef.current = { playerId: null, active: false };
     };
 
     const openModal = (slot = null) => {
@@ -220,6 +300,10 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
         // Queue the swap to be committed when the user clicks "Update team".
         setPendingSeatSwaps((prev) => [...prev, { playerIdA, playerIdB }]);
     };
+
+    // Always keep the ref pointing to the latest closure so the document-level
+    // touchend handler (attached once via useEffect) can call it without a stale reference.
+    seatSwapCallbackRef.current = handleSeatSwap;
 
     const handleAddExistingTeam = async (slot) => {
         const selectedTeamId = Number(slotSelections[slot]);
@@ -712,12 +796,20 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
                                 Current players
                             </p>
+                            <p className="text-xs text-slate-400 -mt-1">Drag &amp; Drop Players to swap seats</p>
                             <ul className="space-y-1">
                                 {editingTeam.existingPlayers
                                     .filter((p) => ! removedExistingPlayerIds.includes(p.id))
+                                    .sort((a, b) => {
+                                        if (a.seat_number == null && b.seat_number == null) return 0;
+                                        if (a.seat_number == null) return 1;
+                                        if (b.seat_number == null) return -1;
+                                        return a.seat_number - b.seat_number;
+                                    })
                                     .map((player) => (
                                         <li
                                             key={player.id}
+                                            data-player-id={player.seat_number != null ? player.id : undefined}
                                             draggable={player.seat_number != null}
                                             onDragStart={() => setDraggedPlayerId(player.id)}
                                             onDragEnd={() => {
@@ -747,13 +839,14 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                                 }
                                             }}
                                             className={[
-                                                'flex items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors',
+                                                'flex items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-700 transition select-none',
                                                 draggedPlayerId === player.id
                                                     ? 'opacity-40 bg-slate-100 ring-2 ring-inset ring-slate-300'
                                                     : dragOverPlayerId === player.id
                                                         ? 'bg-indigo-50 ring-2 ring-inset ring-indigo-400'
                                                         : 'bg-slate-50',
                                                 player.seat_number != null ? 'cursor-grab active:cursor-grabbing' : '',
+                                                touchingPlayerId === player.id ? 'opacity-40 bg-slate-100 ring-2 ring-inset ring-slate-300' : '',
                                             ].join(' ')}
                                         >
                                             <div className="flex min-w-0 items-center gap-2">
@@ -895,6 +988,27 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                     </div>
                 </form>
             </Modal>
+
+            {touchingPlayerId && touchGhostPos && (() => {
+                const ghostPlayer = editingTeam?.existingPlayers?.find((p) => p.id === touchingPlayerId);
+                if (!ghostPlayer) return null;
+                return (
+                    <div
+                        aria-hidden="true"
+                        className="pointer-events-none fixed left-0 top-0 z-[200]"
+                        style={{ transform: `translate(calc(${touchGhostPos.x}px - 50%), calc(${touchGhostPos.y}px - 100% - 8px)) scale(1.1)` }}
+                    >
+                        <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-700 shadow-2xl ring-2 ring-inset ring-indigo-400 opacity-90" style={touchGhostWidth ? { width: touchGhostWidth } : undefined}>
+                            {ghostPlayer.seat_number != null && (
+                                <span className="flex flex-shrink-0 items-center justify-center rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500">
+                                    Seat {ghostPlayer.seat_number}
+                                </span>
+                            )}
+                            <span>{ghostPlayer.display_name}</span>
+                        </div>
+                    </div>
+                );
+            })()}
         </>
     );
 }
