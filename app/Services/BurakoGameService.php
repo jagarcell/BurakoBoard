@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Events\GameInvitationSent;
+use App\Events\GameUpdated;
+use App\Events\RoundDraftUpdated;
 use App\Mail\GameInvitationMail;
 use App\Models\Game;
 use App\Models\Player;
@@ -171,7 +173,7 @@ class BurakoGameService
 
         $this->repository->attachTeamToGame($gameId, $team->id);
 
-        return $this->repository->getGameSummary($gameId);
+        return $this->broadcastAndReturn($gameId);
     }
 
     /**
@@ -211,7 +213,7 @@ class BurakoGameService
         // team's players are moved to the even slot where required.
         $this->repository->reassignAllSeatsForGame($gameId);
 
-        return $this->repository->getGameSummary($gameId);
+        return $this->broadcastAndReturn($gameId);
     }
 
     /**
@@ -236,7 +238,7 @@ class BurakoGameService
         $team = $this->repository->findTeamInGameOrFail($gameId, $teamId);
         $this->repository->updateTeam($team, $payload);
 
-        return $this->repository->getGameSummary($gameId);
+        return $this->broadcastAndReturn($gameId);
     }
 
     /**
@@ -274,7 +276,7 @@ class BurakoGameService
         $this->repository->attachPlayerToTeam($team->id, $player->id);
         $this->repository->assignPlayerSeat($gameId, $team->id, $player->id);
 
-        return $this->repository->getGameSummary($gameId);
+        return $this->broadcastAndReturn($gameId);
     }
 
     /**
@@ -302,7 +304,7 @@ class BurakoGameService
         $this->repository->removePlayerSeatForTeam($teamId, $playerId);
         $this->repository->detachPlayerFromTeam($teamId, $playerId);
 
-        return $this->repository->getGameSummary($gameId);
+        return $this->broadcastAndReturn($gameId);
     }
 
     /**
@@ -327,7 +329,7 @@ class BurakoGameService
 
         $this->repository->swapPlayerSeats($gameId, $playerIdA, $playerIdB);
 
-        return $this->repository->getGameSummary($gameId);
+        return $this->broadcastAndReturn($gameId);
     }
 
     /**
@@ -365,7 +367,7 @@ class BurakoGameService
 
         $this->repository->updateGameInitialShufflerSeat($game, (int) $seatedPlayer->seat_number);
 
-        return $this->repository->getGameSummary($gameId);
+        return $this->broadcastAndReturn($gameId);
     }
 
     /**
@@ -438,7 +440,7 @@ class BurakoGameService
         // retrieved later as a read-only scoring breakdown for that round.
         $this->repository->archiveRoundDraft($gameId, $committedRoundNumber);
 
-        return $this->repository->getGameSummary($gameId);
+        return $this->broadcastAndReturn($gameId);
     }
 
     /**
@@ -536,11 +538,37 @@ class BurakoGameService
             ]);
         }
 
-        return $this->repository->upsertRoundDraft(
+        $draft = $this->repository->upsertRoundDraft(
             $gameId,
             $payload['base_inputs'] ?? [],
             $payload['card_inputs'] ?? [],
         );
+
+        broadcast(new RoundDraftUpdated(
+            $gameId,
+            $draft->base_inputs ?? [],
+            $draft->card_inputs ?? [],
+        ))->toOthers();
+
+        return $draft;
+    }
+
+    /**
+     * Build the game summary, broadcast it to other channel members, and return it.
+     *
+     * @param  int  $gameId  Identifier of the game that was mutated.
+     * @return array<string, mixed> The refreshed game summary.
+     * Logic: assemble the authoritative summary once, dispatch a GameUpdated event to every
+     * other authenticated member of the private game channel so their UI reflects the change
+     * without requiring a page reload, then return the summary to the HTTP layer.
+     */
+    private function broadcastAndReturn(int $gameId): array
+    {
+        $summary = $this->repository->getGameSummary($gameId);
+
+        broadcast(new GameUpdated($gameId, $summary))->toOthers();
+
+        return $summary;
     }
 
     /**
