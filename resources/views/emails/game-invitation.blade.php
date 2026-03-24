@@ -135,8 +135,8 @@
             </div>
 
             <p class="note">
-                After you log in, the game will be pre-selected in the dropdown.
-                Click <strong>Accept Invite</strong> to confirm your role as a viewer.
+                After you log in, the game will be pre-selected in the dropdown
+                and your viewer access will be activated automatically.
             </p>
         </div>
 

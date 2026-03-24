@@ -714,4 +714,20 @@ class BurakoGameService
 
         return $this->repository->getGameWithUserRole($gameId, $userId);
     }
+
+    /**
+     * Accept a pending game invitation silently, without throwing on missing rows.
+     *
+     * @param  int  $gameId  Identifier of the game whose invitation should be accepted.
+     * @param  int  $userId  Identifier of the authenticated user.
+     * @return bool True when the pivot row was upgraded from pending_invitee to viewer; false when no pending invitation existed.
+     * Logic: delegates directly to the repository upgrade query and returns its boolean
+     *   result. Unlike acceptInvitation() this method never throws, making it safe to
+     *   call during the post-login flow where the game ID comes from the session and
+     *   the user may have already manually accepted or may not have been invited at all.
+     */
+    public function acceptInvitationIfPending(int $gameId, int $userId): bool
+    {
+        return $this->repository->upgradeInvitationToViewer($gameId, $userId);
+    }
 }
