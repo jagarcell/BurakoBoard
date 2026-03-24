@@ -187,7 +187,7 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
                                             : isHighlightedPlayer
                                                 ? ROLE_CHIP_COLORS.Cutter
                                                 : 'border-indigo-200 bg-white text-indigo-700'
-                                    } ${isFirstRound ? 'hover:border-blue-300 hover:bg-blue-200' : 'cursor-default opacity-80'}`}
+                                    } ${(isFirstRound && !isViewer) ? 'hover:border-blue-300 hover:bg-blue-200' : 'cursor-default opacity-80'}`}
                                     disabled={! isFirstRound || isViewer}
                                     onClick={(isFirstRound && ! isViewer) ? () => handleSetInitialCutter(player.id) : undefined}
                                     type="button"
