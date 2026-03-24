@@ -10,7 +10,8 @@ During every coding session:
    - files read
    - commands executed
    - code generated
-4. Show a message that reads DONE! and an optional brief description of what was done when the current development is complete.
+4. **Plan before implementing**: before making any code changes, outline every file you intend to create or modify and describe each change (e.g. new function, updated logic, migration added). Wait for the user to approve with "approved" before proceeding with implementation.
+5. Show a message that reads DONE! and an optional brief description of what was done when the current development is complete.
 
 ## Workflow
 

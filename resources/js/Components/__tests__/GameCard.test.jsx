@@ -872,9 +872,10 @@ describe('GameCard', () => {
 
         expect(screen.getByText('Bob')).toBeInTheDocument();
 
-        const checkboxes = screen.getAllByRole('checkbox');
-        expect(checkboxes).toHaveLength(2);
-        checkboxes.forEach((cb) => expect(cb).not.toBeChecked());
+        const aliceCheckbox = screen.getByRole('checkbox', { name: 'Alice' });
+        const bobCheckbox = screen.getByRole('checkbox', { name: 'Bob' });
+        expect(aliceCheckbox).not.toBeChecked();
+        expect(bobCheckbox).not.toBeChecked();
     });
 
     it('fetches invitable users from the correct game endpoint when the modal opens', async () => {
@@ -941,7 +942,7 @@ describe('GameCard', () => {
             screen.getByRole('button', { name: 'Invite a viewer to this game' }),
         );
 
-        const checkbox = await screen.findByRole('checkbox');
+        const checkbox = await screen.findByRole('checkbox', { name: 'Alice' });
         expect(checkbox).not.toBeChecked();
 
         await userEvent.click(checkbox);
@@ -1242,7 +1243,7 @@ describe('GameCard', () => {
 
         await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
 
-        await userEvent.click(screen.getByRole('checkbox'));
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Alice' }));
 
         expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
     });
@@ -1296,8 +1297,7 @@ describe('GameCard', () => {
         await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
 
         // Select only Alice
-        const checkboxes = screen.getAllByRole('checkbox');
-        await userEvent.click(checkboxes[0]);
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Alice' }));
 
         await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -1342,7 +1342,7 @@ describe('GameCard', () => {
 
         await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
 
-        await userEvent.click(screen.getByRole('checkbox'));
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Alice' }));
         await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
         await waitFor(() =>
@@ -1395,7 +1395,7 @@ describe('GameCard', () => {
 
         await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
 
-        await userEvent.click(screen.getByRole('checkbox'));
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Alice' }));
         expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
 
         await userEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -1626,6 +1626,83 @@ describe('GameCard', () => {
                 expect.objectContaining({ id: 11, user_role: 'viewer' }),
             ),
         );
+    });
+
+    // -------------------------------------------------------------------------
+    // Include finished games filter
+    // -------------------------------------------------------------------------
+
+    it('renders the Include finished games checkbox checked by default', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const filterCheckbox = await screen.findByRole('checkbox', { name: 'Include finished games' });
+        expect(filterCheckbox).toBeChecked();
+    });
+
+    it('shows all games (including finished) in the dropdown when the filter checkbox is checked', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+
+        expect(screen.getByRole('option', { name: 'Late Table (2000 pts)' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'Early Table (1500 pts)' })).toBeInTheDocument();
+    });
+
+    it('hides finished games from the dropdown when the filter checkbox is unchecked', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const filterCheckbox = await screen.findByRole('checkbox', { name: 'Include finished games' });
+        await userEvent.click(filterCheckbox);
+
+        const trigger = screen.getByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await userEvent.click(trigger);
+
+        expect(screen.getByRole('option', { name: 'Late Table (2000 pts)' })).toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: 'Early Table (1500 pts)' })).not.toBeInTheDocument();
+    });
+
+    it('persists the Include finished games preference to localStorage keyed by user id', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const filterCheckbox = await screen.findByRole('checkbox', { name: 'Include finished games' });
+
+        await userEvent.click(filterCheckbox);
+        expect(localStorage.getItem('burako_include_finished_1')).toBe('false');
+
+        await userEvent.click(filterCheckbox);
+        expect(localStorage.getItem('burako_include_finished_1')).toBe('true');
+    });
+
+    it('restores the Include finished games preference from localStorage on mount', async () => {
+        localStorage.setItem('burako_include_finished_1', 'false');
+
+        axios.get.mockResolvedValueOnce({
+            data: { data: { games: twoGames } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const filterCheckbox = await screen.findByRole('checkbox', { name: 'Include finished games' });
+        expect(filterCheckbox).not.toBeChecked();
     });
 
 });

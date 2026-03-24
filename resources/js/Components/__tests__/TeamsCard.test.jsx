@@ -2053,6 +2053,139 @@ describe('TeamsCard', () => {
 
             expect(axios.put).not.toHaveBeenCalled();
         });
+
+        it('swaps seat badges via touch events (iOS/mobile)', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+            const bobRow   = within(dialog).getByRole('generic', { name: 'Seat 3' }).closest('li');
+
+            // touchstart on Alice's row — provide touch coordinates so headlessUI's
+            // outside-click handler (which also listens on document) doesn't crash.
+            act(() => {
+                fireEvent.touchStart(aliceRow, {
+                    touches: [{ clientX: 5, clientY: 5, target: aliceRow }],
+                    changedTouches: [{ clientX: 5, clientY: 5, target: aliceRow }],
+                });
+            });
+
+            // Mock elementFromPoint to resolve to Bob's row during touchend.
+            // jsdom doesn't define the property, so assign directly rather than spy.
+            document.elementFromPoint = vi.fn().mockReturnValue(bobRow);
+
+            // Fire touchmove/touchend with touches arrays so the production handlers
+            // can read touches[0].clientX / changedTouches[0].clientX without throwing.
+            const moveEv = new Event('touchmove', { bubbles: true, cancelable: true });
+            Object.defineProperty(moveEv, 'touches', { value: [{ clientX: 10, clientY: 50 }], configurable: true });
+            document.dispatchEvent(moveEv);
+
+            // Wrap touchend in act() so React flushes the resulting setEditingTeam
+            // state update (triggered outside React's synthetic event context) before the
+            // assertions run.
+            const endEv = new Event('touchend', { bubbles: true, cancelable: true });
+            Object.defineProperty(endEv, 'changedTouches', { value: [{ clientX: 10, clientY: 50 }], configurable: true });
+            act(() => { document.dispatchEvent(endEv); });
+
+            delete document.elementFromPoint;
+
+            // Seat badges must be swapped immediately in the modal without an API call.
+            expect(within(aliceRow).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
+            expect(within(bobRow).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
+            expect(axios.put).not.toHaveBeenCalled();
+        });
+
+        it('does not swap seats via touch when the finger lifts over the same row', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+
+            // touchstart and touchend on the same row — no swap should occur.
+            act(() => {
+                fireEvent.touchStart(aliceRow, {
+                    touches: [{ clientX: 5, clientY: 5, target: aliceRow }],
+                    changedTouches: [{ clientX: 5, clientY: 5, target: aliceRow }],
+                });
+            });
+
+            document.elementFromPoint = vi.fn().mockReturnValue(aliceRow);
+
+            const endEv = new Event('touchend', { bubbles: true, cancelable: true });
+            Object.defineProperty(endEv, 'changedTouches', { value: [{ clientX: 5, clientY: 5 }], configurable: true });
+            act(() => { document.dispatchEvent(endEv); });
+
+            delete document.elementFromPoint;
+
+            expect(within(aliceRow).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
+            expect(axios.put).not.toHaveBeenCalled();
+        });
+
+        it('applies opacity-40 class on touchstart and removes it on touchend', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+
+            act(() => {
+                fireEvent.touchStart(aliceRow, {
+                    touches: [{ clientX: 5, clientY: 5, target: aliceRow }],
+                    changedTouches: [{ clientX: 5, clientY: 5, target: aliceRow }],
+                });
+            });
+
+            expect(aliceRow).toHaveClass('opacity-40');
+
+            document.elementFromPoint = vi.fn().mockReturnValue(aliceRow);
+
+            const endEv = new Event('touchend', { bubbles: true, cancelable: true });
+            Object.defineProperty(endEv, 'changedTouches', { value: [{ clientX: 5, clientY: 5 }], configurable: true });
+            act(() => { document.dispatchEvent(endEv); });
+
+            delete document.elementFromPoint;
+
+            expect(aliceRow).not.toHaveClass('opacity-40');
+        });
+
+        it('removes opacity-40 class on touchcancel', async () => {
+            setupGetMocks();
+
+            render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+            await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
+
+            const dialog   = screen.getByRole('dialog');
+            const aliceRow = within(dialog).getByRole('generic', { name: 'Seat 1' }).closest('li');
+
+            act(() => {
+                fireEvent.touchStart(aliceRow, {
+                    touches: [{ clientX: 5, clientY: 5, target: aliceRow }],
+                    changedTouches: [{ clientX: 5, clientY: 5, target: aliceRow }],
+                });
+            });
+
+            expect(aliceRow).toHaveClass('opacity-40');
+
+            act(() => { document.dispatchEvent(new Event('touchcancel', { bubbles: true })); });
+
+            expect(aliceRow).not.toHaveClass('opacity-40');
+        });
     });
 
 });

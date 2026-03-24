@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\BurakoGameService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -12,6 +13,16 @@ use Laravel\Socialite\Two\InvalidStateException;
 
 class GoogleAuthController extends Controller
 {
+    /**
+     * Construct the controller with the game service dependency.
+     *
+     * @param  \App\Services\BurakoGameService  $service  Service used to auto-accept pending invitations after login.
+     * @return void
+     * Logic: inject the game service so the callback() method can silently upgrade any
+     *   pending_invitee pivot row when the user signs in via Google from an invitation link.
+     */
+    public function __construct(private readonly BurakoGameService $service) {}
+
     /**
      * Redirect the user to the Google OAuth authorisation page.
      *
@@ -36,8 +47,10 @@ class GoogleAuthController extends Controller
      *        matching account is found we attach the google_id so future
      *        logins skip the e-mail look-up. When neither exists we create a
      *        new account with a random password (the user may set one later
-     *        via the forgot-password flow). In all cases the session is
-     *        regenerated before redirecting to the dashboard.
+     *        via the forgot-password flow). After login, if the session holds
+     *        an invitation_game_id (stored when the user visited the login page
+     *        via an invitation link), the pending_invitee pivot row is silently
+     *        upgraded to viewer so the game appears in the dashboard selector.
      *        InvalidStateException is caught when the OAuth state token is
      *        missing or mismatched (e.g. the user navigated directly to the
      *        callback URL or their session expired). Any other exception is
@@ -77,6 +90,12 @@ class GoogleAuthController extends Controller
         Auth::login($user, remember: true);
 
         request()->session()->regenerate();
+
+        $invitationGameId = request()->session()->pull('invitation_game_id');
+
+        if ($invitationGameId) {
+            $this->service->acceptInvitationIfPending((int) $invitationGameId, $user->id);
+        }
 
         return redirect()->intended(route('dashboard', absolute: false));
     }

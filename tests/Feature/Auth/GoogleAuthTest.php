@@ -2,8 +2,10 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as SocialiteUser;
@@ -182,5 +184,53 @@ class GoogleAuthTest extends TestCase
         $response = $this->actingAs($user)->get(route('auth.google.redirect'));
 
         $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    // -------------------------------------------------------------------------
+    // Callback — auto-accept pending invitation stored in session
+    // -------------------------------------------------------------------------
+
+    /**
+     * When the session contains an invitation_game_id (set when the user visited
+     * the login page via an invitation link), the Google callback silently
+     * upgrades the user's role from pending_invitee to viewer.
+     *
+     * @return void Asserts the game_user role is updated to viewer after Google login.
+     * Logic: prime the session with an invitation_game_id, create a pending_invitee
+     *   pivot row, hit the Google callback, and assert the role is now viewer.
+     */
+    public function test_google_callback_auto_accepts_pending_invitation_from_session(): void
+    {
+        $user = User::factory()->create(['google_id' => 'google-auto-accept']);
+
+        $game = Game::query()->create([
+            'name'                         => 'Invite Game',
+            'target_points'                => 2000,
+            'status'                       => 'in_progress',
+            'winning_team_id'              => null,
+            'current_round_number'         => 0,
+            'initial_shuffler_seat_number' => null,
+        ]);
+
+        DB::table('game_user')->insert([
+            'game_id'    => $game->id,
+            'user_id'    => $user->id,
+            'role'       => 'pending_invitee',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $socialiteUser = $this->makeSocialiteUser('google-auto-accept', $user->email, $user->name);
+        $this->mockSocialiteDriver($socialiteUser);
+
+        // Prime the session with the invitation game ID (simulates visiting the login page via invitation link).
+        $this->withSession(['invitation_game_id' => $game->id])
+            ->get(route('auth.google.callback'));
+
+        $this->assertDatabaseHas('game_user', [
+            'game_id' => $game->id,
+            'user_id' => $user->id,
+            'role'    => 'viewer',
+        ]);
     }
 }

@@ -53,7 +53,15 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     const [isFetchingInvitations, setIsFetchingInvitations] = useState(false);
     const [pendingGames, setPendingGames] = useState([]);
 
+    const [includeFinishedGames, setIncludeFinishedGames] = useState(
+        () => localStorage.getItem(`burako_include_finished_${user?.id}`) !== 'false',
+    );
+
     const selectedGame = games.find((g) => String(g.id) === selectedGameId) ?? null;
+
+    const visibleGames = includeFinishedGames
+        ? games
+        : games.filter((g) => g.status !== 'finished');
 
     useEffect(() => {
         let isActive = true;
@@ -567,11 +575,25 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                             </p>
                         </div>
 
-                        <div className="flex w-full flex-col gap-3 sm:flex-row lg:max-w-2xl lg:items-center">
-                            <label className="sr-only" htmlFor="game-selector">
-                                Select or create a game
+                        <div className="flex w-full flex-col gap-1.5 lg:max-w-2xl">
+                            <label className="flex cursor-pointer items-center gap-2 self-start" htmlFor="include-finished-games">
+                                <Checkbox
+                                    id="include-finished-games"
+                                    checked={includeFinishedGames}
+                                    onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setIncludeFinishedGames(checked);
+                                        localStorage.setItem(`burako_include_finished_${user?.id}`, String(checked));
+                                    }}
+                                />
+                                <span className="select-none text-sm text-slate-600">Include finished games</span>
                             </label>
-                            <div className="relative w-full" ref={dropdownAnchorRef}>
+
+                            <div className="flex w-full flex-col gap-3 sm:flex-row lg:items-center">
+                                <label className="sr-only" htmlFor="game-selector">
+                                    Select or create a game
+                                </label>
+                                <div className="relative w-full" ref={dropdownAnchorRef}>
                                 {isDropdownOpen && (
                                     <div
                                         className="fixed inset-0 z-40"
@@ -632,7 +654,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                     </svg>
                                 </button>
 
-                                {isDropdownOpen && games.length > 0 && dropdownRect && createPortal(
+                                {isDropdownOpen && visibleGames.length > 0 && dropdownRect && createPortal(
                                     <ul
                                         id="game-listbox"
                                         role="listbox"
@@ -657,7 +679,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                             Select or create a game
                                         </li>
 
-                                        {games.map((game) => (
+                                        {visibleGames.map((game) => (
                                             <li
                                                 key={game.id}
                                                 role="option"
@@ -702,6 +724,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                     Edit
                                 </PrimaryButton>
                             ) : null}
+                            </div>
                         </div>
                     </div>
 
