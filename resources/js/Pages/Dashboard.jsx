@@ -99,6 +99,33 @@ export default function Dashboard() {
     const initialRounds = useMemo(() => gameSummary?.rounds ?? [], [gameSummary]);
     const initialRoundRoles = useMemo(() => gameSummary?.round_roles ?? [], [gameSummary]);
 
+    // Subscribe to real-time game-state updates broadcast by other users in this game.
+    // Covers team changes, player order changes, and new rounds recorded by co-players.
+    useEffect(() => {
+        if (! selectedGame?.id || typeof window === 'undefined' || ! window.Echo) return;
+
+        const echo = window.Echo;
+
+        echo.private(`game.${selectedGame.id}`)
+            .listen('.game.updated', ({ game, teams, rounds, round_roles }) => {
+                setGameSummary({ game, teams, rounds, round_roles });
+                if (game) {
+                    setSelectedGame((prev) => {
+                        if (prev && game.status === 'finished' && prev.status !== 'finished') {
+                            fireConfetti();
+                        }
+
+                        return prev ? { ...prev, status: game.status, current_round_number: game.current_round_number } : prev;
+                    });
+                }
+            });
+
+        return () => {
+            echo.leave(`game.${selectedGame.id}`);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedGame?.id]);
+
     const hasTwoTeams = useMemo(() => {
         if (initialTeams.length < 2) return false;
 
