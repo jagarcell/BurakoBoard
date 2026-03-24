@@ -325,6 +325,31 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [baseInputs, cardInputs]);
 
+    // Subscribe to real-time draft updates broadcast by other users in this game.
+    // Viewers receive a live read-only preview; editors are excluded via toOthers()
+    // on the server side so their own keystrokes are not echoed back.
+    useEffect(() => {
+        if (!selectedGame?.id || typeof window === 'undefined' || !window.Echo) return;
+
+        // Capture the Echo instance at subscription time so the cleanup closure
+        // holds a stable reference even if window.Echo is reassigned later.
+        const echo = window.Echo;
+
+        echo.private(`game.${selectedGame.id}`)
+            .listen('.round.draft.updated', ({ base_inputs, card_inputs }) => {
+                // Skip the next debounced auto-save so receiving an update never
+                // triggers a redundant PUT back to the server.
+                skipNextDraftSave.current = true;
+                if (base_inputs) setBaseInputs(base_inputs);
+                if (card_inputs) setCardInputs(card_inputs);
+            });
+
+        return () => {
+            echo.leave(`game.${selectedGame.id}`);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedGame?.id]);
+
     const handleElementChange = (teamId, elementId, value) => {
         setBaseInputs((prev) => {
             const el = elements.find((e) => e.id === elementId);
@@ -714,9 +739,120 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                         </div>
                     ) : selectedGame?.user_role === 'viewer' ? (
                         <div className="border-b border-slate-100 px-6 py-5">
-                            <p className="text-sm font-medium text-slate-500">
-                                You are viewing this game — only the game creator can record rounds.
-                            </p>
+                            <div className="mb-4 flex items-center justify-between">
+                                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                                    Round {nextRound}
+                                </p>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        aria-expanded={activeCircleRound === nextRound}
+                                        aria-label={`${activeCircleRound === nextRound ? 'Hide' : 'Show'} seating circle for round ${nextRound}`}
+                                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+                                            activeCircleRound === nextRound
+                                                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                : 'text-slate-400 hover:bg-indigo-100 hover:text-indigo-600'
+                                        }`}
+                                        onClick={(e) => toggleCircle(e, nextRound)}
+                                        type="button"
+                                    >
+                                        <svg
+                                            aria-hidden="true"
+                                            className="h-3.5 w-3.5"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                        >
+                                            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+                                        </svg>
+                                    </button>
+                                    <span
+                                        aria-label="Receiving live score updates"
+                                        className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600"
+                                    >
+                                        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />
+                                        Live
+                                    </span>
+                                </div>
+                            </div>
+                            {(activeCircleRound === nextRound || closingCircleRound === nextRound) && (
+                                <div className="mb-4 flex justify-center overflow-visible">
+                                    <PlayerCircle
+                                        buttonRect={circleButtonRect}
+                                        isOpen={activeCircleRound === nextRound}
+                                        players={teams.flatMap((t) => t.players)}
+                                        roundNumber={nextRound}
+                                        roundRoles={currentRoundRolesForPanel}
+                                    />
+                                </div>
+                            )}
+                            {activeCircleRound !== nextRound && closingCircleRound !== nextRound && (
+                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                {teams.map((team) => {
+                                    const roundScore = computeTeamScore(team.id);
+                                    const partialScore = getAccruedScore(team.id) + roundScore;
+                                    const other = teams.find((t) => t.id !== team.id);
+                                    const otherPartial = other
+                                        ? getAccruedScore(other.id) + computeTeamScore(other.id)
+                                        : null;
+                                    const bothPos =
+                                        partialScore > 0 &&
+                                        otherPartial !== null &&
+                                        otherPartial > 0;
+                                    const partialChipCls =
+                                        partialScore < 0
+                                            ? 'bg-red-100 text-red-800'
+                                            : partialScore === 0
+                                                ? 'bg-[bisque] text-green-700'
+                                                : bothPos && partialScore < otherPartial
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : 'bg-green-100 text-green-800';
+                                    const roundChipCls =
+                                        roundScore < 0
+                                            ? 'bg-red-100 text-red-800'
+                                            : roundScore === 0
+                                                ? 'bg-slate-100 text-slate-600'
+                                                : 'bg-indigo-100 text-indigo-800';
+
+                                    return (
+                                        <div key={team.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                                <p className="text-sm font-semibold text-slate-700">
+                                                    {team.name}
+                                                </p>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-medium text-slate-400">Round:</span>
+                                                    <span
+                                                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${roundChipCls}`}
+                                                        title="This round's score"
+                                                    >
+                                                        {roundScore}
+                                                    </span>
+                                                    <span className="text-xs font-medium text-slate-400">Total:</span>
+                                                    <span
+                                                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${partialChipCls}`}
+                                                        title="Accrued score + this round"
+                                                    >
+                                                        {partialScore}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {elements.length === 0 ? (
+                                                <p className="text-xs text-slate-400">Loading elements…</p>
+                                            ) : (
+                                                <BaseElementsInput
+                                                    cardsInHand={cardInputs[team.id]?.cardsInHand ?? 0}
+                                                    cardsOnTable={cardInputs[team.id]?.cardsOnTable ?? 0}
+                                                    elements={elements}
+                                                    readOnly
+                                                    teamId={team.id}
+                                                    values={baseInputs[team.id] ?? {}}
+                                                />
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            )}
                         </div>
                     ) : (
                         <div className="relative border-b border-slate-100 px-6 py-5">
@@ -822,33 +958,46 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                             }}
                                             className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
                                         >
-                                            <div className="mb-3 flex items-center justify-between gap-2">
+                                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                                 <p className="text-sm font-semibold text-slate-700">
                                                     {team.name}
                                                 </p>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="text-xs font-medium text-slate-400">
-                                                        Game Score Including Round:
-                                                    </span>
+                                                <div className="flex items-center gap-2">
                                                     {(() => {
-                                                        const partialScore = getAccruedScore(team.id) + computeTeamScore(team.id);
+                                                        const roundScore = computeTeamScore(team.id);
+                                                        const partialScore = getAccruedScore(team.id) + roundScore;
                                                         const other = teams.find((t) => t.id !== team.id);
                                                         const otherPartial = other ? getAccruedScore(other.id) + computeTeamScore(other.id) : null;
                                                         const bothPos = partialScore > 0 && otherPartial !== null && otherPartial > 0;
-                                                        const chipCls = partialScore < 0
+                                                        const partialChipCls = partialScore < 0
                                                             ? 'bg-red-100 text-red-800'
                                                             : partialScore === 0
                                                                 ? 'bg-[bisque] text-green-700'
                                                                 : bothPos && partialScore < otherPartial
                                                                     ? 'bg-yellow-100 text-yellow-800'
                                                                     : 'bg-green-100 text-green-800';
+                                                        const roundChipCls = roundScore < 0
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : roundScore === 0
+                                                                ? 'bg-slate-100 text-slate-600'
+                                                                : 'bg-indigo-100 text-indigo-800';
                                                         return (
-                                                            <span
-                                                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}
-                                                                title="Accrued score + this round"
-                                                            >
-                                                                {partialScore}
-                                                            </span>
+                                                            <>
+                                                                <span className="text-xs font-medium text-slate-400">Round:</span>
+                                                                <span
+                                                                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${roundChipCls}`}
+                                                                    title="This round's score"
+                                                                >
+                                                                    {roundScore}
+                                                                </span>
+                                                                <span className="text-xs font-medium text-slate-400">Total:</span>
+                                                                <span
+                                                                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${partialChipCls}`}
+                                                                    title="Accrued score + this round"
+                                                                >
+                                                                    {partialScore}
+                                                                </span>
+                                                            </>
                                                         );
                                                     })()}
                                                     <button
