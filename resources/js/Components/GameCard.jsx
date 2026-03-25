@@ -632,6 +632,9 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                         const checked = e.target.checked;
                                         setIncludeFinishedGames(checked);
                                         localStorage.setItem(`burako_include_finished_${user?.id}`, String(checked));
+                                        if (!checked && selectedGame?.status === 'finished') {
+                                            setSelectedGameId('');
+                                        }
                                     }}
                                 />
                                 <span className="select-none text-sm text-slate-600">Include finished games</span>
