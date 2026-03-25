@@ -92,6 +92,188 @@ Each user can register custom voice aliases — a display alias paired with a ke
 | jsdom                          | ^24.1.0 |
 | @vitejs/plugin-react           |  ^4.2.0 |
 
+---
+
+## Local Installation
+
+### Prerequisites
+
+| Tool                                     | Minimum version | Required for  |
+|------------------------------------------|-----------------|---------------|
+| Git                                      |       any       |     both      |
+| Docker Desktop / Docker Engine + Compose |       v24+      | Docker track  |
+| PHP                                      |       8.2       | artisan track |
+| Composer                                 |       2.x       | artisan track |
+| Node.js                                  |      20 LTS     |     both      |
+| MySQL                                    |       8.0       | artisan track |
+| Redis                                    |       7.x       | artisan track |
+
+---
+
+### 1 — Common first steps (both tracks)
+
+```bash
+# Clone the repository
+git clone https://github.com/jagarcell/BurakoBoard.git
+cd BurakoBoard
+
+# Copy the environment file
+cp .env.example .env
+```
+
+---
+
+### 2a — Docker track (Laravel Sail)
+
+The `compose.yaml` orchestrates **MySQL 8.4**, **Redis**, **Laravel Reverb**, **Mailpit** and a **Caddy** reverse-proxy alongside the application container — no local PHP or database install needed.
+
+```bash
+# Install PHP dependencies inside a temporary container
+docker run --rm -u "$(id -u):$(id -g)" \
+  -v "$(pwd):/var/www/html" \
+  -w /var/www/html \
+  laravelsail/php82-composer:latest \
+  composer install --no-interaction --prefer-dist
+
+# Start all services in the background
+./vendor/bin/sail up -d
+
+# Generate the application key
+./vendor/bin/sail artisan key:generate
+
+# Run migrations and seed the database
+./vendor/bin/sail artisan migrate --seed
+
+# Install JS dependencies and start the Vite dev server
+./vendor/bin/sail npm install
+./vendor/bin/sail npm run dev
+```
+
+The app is available at **https://localhost** (Caddy handles TLS).  
+Mailpit UI is at **http://localhost:8025**.
+
+> **Caddyfile** — create a `Caddyfile` in the project root with the following content before starting Sail:
+> ```
+> localhost {
+>     tls internal
+>     reverse_proxy app:80
+> }
+> ```
+
+> **Tip:** add `alias sail="./vendor/bin/sail"` to your shell profile to shorten every command to `sail …`.
+
+---
+
+### 2b — Artisan serve track (bare-metal PHP)
+
+#### Install MySQL 8
+
+**macOS (Homebrew)**
+```bash
+brew install mysql@8.4
+brew services start mysql@8.4
+
+# Secure the installation and set a root password
+mysql_secure_installation
+
+# Create the application database and user
+mysql -u root -p <<'SQL'
+CREATE DATABASE burakoboard_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'sail'@'localhost' IDENTIFIED BY 'password';
+GRANT ALL PRIVILEGES ON burakoboard_db.* TO 'sail'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+```
+
+**Ubuntu / Debian**
+```bash
+sudo apt update
+sudo apt install -y mysql-server
+sudo systemctl enable --now mysql
+
+# Secure the installation
+sudo mysql_secure_installation
+
+# Create the application database and user
+sudo mysql <<'SQL'
+CREATE DATABASE burakoboard_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'sail'@'localhost' IDENTIFIED BY 'password';
+GRANT ALL PRIVILEGES ON burakoboard_db.* TO 'sail'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+```
+
+#### Install Redis 7
+
+**macOS (Homebrew)**
+```bash
+brew install redis
+brew services start redis
+
+# Verify it is running
+redis-cli ping   # should return PONG
+```
+
+**Ubuntu / Debian**
+```bash
+sudo apt update
+sudo apt install -y redis-server
+sudo systemctl enable --now redis-server
+
+# Verify it is running
+redis-cli ping   # should return PONG
+```
+
+#### Configure `.env` for local services
+
+Update the following values so they point to the local instances instead of the Docker service names:
+
+```dotenv
+DB_HOST=127.0.0.1
+DB_PORT=3306
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REVERB_HOST=127.0.0.1
+APP_URL=http://localhost:8000
+```
+
+#### Start the application
+
+Run each of the following in a **separate terminal**:
+
+```bash
+# Terminal 1 — PHP dependencies & app server
+composer install
+php artisan key:generate
+php artisan migrate --seed
+php artisan serve                    # http://localhost:8000
+
+# Terminal 2 — WebSocket server (Laravel Reverb)
+php artisan reverb:start
+
+# Terminal 3 — Queue worker (broadcasting & mail jobs)
+php artisan queue:work
+
+# Terminal 4 — Vite dev server (React / Tailwind hot-reload)
+npm install
+npm run dev
+```
+
+---
+
+### Running the test suites
+
+```bash
+# PHP (PHPUnit)
+./vendor/bin/sail artisan test          # Docker
+php artisan test                        # bare-metal
+
+# JavaScript (Vitest)
+./vendor/bin/sail npm run test          # Docker
+npm run test                            # bare-metal
+```
+
+---
 
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
