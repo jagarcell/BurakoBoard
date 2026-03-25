@@ -261,6 +261,136 @@ npm run dev
 
 ---
 
+### 3 — Social Login (OAuth) Configuration
+
+BurakoBoard uses **[Laravel Socialite](https://laravel.com/docs/socialite)** to handle the full
+OAuth flow for both providers — redirecting the user to the provider's authorisation page,
+exchanging the authorisation code for a user token, and returning the authenticated user back to
+the application. Google is supported natively by Socialite; Apple Sign In is added via the
+**[socialiteproviders/apple](https://socialiteproviders.com/Apple/)** community driver, which
+extends Socialite with Apple's `form_post` callback mechanism and JWT-based client secret
+generation. No custom OAuth logic lives in the application — all of it is delegated to these
+two packages.
+
+Both providers are optional. If you skip this section only email/password authentication will be
+available. When a provider is fully configured, the **Continue with Google** / **Continue with
+Apple** buttons appear on the login page automatically.
+
+---
+
+#### Google OAuth
+
+**Portal:** [Google Cloud Console](https://console.cloud.google.com)
+
+1. **Create or select a project**
+   Open the [Google Cloud Console](https://console.cloud.google.com), click the project picker at
+   the top of the page, and either select an existing project or click **New Project**.
+
+2. **Enable the Google Identity API**
+   Go to **APIs & Services → Library**, search for **"Google Identity"** (also listed as
+   "Google Sign-In" or "People API" in older accounts) and click **Enable**.
+
+3. **Configure the OAuth consent screen**
+   Navigate to **APIs & Services → OAuth consent screen**:
+   - User type: **External** (allows any Google account during testing).
+   - Fill in the required fields (app name, support email, developer email).
+   - Under **Test users**, add your own Gmail address so you can log in before publishing.
+
+4. **Create OAuth credentials**
+   Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**:
+   - Application type: **Web application**
+   - Name: any label (e.g., `BurakoBoard Dev`)
+   - **Authorised redirect URIs** — add your callback URL(s) exactly:
+     ```
+     http://localhost:8000/auth/google/callback   # bare-metal / artisan serve
+     https://localhost/auth/google/callback        # Docker / Sail (Caddy TLS)
+     ```
+
+5. **Copy the credentials**
+   After creation the console displays your **Client ID** and **Client Secret**. Copy both.
+
+6. **Set the `.env` variables**
+   ```dotenv
+   GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=your-client-secret
+   GOOGLE_REDIRECT_URI="${APP_URL}/auth/google/callback"
+   ```
+
+> **Note:** the redirect URI in `.env` must exactly match one of the URIs registered in the
+> console (including scheme and trailing path). A mismatch returns a `redirect_uri_mismatch` error.
+
+---
+
+#### Apple Sign In
+
+**Portal:** [Apple Developer Portal](https://developer.apple.com/account)
+
+> **Prerequisite:** you must be enrolled in the
+> [Apple Developer Program](https://developer.apple.com/programs/) (USD 99/year).
+> Sign In with Apple cannot be tested without an active paid membership.
+
+1. **Register an App ID** *(skip if you already have one)*
+   - Go to **Certificates, IDs & Profiles → Identifiers → +**.
+   - Select **App IDs → App**, provide a description and a reverse-DNS bundle ID
+     (e.g., `com.yourcompany.burakoboard`).
+   - Under **Capabilities**, enable **Sign In with Apple** → **Save**.
+
+2. **Create a Services ID** *(this is the web OAuth client)*
+   - Go to **Identifiers → +**, choose **Services IDs**.
+   - Description: any label; Identifier: a unique reverse-DNS string, e.g.,
+     `com.yourcompany.burakoboard.web`. **This identifier becomes `APPLE_CLIENT_ID`.**
+   - Enable **Sign In with Apple**, click **Configure**:
+     - Primary App ID: link it to the App ID created in step 1.
+     - **Return URLs** — add your callback URL exactly:
+       ```
+       https://your-domain.com/auth/apple/callback
+       ```
+       > **Important:** Apple requires an **HTTPS** callback URL with a real, publicly reachable
+       > domain even for local development. Use a tunnelling tool such as
+       > [ngrok](https://ngrok.com) or [Expose](https://expose.dev) to get a public HTTPS URL
+       > that forwards to your local server, then register that URL here and set it as `APP_URL`
+       > in your `.env`.
+   - Save the Services ID.
+
+3. **Create a private key**
+   - Go to **Keys → +**, give it a name, enable **Sign In with Apple**, click **Configure** and
+     select your App ID.
+   - Register the key, then **download the `.p8` file immediately** — Apple only allows one
+     download per key.
+   - Note the **Key ID** (10-character alphanumeric string). **This becomes `APPLE_KEY_ID`.**
+
+4. **Find your Team ID**
+   - Click your account name at the top-right of the developer portal and open the
+     **Membership** page.
+   - Your **Team ID** (10-character alphanumeric string) is shown there.
+     **This becomes `APPLE_TEAM_ID`.**
+
+5. **Set the `.env` variables**
+   ```dotenv
+   APPLE_CLIENT_ID=com.yourcompany.burakoboard.web   # Services ID from step 2
+   APPLE_TEAM_ID=ABCDE12345                           # 10-char team ID from step 4
+   APPLE_KEY_ID=XYZ1234567                            # 10-char key ID from step 3
+   APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIGT...\n-----END PRIVATE KEY-----"
+   APPLE_REDIRECT_URI="${APP_URL}/auth/apple/callback"
+   APPLE_CLIENT_SECRET=                               # left blank — auto-generated by the package
+   ```
+
+   **Formatting `APPLE_PRIVATE_KEY`:** open the downloaded `.p8` file in a text editor, then
+   replace every line break with a literal `\n` and wrap the whole string in **double quotes**.
+   The resulting value should look like:
+   ```dotenv
+   APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEG...\n-----END PRIVATE KEY-----"
+   ```
+
+> **How the callback works:** Apple sends the Sign In callback as an HTTP **POST**
+> (`response_mode=form_post`), not a GET redirect. BurakoBoard already:
+> - registers the callback route as `POST /auth/apple/callback`, and
+> - excludes that path from CSRF verification (`bootstrap/app.php`).
+>
+> No extra server configuration is needed on your end.
+
+---
+
 ### Running the test suites
 
 ```bash
