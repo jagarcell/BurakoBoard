@@ -57,6 +57,9 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         () => localStorage.getItem(`burako_include_finished_${user?.id}`) !== 'false',
     );
 
+    const [isRematch, setIsRematch] = useState(false);
+    const [rematchSourceId, setRematchSourceId] = useState(null);
+
     const selectedGame = games.find((g) => String(g.id) === selectedGameId) ?? null;
 
     const visibleGames = includeFinishedGames
@@ -142,6 +145,8 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     };
 
     const openCreateModal = () => {
+        setIsRematch(false);
+        setRematchSourceId(null);
         resetForm();
         const now = new Date();
         const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
@@ -160,7 +165,24 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         }
 
         setIsCreateModalOpen(false);
+        setIsRematch(false);
+        setRematchSourceId(null);
         resetForm();
+    };
+
+    const openRematchModal = (game) => {
+        setIsRematch(true);
+        setRematchSourceId(game.id);
+        setErrors({});
+        const now = new Date();
+        const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        setForm({ name: `${dayName} ${year}/${month}/${day} ${hours}:${minutes}`, targetPoints: String(game.target_points) });
+        setIsCreateModalOpen(true);
     };
 
     const openEditModal = () => {
@@ -456,7 +478,11 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setIsSaving(true);
 
         try {
-            const response = await axios.post('/api/v1/games', {
+            const endpoint = isRematch
+                ? `/api/v1/games/${rematchSourceId}/rematch`
+                : '/api/v1/games';
+
+            const response = await axios.post(endpoint, {
                 name: trimmedName,
                 target_points: targetPoints,
             });
@@ -475,6 +501,8 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
             });
 
             setIsCreateModalOpen(false);
+            setIsRematch(false);
+            setRematchSourceId(null);
             resetForm();
         } catch (error) {
             const apiErrors = error.response?.data?.data?.errors ?? {};
@@ -528,7 +556,27 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         <>
             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
                 <div className="relative border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.24),_transparent_38%),linear-gradient(135deg,_#f8fafc_0%,_#ffffff_56%,_#eef2ff_100%)] px-6 py-6">
-                    {selectedGame?.user_role === 'creator' && (
+                    {selectedGame?.user_role === 'creator' && selectedGame?.status === 'finished' && (
+                        <button
+                            aria-label="Start a rematch of this game"
+                            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300 sm:right-6 sm:top-6"
+                            onClick={() => openRematchModal(selectedGame)}
+                            type="button"
+                        >
+                            <svg
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                viewBox="0 0 24 24"
+                            >
+                                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            Rematch
+                        </button>
+                    )}
+                    {selectedGame?.user_role === 'creator' && selectedGame?.status !== 'finished' && (
                         <button
                             aria-label="Invite a viewer to this game"
                             className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-300 sm:right-6 sm:top-6"
@@ -584,6 +632,9 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                         const checked = e.target.checked;
                                         setIncludeFinishedGames(checked);
                                         localStorage.setItem(`burako_include_finished_${user?.id}`, String(checked));
+                                        if (!checked && selectedGame?.status === 'finished') {
+                                            setSelectedGameId('');
+                                        }
                                     }}
                                 />
                                 <span className="select-none text-sm text-slate-600">Include finished games</span>
@@ -827,10 +878,12 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 <form className="space-y-6 p-6" onSubmit={handleCreateGame}>
                     <div className="space-y-2">
                         <h4 className="text-lg font-semibold text-slate-900">
-                            Create a new game
+                            {isRematch ? 'Start a rematch' : 'Create a new game'}
                         </h4>
                         <p className="text-sm text-slate-600">
-                            Enter the game name and the score required to declare a winner.
+                            {isRematch
+                                ? 'Adjust the game name and winning score if needed. The same teams and player order will carry over.'
+                                : 'Enter the game name and the score required to declare a winner.'}
                         </p>
                     </div>
 
@@ -886,7 +939,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                         </SecondaryButton>
 
                         <PrimaryButton disabled={isSaving} type="submit">
-                            Accept
+                            {isSaving ? 'Saving…' : isRematch ? 'Start Rematch' : 'Accept'}
                         </PrimaryButton>
                     </div>
                 </form>

@@ -2081,13 +2081,13 @@ describe('TeamsCard', () => {
 
             // Fire touchmove/touchend with touches arrays so the production handlers
             // can read touches[0].clientX / changedTouches[0].clientX without throwing.
+            // Both dispatches are wrapped in act() because the handlers call setDragOverPlayerId
+            // and setTouchGhostPos / setEditingTeam — state updates that must be flushed before
+            // assertions run.
             const moveEv = new Event('touchmove', { bubbles: true, cancelable: true });
             Object.defineProperty(moveEv, 'touches', { value: [{ clientX: 10, clientY: 50 }], configurable: true });
-            document.dispatchEvent(moveEv);
+            act(() => { document.dispatchEvent(moveEv); });
 
-            // Wrap touchend in act() so React flushes the resulting setEditingTeam
-            // state update (triggered outside React's synthetic event context) before the
-            // assertions run.
             const endEv = new Event('touchend', { bubbles: true, cancelable: true });
             Object.defineProperty(endEv, 'changedTouches', { value: [{ clientX: 10, clientY: 50 }], configurable: true });
             act(() => { document.dispatchEvent(endEv); });
