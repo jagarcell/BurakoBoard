@@ -1705,5 +1705,221 @@ describe('GameCard', () => {
         expect(filterCheckbox).not.toBeChecked();
     });
 
+    // Rematch button tests
+    it('does not show Rematch button when no game is selected', async () => {
+        axios.get.mockResolvedValueOnce({ data: { data: { games: [] } } });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByText(/loading games/i);
+
+        expect(screen.queryByRole('button', { name: /start a rematch/i })).not.toBeInTheDocument();
+    });
+
+    it('does not show Rematch button when selected game is in_progress', async () => {
+        const inProgressCreatorGame = [{
+            id: 20,
+            name: 'Active Game',
+            target_points: 2000,
+            status: 'in_progress',
+            winning_team_id: null,
+            current_round_number: 0,
+            user_role: 'creator',
+        }];
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: inProgressCreatorGame } } });
+        localStorage.setItem('burako_selected_game_id', '20');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('combobox');
+
+        expect(screen.queryByRole('button', { name: /start a rematch/i })).not.toBeInTheDocument();
+    });
+
+    it('does not show Rematch button when finished game belongs to viewer', async () => {
+        const finishedViewerGame = [{
+            id: 21,
+            name: 'Finished Viewer Game',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 5,
+            user_role: 'viewer',
+        }];
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedViewerGame } } });
+        localStorage.setItem('burako_selected_game_id', '21');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('combobox');
+
+        expect(screen.queryByRole('button', { name: /start a rematch/i })).not.toBeInTheDocument();
+    });
+
+    it('shows Rematch button when creator selects a finished game', async () => {
+        const finishedCreatorGame = [{
+            id: 22,
+            name: 'Finished Creator Game',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 4,
+            user_role: 'creator',
+        }];
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        localStorage.setItem('burako_selected_game_id', '22');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('button', { name: /start a rematch/i });
+    });
+
+    it('shows Rematch button but not Invite Viewer button on a finished creator game', async () => {
+        const finishedCreatorGame = [{
+            id: 23,
+            name: 'Finished Game',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 4,
+            user_role: 'creator',
+        }];
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        localStorage.setItem('burako_selected_game_id', '23');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('button', { name: /start a rematch/i });
+
+        expect(screen.queryByRole('button', { name: /invite a viewer/i })).not.toBeInTheDocument();
+    });
+
+    it('shows Invite Viewer button but not Rematch button on an in-progress creator game', async () => {
+        const inProgressCreatorGame = [{
+            id: 24,
+            name: 'In Progress Game',
+            target_points: 2000,
+            status: 'in_progress',
+            winning_team_id: null,
+            current_round_number: 0,
+            user_role: 'creator',
+        }];
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: inProgressCreatorGame } } });
+        localStorage.setItem('burako_selected_game_id', '24');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('button', { name: /invite a viewer/i });
+
+        expect(screen.queryByRole('button', { name: /start a rematch/i })).not.toBeInTheDocument();
+    });
+
+    it('opens the rematch modal with pre-populated name and target points', async () => {
+        const finishedCreatorGame = [{
+            id: 25,
+            name: 'Friday Burako',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 3,
+            user_role: 'creator',
+        }];
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        localStorage.setItem('burako_selected_game_id', '25');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const rematchBtn = await screen.findByRole('button', { name: /start a rematch/i });
+        await userEvent.click(rematchBtn);
+
+        expect(screen.getByRole('heading', { name: /start a rematch/i })).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Friday Burako')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('2000')).toBeInTheDocument();
+    });
+
+    it('calls the rematch API endpoint when the modal form is submitted', async () => {
+        const finishedCreatorGame = [{
+            id: 26,
+            name: 'Friday Burako',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 3,
+            user_role: 'creator',
+        }];
+
+        const createdGame = {
+            id: 99,
+            name: 'Friday Burako',
+            target_points: 2000,
+            status: 'in_progress',
+            winning_team_id: null,
+            current_round_number: 0,
+        };
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        axios.post.mockResolvedValueOnce({
+            data: { data: { game: { game: createdGame, teams: [], rounds: [], round_roles: [] } } },
+        });
+
+        localStorage.setItem('burako_selected_game_id', '26');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const rematchBtn = await screen.findByRole('button', { name: /start a rematch/i });
+        await userEvent.click(rematchBtn);
+
+        const submitBtn = screen.getByRole('button', { name: /start rematch/i });
+        await userEvent.click(submitBtn);
+
+        expect(axios.post).toHaveBeenCalledWith(
+            '/api/v1/games/26/rematch',
+            { name: 'Friday Burako', target_points: 2000 },
+        );
+    });
+
+    it('adds the new game to the list and selects it after a rematch', async () => {
+        const finishedCreatorGame = [{
+            id: 27,
+            name: 'Old Game',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 2,
+            user_role: 'creator',
+        }];
+
+        const createdGame = {
+            id: 100,
+            name: 'Old Game',
+            target_points: 2000,
+            status: 'in_progress',
+            winning_team_id: null,
+            current_round_number: 0,
+        };
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        axios.post.mockResolvedValueOnce({
+            data: { data: { game: { game: createdGame, teams: [], rounds: [], round_roles: [] } } },
+        });
+
+        localStorage.setItem('burako_selected_game_id', '27');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const rematchBtn = await screen.findByRole('button', { name: /start a rematch/i });
+        await userEvent.click(rematchBtn);
+
+        await userEvent.click(screen.getByRole('button', { name: /start rematch/i }));
+
+        expect(localStorage.getItem('burako_selected_game_id')).toBe('100');
+    });
+
 });
 
