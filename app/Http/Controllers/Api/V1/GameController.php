@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SetInitialShufflerRequest;
 use App\Http\Requests\Api\V1\StoreGameInviteRequest;
+use App\Http\Requests\Api\V1\StoreGameRematchRequest;
 use App\Http\Requests\Api\V1\StoreGameRequest;
 use App\Http\Requests\Api\V1\UpdateGameRequest;
 use App\Http\Resources\Api\V1\GameListItemResource;
@@ -182,6 +183,24 @@ class GameController extends Controller
         return response()->json([
             'invitations' => GameListItemResource::collection($invitations),
         ]);
+    }
+
+    /**
+     * Create a new game as a rematch of an existing finished game.
+     *
+     * @param  \App\Http\Requests\Api\V1\StoreGameRematchRequest  $request  Validated request with name and target_points.
+     * @param  int  $gameId  Identifier of the finished game to rematch.
+     * @return \Illuminate\Http\JsonResponse  201 response containing the new game's summary.
+     * Logic: delegate all business rules and persistence to the service layer; return the
+     *   full game summary as a 201 so the frontend can select and display the new game immediately.
+     */
+    public function rematch(StoreGameRematchRequest $request, int $gameId): JsonResponse
+    {
+        $summary = $this->service->createRematch($gameId, $request->validated(), (int) auth()->id());
+
+        return response()->json([
+            'game' => new GameSummaryResource($summary),
+        ], 201);
     }
 
     /**

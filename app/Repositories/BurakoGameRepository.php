@@ -1159,6 +1159,120 @@ class BurakoGameRepository
     }
 
     /**
+     * Atomically create a new rematch game from a source game within a DB transaction.
+     *
+     * @param  int  $sourceGameId  Identifier of the finished source game.
+     * @param  array<string, mixed>  $attributes  Game attributes for the new game (name, target_points, status, etc.).
+     * @param  int  $userId  Identifier of the user to attach as creator.
+     * @return int The id of the newly created game.
+     * Logic: wrap all operations in a DB transaction so a failure in any step rolls back the entire
+     * set. Steps: (1) create the game record, (2) attach the creator pivot row, (3) attach the same
+     * teams from the source game in ascending team-id order, (4) copy seat rows from the source game,
+     * (5) set initial_shuffler_seat_number to the next cutter rotation seat when derivable.
+     */
+    public function createRematchGame(int $sourceGameId, array $attributes, int $userId): int
+    {
+        return DB::transaction(function () use ($sourceGameId, $attributes, $userId): int {
+            $newGame = $this->createGame($attributes);
+
+            $this->attachUserToGame($newGame->id, $userId, 'creator');
+
+            $teamIds = DB::table('game_team')
+                ->join('teams', 'teams.id', '=', 'game_team.team_id')
+                ->where('game_team.game_id', $sourceGameId)
+                ->orderBy('teams.id')
+                ->pluck('teams.id');
+
+            foreach ($teamIds as $teamId) {
+                $this->attachTeamToGame($newGame->id, (int) $teamId);
+            }
+
+            $this->copySeatsFromGame($sourceGameId, $newGame->id);
+
+            $nextCutterSeat = $this->computeNextCutterSeatNumber($sourceGameId);
+
+            if ($nextCutterSeat !== null) {
+                $newGame->initial_shuffler_seat_number = $nextCutterSeat;
+                $newGame->save();
+            }
+
+            return $newGame->id;
+        });
+    }
+
+    /**
+     * Copy all game_player_seat rows from a source game into a newly created game.
+     *
+     * @param  int  $sourceGameId  Identifier of the finished game to copy seats from.
+     * @param  int  $newGameId  Identifier of the freshly created rematch game.
+     * @return void Inserts one seat row per player in the new game matching the source seat assignments.
+     * Logic: select every game_player_seat row belonging to the source game and bulk-insert
+     * equivalent rows for the new game, preserving player_id and seat_number so the player
+     * order is identical to the source game. This is done in a single query to minimise
+     * round-trips and keep the operation atomic within the caller's transaction.
+     */
+    public function copySeatsFromGame(int $sourceGameId, int $newGameId): void
+    {
+        $rows = DB::table('game_player_seat')
+            ->where('game_id', $sourceGameId)
+            ->get(['player_id', 'seat_number'])
+            ->map(fn (object $row): array => [
+                'game_id'     => $newGameId,
+                'player_id'   => (int) $row->player_id,
+                'seat_number' => (int) $row->seat_number,
+            ])
+            ->all();
+
+        if (! empty($rows)) {
+            DB::table('game_player_seat')->insert($rows);
+        }
+    }
+
+    /**
+     * Compute the seat number of the player who would be cutter in the next round of a finished game.
+     *
+     * @param  int  $gameId  Identifier of the finished game.
+     * @return int|null The seat number of the next cutter, or null when roles cannot be determined.
+     * Logic: load the initial_shuffler_seat_number and current_round_number from the game,
+     * then collect all seated players for the game sorted by seat_number. The next cutter
+     * is the player at index (initialIndex + currentRoundNumber) % totalPlayers, which is
+     * exactly one rotation beyond the last played round's cutter.
+     */
+    public function computeNextCutterSeatNumber(int $gameId): ?int
+    {
+        $game = $this->findGameOrFail($gameId);
+
+        if ($game->initial_shuffler_seat_number === null) {
+            return null;
+        }
+
+        $seats = DB::table('game_player_seat')
+            ->where('game_id', $gameId)
+            ->orderBy('seat_number')
+            ->pluck('seat_number')
+            ->map(fn ($s) => (int) $s)
+            ->values();
+
+        $totalPlayers = $seats->count();
+
+        if ($totalPlayers < 4) {
+            return null;
+        }
+
+        $initialSeat  = (int) $game->initial_shuffler_seat_number;
+        $initialIndex = $seats->search($initialSeat);
+
+        if ($initialIndex === false) {
+            return null;
+        }
+
+        $roundNumber = (int) $game->current_round_number;
+        $nextIndex   = ($initialIndex + $roundNumber) % $totalPlayers;
+
+        return $seats[$nextIndex];
+    }
+
+    /**
      * Permanently remove a game record and let the database cascade to all related rows.
      *
      * @param  int  $gameId  Identifier of the game to delete.

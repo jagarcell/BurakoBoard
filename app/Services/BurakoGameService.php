@@ -716,6 +716,52 @@ class BurakoGameService
     }
 
     /**
+     * Create a new game as a rematch of an existing finished game.
+     *
+     * @param  int  $sourceGameId  Identifier of the finished game being rematched.
+     * @param  array<string, mixed>  $payload  Validated payload containing name and target_points.
+     * @param  int  $userId  Identifier of the authenticated creator.
+     * @return array<string, mixed> Game summary payload for the newly created rematch game.
+     * Logic:
+     *  1. Load the source game and abort with a validation error if it is still in progress.
+     *  2. Restrict rematch creation to the game's creator.
+     *  3. Within a DB transaction: create the new game, attach the creator, attach the same teams
+     *     from the source game (preserving team order), copy seat assignments from the source game,
+     *     and set the initial shuffler seat to the player who would be cutter in the next rotation
+     *     (source round N+1) so the player order carries over correctly.
+     *  4. Return the full summary payload after broadcast.
+     */
+    public function createRematch(int $sourceGameId, array $payload, int $userId): array
+    {
+        $sourceGame = $this->repository->findGameOrFail($sourceGameId);
+
+        if ($sourceGame->status !== 'finished') {
+            throw ValidationException::withMessages([
+                'game' => 'Only finished games can be rematched.',
+            ]);
+        }
+
+        if (! $this->repository->isGameCreator($sourceGameId, $userId)) {
+            abort(403, 'Only the game creator can start a rematch.');
+        }
+
+        $newGameId = $this->repository->createRematchGame(
+            $sourceGameId,
+            [
+                'name'                         => $payload['name'],
+                'target_points'                => (int) $payload['target_points'],
+                'status'                       => 'in_progress',
+                'winning_team_id'              => null,
+                'current_round_number'         => 0,
+                'initial_shuffler_seat_number' => null,
+            ],
+            $userId,
+        );
+
+        return $this->repository->getGameSummary($newGameId);
+    }
+
+    /**
      * Accept a pending game invitation silently, without throwing on missing rows.
      *
      * @param  int  $gameId  Identifier of the game whose invitation should be accepted.
