@@ -1839,7 +1839,7 @@ describe('GameCard', () => {
         await userEvent.click(rematchBtn);
 
         expect(screen.getByRole('heading', { name: /start a rematch/i })).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Friday Burako')).toBeInTheDocument();
+        expect(screen.getByLabelText('Game name').value).toMatch(/^\w+ \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/);
         expect(screen.getByDisplayValue('2000')).toBeInTheDocument();
     });
 
@@ -1880,7 +1880,7 @@ describe('GameCard', () => {
 
         expect(axios.post).toHaveBeenCalledWith(
             '/api/v1/games/26/rematch',
-            { name: 'Friday Burako', target_points: 2000 },
+            { name: expect.stringMatching(/^\w+ \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/), target_points: 2000 },
         );
     });
 

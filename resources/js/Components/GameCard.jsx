@@ -174,7 +174,14 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setIsRematch(true);
         setRematchSourceId(game.id);
         setErrors({});
-        setForm({ name: game.name, targetPoints: String(game.target_points) });
+        const now = new Date();
+        const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        setForm({ name: `${dayName} ${year}/${month}/${day} ${hours}:${minutes}`, targetPoints: String(game.target_points) });
         setIsCreateModalOpen(true);
     };
 
