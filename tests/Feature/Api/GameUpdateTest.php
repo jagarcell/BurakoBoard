@@ -3,12 +3,28 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Game;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class GameUpdateTest extends TestCase
 {
     use RefreshDatabase;
+
+    private User $user;
+
+    /**
+     * Boot a shared authenticated user for each test.
+     *
+     * @return void
+     * Logic: authenticate once per test so all requests pass the auth:sanctum middleware.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->create();
+        $this->actingAs($this->user);
+    }
 
     /**
      * Ensure a game's name and target points can be updated.

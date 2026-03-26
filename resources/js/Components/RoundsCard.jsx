@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from '@/api/client';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import BaseElementsInput from '@/Components/BaseElementsInput';
@@ -163,8 +163,8 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         let cancelled = false;
         setLoadingDraftRound(expandedRound);
 
-        axios
-            .get(`/api/v1/games/${selectedGame.id}/rounds/${expandedRound}/draft`)
+        api
+            .get(`/games/${selectedGame.id}/rounds/${expandedRound}/draft`)
             .then((response) => {
                 if (cancelled) return;
                 const draft = response.data?.data?.round_draft ?? null;
@@ -196,7 +196,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
     // Fetch base elements once on mount
     useEffect(() => {
-        axios.get('/api/v1/base-elements').then((response) => {
+        api.get('/base-elements').then((response) => {
             const els = response.data?.data?.base_elements ?? [];
             setElements(els);
         });
@@ -279,8 +279,8 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         draftLoadedRef.current = false;
         let cancelled = false;
 
-        axios
-            .get(`/api/v1/games/${selectedGame.id}/round-draft`)
+        api
+            .get(`/games/${selectedGame.id}/round-draft`)
             .then((response) => {
                 if (cancelled) return;
                 const draft = response.data?.data?.round_draft;
@@ -312,7 +312,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         draftSaveTimerRef.current = setTimeout(() => {
             const game = selectedGameRef.current;
             if (game?.id) {
-                axios.put(`/api/v1/games/${game.id}/round-draft`, {
+                api.put(`/games/${game.id}/round-draft`, {
                     base_inputs: baseInputs,
                     card_inputs: cardInputs,
                 }).catch(() => { /* silently ignore draft save failures */ });
@@ -489,8 +489,8 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         unlockWinnerSound();
 
         try {
-            const response = await axios.post(
-                `/api/v1/games/${selectedGame.id}/rounds`,
+            const response = await api.post(
+                `/games/${selectedGame.id}/rounds`,
                 {
                     scores: teams.map((t) => ({
                         team_id: t.id,

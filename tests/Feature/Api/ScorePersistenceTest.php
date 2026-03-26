@@ -35,6 +35,7 @@ class ScorePersistenceTest extends TestCase
         $this->repository = $this->app->make(BurakoGameRepository::class);
         $this->service    = $this->app->make(BurakoGameService::class);
         $this->user       = User::factory()->create();
+        $this->actingAs($this->user);
     }
 
     /**

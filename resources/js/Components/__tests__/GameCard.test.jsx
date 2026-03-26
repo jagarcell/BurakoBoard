@@ -1,11 +1,18 @@
 import '@testing-library/jest-dom/vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import axios from 'axios';
+import api from '@/api/client';
 import { usePage } from '@inertiajs/react';
 import GameCard from '@/Components/GameCard';
 
-vi.mock('axios');
+vi.mock('@/api/client', () => ({
+    default: {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+    },
+}));
 
 vi.mock('@inertiajs/react', () => ({
     usePage: vi.fn(() => ({
@@ -106,7 +113,7 @@ describe('GameCard', () => {
     it('shows the Select or create a game placeholder and no auto-selection on load', async () => {
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -123,7 +130,7 @@ describe('GameCard', () => {
     });
 
     it('shows the New button when no game is selected and Edit button after selecting one', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -143,7 +150,7 @@ describe('GameCard', () => {
     });
 
     it('shows the Edit button for a creator game and hides it for a viewer game', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -167,7 +174,7 @@ describe('GameCard', () => {
     it('allows manual selection of a game from the dropdown', async () => {
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -198,11 +205,11 @@ describe('GameCard', () => {
     it('creates a new game, closes the dialog, and selects the created game', async () => {
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: oneGame } },
         });
 
-        axios.post.mockResolvedValueOnce({
+        api.post.mockResolvedValueOnce({
             data: {
                 data: {
                     game: {
@@ -235,7 +242,7 @@ describe('GameCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Accept' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith('/api/v1/games', {
+            expect(api.post).toHaveBeenCalledWith('/games', {
                 name: 'Finals Table',
                 target_points: 3000,
             }),
@@ -260,11 +267,11 @@ describe('GameCard', () => {
     it('opens the edit modal pre-populated, submits a PUT request, and updates the game in the list', async () => {
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
-        axios.put.mockResolvedValueOnce({
+        api.put.mockResolvedValueOnce({
             data: {
                 data: {
                     game: {
@@ -305,7 +312,7 @@ describe('GameCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
         await waitFor(() =>
-            expect(axios.put).toHaveBeenCalledWith('/api/v1/games/8', {
+            expect(api.put).toHaveBeenCalledWith('/games/8', {
                 name: 'Late Table Renamed',
                 target_points: 2500,
             }),
@@ -324,7 +331,7 @@ describe('GameCard', () => {
     });
 
     it('keeps the selector on the placeholder option when returning to it after a selection', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -344,7 +351,7 @@ describe('GameCard', () => {
     });
 
     it('persists the selected game id to localStorage when a game is chosen', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -364,7 +371,7 @@ describe('GameCard', () => {
 
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -384,7 +391,7 @@ describe('GameCard', () => {
 
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -400,7 +407,7 @@ describe('GameCard', () => {
     it('removes the localStorage entry when the placeholder is selected', async () => {
         localStorage.setItem('burako_selected_game_id', '8');
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -416,7 +423,7 @@ describe('GameCard', () => {
     });
 
     it('shows role icon badges in the open dropdown for creator and viewer', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -432,7 +439,7 @@ describe('GameCard', () => {
     });
 
     it('shows the creator icon in the trigger after selecting a creator game', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -447,7 +454,7 @@ describe('GameCard', () => {
     });
 
     it('shows the viewer icon in the trigger after selecting a viewer game', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -462,7 +469,7 @@ describe('GameCard', () => {
     });
 
     it('shows the Invite Viewer button when a creator game is selected', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -479,7 +486,7 @@ describe('GameCard', () => {
     });
 
     it('does not show the Invite Viewer button when a non-creator game is selected', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -496,7 +503,7 @@ describe('GameCard', () => {
     });
 
     it('does not show the Invite Viewer button when no game is selected', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -521,7 +528,7 @@ describe('GameCard', () => {
             },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -535,7 +542,7 @@ describe('GameCard', () => {
     });
 
     it('does not show the bell notification icon when hasPendingInvitations is false', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -560,11 +567,11 @@ describe('GameCard', () => {
             },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
         // Invitations fetch triggered on bell click.
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { invitations: [pendingGame] } },
         });
 
@@ -589,10 +596,10 @@ describe('GameCard', () => {
             },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { invitations: [pendingGame] } },
         });
 
@@ -603,7 +610,7 @@ describe('GameCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Pending game invitations' }));
 
         await waitFor(() =>
-            expect(axios.get).toHaveBeenCalledWith('/api/v1/invitations'),
+            expect(api.get).toHaveBeenCalledWith('/invitations'),
         );
     });
 
@@ -615,10 +622,10 @@ describe('GameCard', () => {
             },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { invitations: [pendingGame] } },
         });
 
@@ -630,12 +637,12 @@ describe('GameCard', () => {
 
         // First click — open.
         await userEvent.click(bell);
-        await waitFor(() => expect(axios.get).toHaveBeenCalledWith('/api/v1/invitations'));
-        const callCount = axios.get.mock.calls.length;
+        await waitFor(() => expect(api.get).toHaveBeenCalledWith('/invitations'));
+        const callCount = api.get.mock.calls.length;
 
         // Second click — close (no new fetch).
         await userEvent.click(bell);
-        expect(axios.get.mock.calls.length).toBe(callCount);
+        expect(api.get.mock.calls.length).toBe(callCount);
     });
 
     it('shows a newly arrived pending game fetched from the API when the popup opens', async () => {
@@ -658,10 +665,10 @@ describe('GameCard', () => {
             user_role: 'pending_invitee',
         };
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: [gamesWithRoles[0], gamesWithRoles[1]] } }, // no pending game
         });
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { invitations: [newInvitation] } },
         });
 
@@ -684,14 +691,14 @@ describe('GameCard', () => {
 
         const updatedGame = { ...pendingGame, user_role: 'viewer' };
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { invitations: [pendingGame] } },
         });
 
-        axios.put.mockResolvedValueOnce({
+        api.put.mockResolvedValueOnce({
             data: { data: { game: updatedGame } },
         });
 
@@ -711,7 +718,7 @@ describe('GameCard', () => {
         );
 
         await waitFor(() =>
-            expect(axios.put).toHaveBeenCalledWith('/api/v1/games/12/invitation'),
+            expect(api.put).toHaveBeenCalledWith('/games/12/invitation'),
         );
     });
 
@@ -725,14 +732,14 @@ describe('GameCard', () => {
 
         const updatedGame = { ...pendingGame, user_role: 'viewer' };
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { invitations: [pendingGame] } },
         });
 
-        axios.put.mockResolvedValueOnce({
+        api.put.mockResolvedValueOnce({
             data: { data: { game: updatedGame } },
         });
 
@@ -772,13 +779,13 @@ describe('GameCard', () => {
 
         const updatedGame = { ...pendingGame, user_role: 'viewer' };
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { invitations: [pendingGame] } },
         });
-        axios.put.mockResolvedValueOnce({
+        api.put.mockResolvedValueOnce({
             data: { data: { game: updatedGame } },
         });
 
@@ -813,12 +820,12 @@ describe('GameCard', () => {
     // -------------------------------------------------------------------------
 
     it('opens the invite modal and shows a loading spinner when Invite Viewer is clicked', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
         // Delay the invitable-users response so the spinner is visible
-        axios.get.mockReturnValueOnce(new Promise(() => {}));
+        api.get.mockReturnValueOnce(new Promise(() => {}));
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
@@ -836,11 +843,11 @@ describe('GameCard', () => {
     });
 
     it('shows the list of invitable users with checkboxes after the modal loads', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -879,11 +886,11 @@ describe('GameCard', () => {
     });
 
     it('fetches invitable users from the correct game endpoint when the modal opens', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -907,19 +914,19 @@ describe('GameCard', () => {
         );
 
         await waitFor(() =>
-            expect(axios.get).toHaveBeenCalledWith(
-                '/api/v1/games/10/invitable-users',
+            expect(api.get).toHaveBeenCalledWith(
+                '/games/10/invitable-users',
                 expect.objectContaining({ params: { page: 1 } }),
             ),
         );
     });
 
     it('toggles a user checkbox on and off when clicked', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -953,11 +960,11 @@ describe('GameCard', () => {
     });
 
     it('shows an empty state message when there are no invitable users', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -986,11 +993,11 @@ describe('GameCard', () => {
     });
 
     it('shows an error message when the invitable users request fails', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockRejectedValueOnce(new Error('Network Error'));
+        api.get.mockRejectedValueOnce(new Error('Network Error'));
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
@@ -1009,11 +1016,11 @@ describe('GameCard', () => {
     });
 
     it('shows pagination controls when there are multiple pages of invitable users', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1048,12 +1055,12 @@ describe('GameCard', () => {
     });
 
     it('fetches the next page when the Next button is clicked', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
         // Page 1
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1069,7 +1076,7 @@ describe('GameCard', () => {
         });
 
         // Page 2
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1107,11 +1114,11 @@ describe('GameCard', () => {
     });
 
     it('does not show pagination controls when there is only one page', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1142,11 +1149,11 @@ describe('GameCard', () => {
     });
 
     it('closes the invite modal when the Close button is clicked', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1181,11 +1188,11 @@ describe('GameCard', () => {
     });
 
     it('Send button is disabled when no users are selected', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1214,11 +1221,11 @@ describe('GameCard', () => {
     });
 
     it('Send button is enabled when at least one user is selected', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1264,10 +1271,10 @@ describe('GameCard', () => {
             },
         };
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
-        axios.get.mockResolvedValueOnce(usersResponse);
+        api.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        api.get.mockResolvedValueOnce(usersResponse);
         // The refreshed user list after send (both users now invited, list is empty)
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1279,7 +1286,7 @@ describe('GameCard', () => {
             },
         });
 
-        axios.post.mockResolvedValueOnce({
+        api.post.mockResolvedValueOnce({
             data: { status: 'success', data: { invited_count: 1, message: '1 invitation sent.' }, meta: {}, links: {}, http_code: 201 },
         });
 
@@ -1302,8 +1309,8 @@ describe('GameCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/10/invitations',
+            expect(api.post).toHaveBeenCalledWith(
+                '/games/10/invitations',
                 { user_ids: [101] },
             ),
         );
@@ -1314,8 +1321,8 @@ describe('GameCard', () => {
     });
 
     it('shows an error message when the send invitations request fails', async () => {
-        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1327,7 +1334,7 @@ describe('GameCard', () => {
             },
         });
 
-        axios.post.mockRejectedValueOnce(new Error('Network Error'));
+        api.post.mockRejectedValueOnce(new Error('Network Error'));
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
@@ -1353,8 +1360,8 @@ describe('GameCard', () => {
     });
 
     it('resets selections and refreshes the user list after a successful send', async () => {
-        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1366,7 +1373,7 @@ describe('GameCard', () => {
             },
         });
         // Refreshed list returns empty (Alice was invited)
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: {
                 data: {
                     users: {
@@ -1378,7 +1385,7 @@ describe('GameCard', () => {
             },
         });
 
-        axios.post.mockResolvedValueOnce({
+        api.post.mockResolvedValueOnce({
             data: { status: 'success', data: { invited_count: 1 }, meta: {}, links: {}, http_code: 201 },
         });
 
@@ -1409,7 +1416,7 @@ describe('GameCard', () => {
     });
 
     it('shows the Delete button in the edit modal for a creator game with no recorded rounds', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -1427,7 +1434,7 @@ describe('GameCard', () => {
     });
 
     it('does not show the Edit button or Delete button for a viewer game', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -1455,7 +1462,7 @@ describe('GameCard', () => {
             },
         ];
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: creatorGameWithRounds } },
         });
 
@@ -1475,11 +1482,11 @@ describe('GameCard', () => {
     it('deletes the game, removes it from the list, and resets the selector on confirmation', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.delete.mockResolvedValueOnce({
+        api.delete.mockResolvedValueOnce({
             data: { status: 'success', data: { game_id: 10 } },
         });
 
@@ -1494,7 +1501,7 @@ describe('GameCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
         await waitFor(() =>
-            expect(axios.delete).toHaveBeenCalledWith('/api/v1/games/10'),
+            expect(api.delete).toHaveBeenCalledWith('/games/10'),
         );
 
         await waitFor(() =>
@@ -1512,11 +1519,11 @@ describe('GameCard', () => {
     it('shows a general error when the delete request fails', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
-        axios.delete.mockRejectedValueOnce(new Error('Server error'));
+        api.delete.mockRejectedValueOnce(new Error('Server error'));
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
@@ -1540,7 +1547,7 @@ describe('GameCard', () => {
     it('does not delete the game when the confirmation dialog is dismissed', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -1554,7 +1561,7 @@ describe('GameCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
         await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-        expect(axios.delete).not.toHaveBeenCalled();
+        expect(api.delete).not.toHaveBeenCalled();
         expect(screen.getByText('Edit game')).toBeInTheDocument();
 
         vi.restoreAllMocks();
@@ -1567,7 +1574,7 @@ describe('GameCard', () => {
     it('auto-selects the game matching preselectedGameId after games load', async () => {
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -1580,7 +1587,7 @@ describe('GameCard', () => {
     it('falls back to the placeholder when preselectedGameId does not match any game', async () => {
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -1593,7 +1600,7 @@ describe('GameCard', () => {
     it('gives preselectedGameId priority over a stale localStorage entry', async () => {
         localStorage.setItem('burako_selected_game_id', '10');
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -1610,7 +1617,7 @@ describe('GameCard', () => {
     it('forwards a viewer game to onGameSelect', async () => {
         const onGameSelect = vi.fn();
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: gamesWithRoles } },
         });
 
@@ -1633,7 +1640,7 @@ describe('GameCard', () => {
     // -------------------------------------------------------------------------
 
     it('renders the Include finished games checkbox checked by default', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -1644,7 +1651,7 @@ describe('GameCard', () => {
     });
 
     it('shows all games (including finished) in the dropdown when the filter checkbox is checked', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -1659,7 +1666,7 @@ describe('GameCard', () => {
     });
 
     it('hides finished games from the dropdown when the filter checkbox is unchecked', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -1677,7 +1684,7 @@ describe('GameCard', () => {
     });
 
     it('persists the Include finished games preference to localStorage keyed by user id', async () => {
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -1695,7 +1702,7 @@ describe('GameCard', () => {
     it('restores the Include finished games preference from localStorage on mount', async () => {
         localStorage.setItem('burako_include_finished_1', 'false');
 
-        axios.get.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({
             data: { data: { games: twoGames } },
         });
 
@@ -1707,7 +1714,7 @@ describe('GameCard', () => {
 
     // Rematch button tests
     it('does not show Rematch button when no game is selected', async () => {
-        axios.get.mockResolvedValueOnce({ data: { data: { games: [] } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: [] } } });
 
         render(<GameCard onGameSelect={vi.fn()} />);
 
@@ -1727,7 +1734,7 @@ describe('GameCard', () => {
             user_role: 'creator',
         }];
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: inProgressCreatorGame } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: inProgressCreatorGame } } });
         localStorage.setItem('burako_selected_game_id', '20');
 
         render(<GameCard onGameSelect={vi.fn()} />);
@@ -1748,7 +1755,7 @@ describe('GameCard', () => {
             user_role: 'viewer',
         }];
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedViewerGame } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedViewerGame } } });
         localStorage.setItem('burako_selected_game_id', '21');
 
         render(<GameCard onGameSelect={vi.fn()} />);
@@ -1769,7 +1776,7 @@ describe('GameCard', () => {
             user_role: 'creator',
         }];
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
         localStorage.setItem('burako_selected_game_id', '22');
 
         render(<GameCard onGameSelect={vi.fn()} />);
@@ -1788,7 +1795,7 @@ describe('GameCard', () => {
             user_role: 'creator',
         }];
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
         localStorage.setItem('burako_selected_game_id', '23');
 
         render(<GameCard onGameSelect={vi.fn()} />);
@@ -1809,7 +1816,7 @@ describe('GameCard', () => {
             user_role: 'creator',
         }];
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: inProgressCreatorGame } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: inProgressCreatorGame } } });
         localStorage.setItem('burako_selected_game_id', '24');
 
         render(<GameCard onGameSelect={vi.fn()} />);
@@ -1830,7 +1837,7 @@ describe('GameCard', () => {
             user_role: 'creator',
         }];
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
         localStorage.setItem('burako_selected_game_id', '25');
 
         render(<GameCard onGameSelect={vi.fn()} />);
@@ -1863,8 +1870,8 @@ describe('GameCard', () => {
             current_round_number: 0,
         };
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
-        axios.post.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        api.post.mockResolvedValueOnce({
             data: { data: { game: { game: createdGame, teams: [], rounds: [], round_roles: [] } } },
         });
 
@@ -1878,8 +1885,8 @@ describe('GameCard', () => {
         const submitBtn = screen.getByRole('button', { name: /start rematch/i });
         await userEvent.click(submitBtn);
 
-        expect(axios.post).toHaveBeenCalledWith(
-            '/api/v1/games/26/rematch',
+        expect(api.post).toHaveBeenCalledWith(
+            '/games/26/rematch',
             { name: expect.stringMatching(/^\w+ \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/), target_points: 2000 },
         );
     });
@@ -1904,8 +1911,8 @@ describe('GameCard', () => {
             current_round_number: 0,
         };
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
-        axios.post.mockResolvedValueOnce({
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        api.post.mockResolvedValueOnce({
             data: { data: { game: { game: createdGame, teams: [], rounds: [], round_roles: [] } } },
         });
 
@@ -1936,9 +1943,9 @@ describe('GameCard', () => {
             leave: vi.fn(),
         };
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
         // fetchPendingInvitations called inside handleNewInvitation
-        axios.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
+        api.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
 
         render(<GameCard onGameSelect={vi.fn()} />);
         await screen.findByRole('combobox');
@@ -1965,8 +1972,8 @@ describe('GameCard', () => {
             leave: vi.fn(),
         };
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
-        axios.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        api.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
 
         render(<GameCard onGameSelect={vi.fn()} />);
         await screen.findByRole('combobox');
@@ -1997,9 +2004,9 @@ describe('GameCard', () => {
 
         const updatedGame = { ...pendingGame, user_role: 'viewer' };
 
-        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
-        axios.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
-        axios.put.mockResolvedValueOnce({ data: { data: { game: updatedGame } } });
+        api.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        api.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
+        api.put.mockResolvedValueOnce({ data: { data: { game: updatedGame } } });
 
         render(<GameCard onGameSelect={vi.fn()} />);
         await screen.findByRole('combobox');

@@ -10,6 +10,22 @@ class UserIndexTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
+    /**
+     * Boot a shared authenticated user for each test without persisting it.
+     *
+     * @return void
+     * Logic: use make() instead of create() so the auth user is not counted in the
+     *   users table, preserving tests that assert exact user counts.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->make();
+        $this->actingAs($this->user);
+    }
+
     /**
      * Ensure the users index returns an empty list when no users exist.
      *

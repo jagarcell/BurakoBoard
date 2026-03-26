@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
-import axios from 'axios';
+import api from '@/api/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import GameCard from '@/Components/GameCard';
 import PlayerOrderCard from '@/Components/PlayerOrderCard';
@@ -29,7 +29,7 @@ export default function Dashboard() {
         burstConfetti();
     }, [unlockBadgeSound, playBadgeSound, burstConfetti]);
 
-    const handleTeamsChange = (newTeams, nextSummary = null) => {
+    const handleTeamsChange = useCallback((newTeams, nextSummary = null) => {
         if (nextSummary) {
             setGameSummary(nextSummary);
 
@@ -37,9 +37,11 @@ export default function Dashboard() {
         }
 
         setGameSummary((prev) => (prev ? { ...prev, teams: newTeams } : prev));
-    };
+    // setGameSummary is a stable setter; no external deps needed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    const handleRoundRecorded = (updatedTeams, gameStatus, nextSummary = null) => {
+    const handleRoundRecorded = useCallback((updatedTeams, gameStatus, nextSummary = null) => {
         setScoreUpdate(updatedTeams);
 
         if (nextSummary) {
@@ -52,7 +54,7 @@ export default function Dashboard() {
         if (gameStatus === 'finished') {
             fireConfetti();
         }
-    };
+    }, [fireConfetti]);
 
     useEffect(() => {
         if (! selectedGame) {
@@ -66,8 +68,8 @@ export default function Dashboard() {
         setIsFetching(true);
         let isActive = true;
 
-        axios
-            .get(`/api/v1/games/${selectedGame.id}`)
+        api
+            .get(`/games/${selectedGame.id}`)
             .then((response) => {
                 if (! isActive) return;
 
@@ -126,11 +128,10 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedGame?.id]);
 
-    const hasTwoTeams = useMemo(() => {
-        if (initialTeams.length < 2) return false;
-
-        return initialTeams[0].players.length === initialTeams[1].players.length;
-    }, [initialTeams]);
+    const hasTwoTeams = useMemo(
+        () => (gameSummary?.teams ?? []).length >= 2,
+        [gameSummary],
+    );
 
     return (
         <AuthenticatedLayout

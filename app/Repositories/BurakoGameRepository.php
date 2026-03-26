@@ -2,6 +2,8 @@
 
 namespace App\Repositories;
 
+use App\Enums\GameStatus;
+use App\Enums\GameUserRole;
 use App\Models\BaseElement;
 use App\Models\Game;
 use App\Models\Player;
@@ -57,7 +59,7 @@ class BurakoGameRepository
         return Game::query()
             ->join('game_user', 'game_user.game_id', '=', 'games.id')
             ->where('game_user.user_id', $userId)
-            ->where('game_user.role', '!=', 'pending_invitee')
+            ->where('game_user.role', '!=', GameUserRole::PendingInvitee->value)
             ->select([
                 'games.id',
                 'games.name',
@@ -85,7 +87,7 @@ class BurakoGameRepository
         return Game::query()
             ->join('game_user', 'game_user.game_id', '=', 'games.id')
             ->where('game_user.user_id', $userId)
-            ->where('game_user.role', 'pending_invitee')
+            ->where('game_user.role', GameUserRole::PendingInvitee->value)
             ->select([
                 'games.id',
                 'games.name',
@@ -112,7 +114,7 @@ class BurakoGameRepository
     {
         return DB::table('game_user')
             ->where('user_id', $userId)
-            ->where('role', 'pending_invitee')
+            ->where('role', GameUserRole::PendingInvitee->value)
             ->exists();
     }
 
@@ -377,6 +379,7 @@ class BurakoGameRepository
     {
         $maxRound = Round::query()
             ->where('game_id', $gameId)
+            ->lockForUpdate()
             ->max('round_number');
 
         return (int) $maxRound + 1;
@@ -496,7 +499,7 @@ class BurakoGameRepository
      */
     public function finishGameWithWinner(Game $game, int $winningTeamId, int $roundNumber): Game
     {
-        $game->status = 'finished';
+        $game->status = GameStatus::Finished;
         $game->winning_team_id = $winningTeamId;
         $game->current_round_number = $roundNumber;
         $game->save();
@@ -588,7 +591,7 @@ class BurakoGameRepository
                 $subquery->select('user_id')
                     ->from('game_user')
                     ->where('game_id', $gameId)
-                    ->where('role', 'pending_invitee');
+                    ->where('role', GameUserRole::PendingInvitee->value);
             })
             ->orderBy('users.name')
             ->paginate($perPage, ['*'], 'page', $page);
@@ -628,7 +631,7 @@ class BurakoGameRepository
             static fn (int $userId): array => [
                 'game_id'    => $gameId,
                 'user_id'    => $userId,
-                'role'       => 'pending_invitee',
+                'role'       => GameUserRole::PendingInvitee->value,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
@@ -1155,7 +1158,7 @@ class BurakoGameRepository
         return DB::table('game_user')
             ->where('game_id', $gameId)
             ->where('user_id', $userId)
-            ->where('role', 'creator')
+            ->where('role', GameUserRole::Creator->value)
             ->exists();
     }
 
@@ -1176,7 +1179,7 @@ class BurakoGameRepository
         return DB::transaction(function () use ($sourceGameId, $attributes, $userId): int {
             $newGame = $this->createGame($attributes);
 
-            $this->attachUserToGame($newGame->id, $userId, 'creator');
+            $this->attachUserToGame($newGame->id, $userId, GameUserRole::Creator->value);
 
             $teamIds = DB::table('game_team')
                 ->join('teams', 'teams.id', '=', 'game_team.team_id')
@@ -1322,8 +1325,8 @@ class BurakoGameRepository
         return (bool) DB::table('game_user')
             ->where('game_id', $gameId)
             ->where('user_id', $userId)
-            ->where('role', 'pending_invitee')
-            ->update(['role' => 'viewer', 'updated_at' => now()]);
+            ->where('role', GameUserRole::PendingInvitee->value)
+            ->update(['role' => GameUserRole::Viewer->value, 'updated_at' => now()]);
     }
 
     /**

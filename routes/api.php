@@ -17,33 +17,37 @@ Route::prefix('v1')->group(function () {
         'health' => 'ok',
     ]);
 
-    Route::get('/users', [UserController::class, 'index']);
-    Route::get('/teams', [TeamController::class, 'index']);
     Route::get('/base-elements', [BaseElementController::class, 'index']);
 
     Route::get('/games/{gameId}', [GameController::class, 'show']);
-    Route::put('/games/{gameId}', [GameController::class, 'update']);
-    Route::put('/games/{gameId}/shuffler', [GameController::class, 'setInitialShuffler']);
     Route::get('/games/{gameId}/has-two-teams', [GameController::class, 'hasTwoTeams']);
-    Route::post('/games/{gameId}/teams', [TeamController::class, 'store']);
-    Route::put('/games/{gameId}/teams/{teamId}', [TeamController::class, 'update']);
-    Route::post('/games/{gameId}/teams/{teamId}/attach', [TeamController::class, 'attach']);
-    Route::post('/games/{gameId}/teams/{teamId}/players', [TeamPlayerController::class, 'store']);
-    Route::delete('/games/{gameId}/teams/{teamId}/players/{playerId}', [TeamPlayerController::class, 'destroy']);
-    Route::put('/games/{gameId}/players/swap-seats', [TeamPlayerController::class, 'swapSeats']);
-    Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);
     Route::get('/games/{gameId}/round-draft', [RoundDraftController::class, 'show']);
-    Route::put('/games/{gameId}/round-draft', [RoundDraftController::class, 'upsert']);
     Route::get('/games/{gameId}/rounds/{roundNumber}/draft', [RoundDraftController::class, 'showByRound']);
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
+        Route::get('/users', [UserController::class, 'index']);
+        Route::get('/teams', [TeamController::class, 'index']);
+
         Route::get('/games', [GameController::class, 'index']);
         Route::post('/games', [GameController::class, 'store']);
+        Route::put('/games/{gameId}', [GameController::class, 'update']);
         Route::delete('/games/{gameId}', [GameController::class, 'destroy']);
         Route::post('/games/{gameId}/rematch', [GameController::class, 'rematch']);
 
-        Route::get('/invitations', [GameController::class, 'pendingInvitations']);
+        Route::put('/games/{gameId}/shuffler', [GameController::class, 'setInitialShuffler']);
 
+        Route::post('/games/{gameId}/teams', [TeamController::class, 'store']);
+        Route::put('/games/{gameId}/teams/{teamId}', [TeamController::class, 'update']);
+        Route::post('/games/{gameId}/teams/{teamId}/attach', [TeamController::class, 'attach']);
+
+        Route::post('/games/{gameId}/teams/{teamId}/players', [TeamPlayerController::class, 'store']);
+        Route::delete('/games/{gameId}/teams/{teamId}/players/{playerId}', [TeamPlayerController::class, 'destroy']);
+        Route::put('/games/{gameId}/players/swap-seats', [TeamPlayerController::class, 'swapSeats']);
+
+        Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);
+        Route::put('/games/{gameId}/round-draft', [RoundDraftController::class, 'upsert']);
+
+        Route::get('/invitations', [GameController::class, 'pendingInvitations']);
         Route::get('/games/{gameId}/invitable-users', [UserController::class, 'indexInvitable']);
         Route::post('/games/{gameId}/invitations', [GameController::class, 'storeInvitations']);
         Route::put('/games/{gameId}/invitation', [GameController::class, 'acceptInvitation']);
