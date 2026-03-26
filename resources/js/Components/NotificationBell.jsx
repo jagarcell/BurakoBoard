@@ -34,6 +34,13 @@ export default function NotificationBell({
     const [isOpen, setIsOpen] = useState(false);
     const [panelRect, setPanelRect] = useState(null);
     const bellRef = useRef(null);
+    const onNewInvitationRef = useRef(onNewInvitation);
+
+    // Keep the ref in sync with the latest prop on every render without
+    // triggering the Echo subscription effect.
+    useEffect(() => {
+        onNewInvitationRef.current = onNewInvitation;
+    });
 
     useEffect(() => {
         if (!userId || !window.Echo) return;
@@ -41,14 +48,14 @@ export default function NotificationBell({
         const channel = window.Echo.private(`App.Models.User.${userId}`);
 
         channel.listen('.game.invitation.sent', () => {
-            onNewInvitation?.();
+            onNewInvitationRef.current?.();
         });
 
         return () => {
             channel.stopListening('.game.invitation.sent');
             window.Echo?.leave(`App.Models.User.${userId}`);
         };
-    }, [userId, onNewInvitation]);
+    }, [userId]);
 
     // Close popup when all invitations are cleared.
     useEffect(() => {
