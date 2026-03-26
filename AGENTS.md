@@ -72,3 +72,70 @@ During every coding session:
 - **Injection prevention**: never concatenate user input into raw SQL strings. Use Eloquent query builder methods (`where`, `join`, `orderBy`, etc.) or named/positional bindings (`whereRaw('col = ?', [$value])`) for all dynamic values. Never pass unvalidated input directly to `DB::statement`, `DB::select`, or `whereRaw`.
 - **Selective columns**: always specify only the columns needed in `select([...])` / `get([...])` calls. Never use `SELECT *` in repository queries. In joins, prefix ambiguous column names with their table name to avoid collisions and unintended data leakage.
 - **Eloquent vs Query Builder**: Default to Eloquent models when the result needs model features — relationships, accessors, mutators, observers, casts, or API Resources. Switch to `DB::table()` (query builder) when none of those features are needed and the query is performance-sensitive: bulk aggregations, reporting queries, large set operations, or any path where hydrating full model objects is measurable overhead. Never mix both within the same repository method — pick one and be consistent for that query's purpose.
+
+## Engineering Standards
+
+### Error Handling & Logging
+- **Never leave a catch block empty or silent.** Every `catch` must emit a structured log entry at
+  the appropriate level: `error` for unexpected failures, `warning` for acceptable partial failures,
+  `info` for recoverable conditions. Silently swallowing exceptions is always wrong.
+- **Structured, contextual logging only.** Every log call must include a context array with
+  relevant identifiers (e.g. resource IDs, user ID, IP address, exception message). A bare string
+  with no context is not acceptable.
+- **Wrap all database transactions in try/catch.** On failure, log diagnostic details (query,
+  bindings) that must never be returned to the client, then re-throw as a user-facing error.
+- **Wrap all external service calls (mail, HTTP, queues) in try/catch.** Log the failure and
+  continue where partial failure is acceptable — an external service error must not abort an
+  otherwise successful operation.
+- **Always log before suppressing an exception.** If a catch block redirects or returns a fallback
+  value, the exception must still be logged before doing so.
+- **Keep HTTP concerns out of non-HTTP layers.** Repositories and services must throw typed domain
+  exceptions. HTTP status mapping belongs in controllers or a global exception handler.
+- **Standardise the API error response shape.** All JSON error responses must follow the same
+  envelope structure (e.g. always include both `message` and `errors` keys). Enforce this in the
+  global exception handler, not scattered across individual controllers.
+- **Configure the global exception handler explicitly:** sanitise sensitive fields from error
+  context; map common domain exceptions to appropriate HTTP status codes; log all unhandled
+  exceptions with a correlation/request ID that can be quoted by API clients.
+
+### Architecture & Layering
+- **Respect the established layer boundaries.** Business logic belongs in services, data access in
+  repositories, HTTP concerns in controllers, and response shaping in dedicated resource/presenter
+  classes. Never skip a layer.
+- **Favour domain-scoped classes over god objects.** When a repository or service grows to cover
+  multiple unrelated domain concerns, split it along those boundaries rather than adding to it.
+- **Repositories return raw data only.** Never assemble API response arrays or apply domain/business
+  rules inside a repository. Presentation belongs in resource classes; rules belong in services.
+- **Presentation-layer components (middleware, controllers) must not reach past the service
+  boundary.** Inject the relevant service — never a repository directly.
+
+### Security
+- **All mutation routes (`POST`, `PUT`, `PATCH`, `DELETE`) must require authentication.** No
+  write-capable endpoint is ever public.
+- **Resource-scoped routes must verify ownership or membership** before any read or write on that
+  resource (via a policy, middleware, or a shared base-controller helper).
+- **Endpoints that return personal or sensitive catalogue data must require authentication.**
+- **Apply rate limiting to all API mutation routes.**
+
+### Performance
+- **Cache stable, rarely-changing data** using `Cache::remember()` (or equivalent). Never use a
+  database-backed cache store as the default in production; prefer an in-memory store (Redis,
+  Memcached).
+- **Avoid race conditions on computed sequences.** When deriving a next-sequence value inside a
+  transaction (e.g. `MAX() + 1`), use a row-level lock to serialise concurrent writes.
+
+### Data Modelling
+- **Replace repeated bare string constants for domain states with typed enums.** Never introduce a
+  new plain-string status or role value; add a case to the relevant enum instead.
+
+### Frontend
+- **Decompose large components.** When a component exceeds a manageable size or handles multiple
+  unrelated concerns, extract focused sub-components rather than adding more logic to the existing
+  file.
+- **Batch related mutations into a single API call** rather than firing sequential requests for what
+  is logically one user action.
+- **Do not suppress linter dependency warnings** (e.g. `exhaustive-deps`) without an explicit
+  inline comment justifying why the omission is safe.
+- **Derive all computed flags and derived state from a single authoritative data source** (e.g. an
+  API response or a shared store) rather than from local ad-hoc calculations that can drift out of
+  sync.
