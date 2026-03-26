@@ -1,10 +1,17 @@
 import '@testing-library/jest-dom/vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import axios from 'axios';
+import api from '@/api/client';
 import PlayerOrderCard from '@/Components/PlayerOrderCard';
 
-vi.mock('axios');
+vi.mock('@/api/client', () => ({
+    default: {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+    },
+}));
 
 const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress' };
 
@@ -120,7 +127,7 @@ describe('PlayerOrderCard', () => {
             ]),
         ];
 
-        axios.put.mockResolvedValueOnce({
+        api.put.mockResolvedValueOnce({
             data: {
                 data: {
                     game: {
@@ -153,7 +160,7 @@ describe('PlayerOrderCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Seat 1 · Carlos' }));
 
         await waitFor(() =>
-            expect(axios.put).toHaveBeenCalledWith('/api/v1/games/5/shuffler', {
+            expect(api.put).toHaveBeenCalledWith('/games/5/shuffler', {
                 player_id: 1,
             }),
         );
@@ -281,7 +288,7 @@ describe('PlayerOrderCard', () => {
         expect(carlosChip).toHaveClass('bg-white');
 
         await userEvent.click(brunoChip);
-        expect(axios.put).not.toHaveBeenCalled();
+        expect(api.put).not.toHaveBeenCalled();
     });
 
     it('shows "Add at least one player" message when no candidates exist', () => {
@@ -369,7 +376,7 @@ describe('PlayerOrderCard', () => {
         chips.forEach((chip) => expect(chip).toBeDisabled());
 
         await userEvent.click(chips[0]);
-        expect(axios.put).not.toHaveBeenCalled();
+        expect(api.put).not.toHaveBeenCalled();
     });
 
     it('expands the body again when the collapse button is clicked a second time', async () => {
