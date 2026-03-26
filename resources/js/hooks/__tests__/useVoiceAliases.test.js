@@ -1,9 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import axios from 'axios';
+import api from '@/api/client';
 import useVoiceAliases from '@/hooks/useVoiceAliases';
 
-vi.mock('axios');
+vi.mock('@/api/client', () => ({
+    default: {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+    },
+}));
 
 const mockAliases = [
     { id: 1, alias: 'canada', keyword: 'canastra' },
@@ -20,7 +27,7 @@ describe('useVoiceAliases', () => {
     });
 
     it('fetches aliases on mount and populates state', async () => {
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: mockAliases } } });
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: mockAliases } } });
 
         const { result } = renderHook(() => useVoiceAliases());
 
@@ -30,11 +37,11 @@ describe('useVoiceAliases', () => {
 
         expect(result.current.aliases).toEqual(mockAliases);
         expect(result.current.error).toBeNull();
-        expect(axios.get).toHaveBeenCalledWith('/api/v1/user/voice-aliases');
+        expect(api.get).toHaveBeenCalledWith('/user/voice-aliases');
     });
 
     it('sets error state when the fetch fails', async () => {
-        axios.get.mockRejectedValueOnce(new Error('Network error'));
+        api.get.mockRejectedValueOnce(new Error('Network error'));
 
         const { result } = renderHook(() => useVoiceAliases());
 
@@ -47,7 +54,7 @@ describe('useVoiceAliases', () => {
     it('falls back to an empty array when the API response data.data.aliases is not an array', async () => {
         // Simulate an unexpected server response (e.g., a wrapped error body)
         // where data.data.aliases is missing or not an array.
-        axios.get.mockResolvedValueOnce({ data: { data: { message: 'unexpected' } } });
+        api.get.mockResolvedValueOnce({ data: { data: { message: 'unexpected' } } });
 
         const { result } = renderHook(() => useVoiceAliases());
 
@@ -58,9 +65,9 @@ describe('useVoiceAliases', () => {
     });
 
     it('addAlias posts to the API and merges the result into aliases sorted alphabetically', async () => {
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: [] } } });
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: [] } } });
         const created = { id: 3, alias: 'africa', keyword: 'burako' };
-        axios.post.mockResolvedValueOnce({ data: { data: created } });
+        api.post.mockResolvedValueOnce({ data: { data: created } });
 
         const { result } = renderHook(() => useVoiceAliases());
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -69,7 +76,7 @@ describe('useVoiceAliases', () => {
             await result.current.addAlias('africa', 'burako');
         });
 
-        expect(axios.post).toHaveBeenCalledWith('/api/v1/user/voice-aliases', {
+        expect(api.post).toHaveBeenCalledWith('/user/voice-aliases', {
             alias: 'africa',
             keyword: 'burako',
         });
@@ -81,9 +88,9 @@ describe('useVoiceAliases', () => {
             { id: 1, alias: 'apple', keyword: 'a' },
             { id: 2, alias: 'zebra', keyword: 'z' },
         ];
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: initial } } });
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: initial } } });
         const created = { id: 3, alias: 'mango', keyword: 'm' };
-        axios.post.mockResolvedValueOnce({ data: { data: created } });
+        api.post.mockResolvedValueOnce({ data: { data: created } });
 
         const { result } = renderHook(() => useVoiceAliases());
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -97,9 +104,9 @@ describe('useVoiceAliases', () => {
 
     it('addAlias merges a 200 (existing) response by replacing the matching alias in state', async () => {
         const initial = [{ id: 5, alias: 'morocco', keyword: 'burako' }];
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: initial } } });
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: initial } } });
         const returned = { id: 5, alias: 'morocco', keyword: 'burako' };
-        axios.post.mockResolvedValueOnce({ data: { data: returned } });
+        api.post.mockResolvedValueOnce({ data: { data: returned } });
 
         const { result } = renderHook(() => useVoiceAliases());
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -113,13 +120,13 @@ describe('useVoiceAliases', () => {
     });
 
     it('addAlias throws when the API returns a validation error', async () => {
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: [] } } });
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: [] } } });
         const apiError = Object.assign(new Error('Duplicate'), {
             response: { data: { errors: { alias: ['You already have an alias for that word.'] } } },
         });
-        axios.post.mockRejectedValueOnce(apiError);
+        api.post.mockRejectedValueOnce(apiError);
         // Re-fetch triggered after failure — return empty list
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: [] } } });
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: [] } } });
 
         const { result } = renderHook(() => useVoiceAliases());
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -131,14 +138,14 @@ describe('useVoiceAliases', () => {
 
     it('addAlias re-fetches aliases after a failure so existing aliases become visible', async () => {
         // Simulate: initial fetch returns empty (e.g. session expired / temporary failure).
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: [] } } });
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: [] } } });
         const apiError = Object.assign(new Error('Duplicate'), {
             response: { status: 422, data: { errors: { alias: ['You already have an alias for that word.'] } } },
         });
-        axios.post.mockRejectedValueOnce(apiError);
+        api.post.mockRejectedValueOnce(apiError);
         // Re-fetch after failure returns the alias that already existed in the DB.
         const existing = { id: 1, alias: 'morroco', keyword: 'burako' };
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: [existing] } } });
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: [existing] } } });
 
         const { result } = renderHook(() => useVoiceAliases());
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -160,8 +167,8 @@ describe('useVoiceAliases', () => {
     });
 
     it('removeAlias removes the alias optimistically before the API responds', async () => {
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: mockAliases } } });
-        axios.delete.mockResolvedValueOnce({});
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: mockAliases } } });
+        api.delete.mockResolvedValueOnce({});
 
         const { result } = renderHook(() => useVoiceAliases());
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -175,8 +182,8 @@ describe('useVoiceAliases', () => {
     });
 
     it('removeAlias calls DELETE on the correct endpoint', async () => {
-        axios.get.mockResolvedValueOnce({ data: { data: { aliases: mockAliases } } });
-        axios.delete.mockResolvedValueOnce({});
+        api.get.mockResolvedValueOnce({ data: { data: { aliases: mockAliases } } });
+        api.delete.mockResolvedValueOnce({});
 
         const { result } = renderHook(() => useVoiceAliases());
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -185,15 +192,15 @@ describe('useVoiceAliases', () => {
             await result.current.removeAlias(2);
         });
 
-        expect(axios.delete).toHaveBeenCalledWith('/api/v1/user/voice-aliases/2');
+        expect(api.delete).toHaveBeenCalledWith('/user/voice-aliases/2');
     });
 
     it('removeAlias rolls back on API failure by re-fetching', async () => {
-        axios.get
+        api.get
             .mockResolvedValueOnce({ data: { data: { aliases: mockAliases } } })  // initial fetch
             .mockResolvedValueOnce({ data: { data: { aliases: mockAliases } } });  // rollback re-fetch
 
-        axios.delete.mockRejectedValueOnce(new Error('Server error'));
+        api.delete.mockRejectedValueOnce(new Error('Server error'));
 
         const { result } = renderHook(() => useVoiceAliases());
         await waitFor(() => expect(result.current.isLoading).toBe(false));

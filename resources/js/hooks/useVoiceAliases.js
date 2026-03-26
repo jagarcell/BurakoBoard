@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import axios from 'axios';
+import api from '@/api/client';
 
 /**
  * React hook for managing the authenticated user's voice recognition aliases.
@@ -39,7 +39,7 @@ export default function useVoiceAliases() {
         try {
             setIsLoading(true);
             setError(null);
-            const { data } = await axios.get('/api/v1/user/voice-aliases');
+            const { data } = await api.get('/user/voice-aliases');
             setAliases(Array.isArray(data.data?.aliases) ? data.data.aliases : []);
         } catch {
             setError('Failed to load voice aliases.');
@@ -64,7 +64,7 @@ export default function useVoiceAliases() {
      */
     const addAlias = useCallback(async (alias, keyword) => {
         try {
-            const { data } = await axios.post('/api/v1/user/voice-aliases', { alias, keyword });
+            const { data } = await api.post('/user/voice-aliases', { alias, keyword });
             const created = data.data ?? data;
             setAliases((prev) =>
                 [...prev.filter((a) => a.id !== created.id), created].sort((a, b) => a.alias.localeCompare(b.alias))
@@ -91,7 +91,7 @@ export default function useVoiceAliases() {
     const removeAlias = useCallback(async (aliasId) => {
         setAliases((prev) => prev.filter((a) => a.id !== aliasId));
         try {
-            await axios.delete(`/api/v1/user/voice-aliases/${aliasId}`);
+            await api.delete(`/user/voice-aliases/${aliasId}`);
         } catch {
             await fetchAliases();
         }
