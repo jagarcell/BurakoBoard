@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Team;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -12,6 +13,21 @@ use Tests\TestCase;
 class TeamPlayerDestroyTest extends TestCase
 {
     use RefreshDatabase;
+
+    private User $user;
+
+    /**
+     * Boot a shared authenticated user for each test.
+     *
+     * @return void
+     * Logic: authenticate once per test so all requests pass the auth:sanctum middleware.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->create();
+        $this->actingAs($this->user);
+    }
 
     private function makeGame(string $status = 'in_progress'): Game
     {

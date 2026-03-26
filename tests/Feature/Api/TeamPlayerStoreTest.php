@@ -14,6 +14,21 @@ class TeamPlayerStoreTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
+    /**
+     * Boot a shared authenticated user for each test.
+     *
+     * @return void
+     * Logic: authenticate once per test so all requests pass the auth:sanctum middleware.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->create();
+        $this->actingAs($this->user);
+    }
+
     private function makeGame(string $status = 'in_progress'): Game
     {
         return Game::query()->create([
