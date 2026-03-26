@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Events\GameInvitationSent;
 use App\Events\GameUpdated;
 use App\Events\RoundDraftUpdated;
+use App\Enums\GameStatus;
+use App\Enums\GameUserRole;
 use App\Mail\GameInvitationMail;
 use App\Models\Game;
 use App\Models\Player;
@@ -74,13 +76,13 @@ class BurakoGameService
         $game = $this->repository->createGame([
             'name' => $payload['name'],
             'target_points' => (int) $payload['target_points'],
-            'status' => 'in_progress',
+            'status' => GameStatus::InProgress,
             'winning_team_id' => null,
             'current_round_number' => 0,
             'initial_shuffler_seat_number' => null,
         ]);
 
-        $this->repository->attachUserToGame($game->id, $userId, 'creator');
+        $this->repository->attachUserToGame($game->id, $userId, GameUserRole::Creator->value);
 
         Log::info('Game created', ['game_id' => $game->id, 'creator_id' => $userId]);
 
@@ -166,7 +168,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot add teams to a finished game.',
             ]);
@@ -195,7 +197,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot add teams to a finished game.',
             ]);
@@ -234,7 +236,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot update teams in a finished game.',
             ]);
@@ -260,7 +262,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot add players to a finished game.',
             ]);
@@ -298,7 +300,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot remove players from a finished game.',
             ]);
@@ -326,7 +328,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot swap seats in a finished game.',
             ]);
@@ -350,7 +352,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot set cutter for a finished game.',
             ]);
@@ -389,7 +391,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot record rounds for a finished game.',
             ]);
@@ -555,7 +557,7 @@ class BurakoGameService
     {
         $game = $this->repository->findGameOrFail($gameId);
 
-        if ($game->status !== 'in_progress') {
+        if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
                 'game' => 'Cannot save a draft for a finished game.',
             ]);
@@ -774,7 +776,7 @@ class BurakoGameService
     {
         $sourceGame = $this->repository->findGameOrFail($sourceGameId);
 
-        if ($sourceGame->status !== 'finished') {
+        if ($sourceGame->status !== GameStatus::Finished) {
             throw ValidationException::withMessages([
                 'game' => 'Only finished games can be rematched.',
             ]);
@@ -789,7 +791,7 @@ class BurakoGameService
             [
                 'name'                         => $payload['name'],
                 'target_points'                => (int) $payload['target_points'],
-                'status'                       => 'in_progress',
+                'status'                       => GameStatus::InProgress,
                 'winning_team_id'              => null,
                 'current_round_number'         => 0,
                 'initial_shuffler_seat_number' => null,
