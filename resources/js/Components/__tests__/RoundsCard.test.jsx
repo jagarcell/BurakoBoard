@@ -1,15 +1,32 @@
 import '@testing-library/jest-dom/vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import axios from 'axios';
+import api from '@/api/client';
 import RoundsCard from '@/Components/RoundsCard';
 
-vi.mock('axios');
+vi.mock('@/api/client', () => ({
+    default: {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+    },
+}));
 
 const mockPlayWinnerSound = vi.fn();
 const mockUnlockWinnerSound = vi.fn();
 vi.mock('@/hooks/useWinnerSound', () => ({
     default: () => ({ unlock: mockUnlockWinnerSound, play: mockPlayWinnerSound }),
+}));
+
+vi.mock('@/hooks/useVoiceAliases', () => ({
+    default: () => ({
+        aliases: [],
+        isLoading: false,
+        error: null,
+        addAlias: vi.fn(),
+        removeAlias: vi.fn(),
+    }),
 }));
 
 const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000 };
@@ -50,7 +67,7 @@ describe('RoundsCard', () => {
         mockPlayWinnerSound.mockReset();
         mockUnlockWinnerSound.mockReset();
         // Each test gets a working base-elements GET response so the form renders
-        axios.get.mockResolvedValue(elementsResponse);
+        api.get.mockResolvedValue(elementsResponse);
     });
 
     it('shows a placeholder when no game is selected', async () => {
@@ -117,7 +134,7 @@ describe('RoundsCard', () => {
     it('records a round with scores computed from base element inputs', async () => {
         const updatedTeamA = { ...teamA, current_score: 100 };
         const updatedTeamB = { ...teamB, current_score: 400 };
-        axios.post.mockResolvedValueOnce(
+        api.post.mockResolvedValueOnce(
             makeGameResponse([updatedTeamA, updatedTeamB], [round1]),
         );
 
@@ -136,7 +153,7 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+            expect(api.post).toHaveBeenCalledWith('/games/5/rounds', {
                 scores: [
                     { team_id: 10, points: 100 },
                     { team_id: 11, points: 400 },
@@ -148,7 +165,7 @@ describe('RoundsCard', () => {
     });
 
     it('resets base element inputs to defaults after a successful round submission', async () => {
-        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
 
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -165,7 +182,7 @@ describe('RoundsCard', () => {
     it('calls onRoundRecorded callback with updated teams after a successful round submission', async () => {
         const updatedTeamA = { ...teamA, current_score: 100 };
         const updatedTeamB = { ...teamB, current_score: 0 };
-        axios.post.mockResolvedValueOnce(
+        api.post.mockResolvedValueOnce(
             makeGameResponse([updatedTeamA, updatedTeamB], [round1]),
         );
 
@@ -198,7 +215,7 @@ describe('RoundsCard', () => {
     it('calls onRoundRecorded callback with updated teams and finished status when the round ends the game', async () => {
         const updatedTeamA = { ...teamA, current_score: 2100 };
         const updatedTeamB = { ...teamB, current_score: 800 };
-        axios.post.mockResolvedValueOnce(
+        api.post.mockResolvedValueOnce(
             makeGameResponse([updatedTeamA, updatedTeamB], [round1], 'finished'),
         );
 
@@ -231,7 +248,7 @@ describe('RoundsCard', () => {
     it('plays the winner sound when the recorded round ends the game', async () => {
         const updatedTeamA = { ...teamA, current_score: 2100 };
         const updatedTeamB = { ...teamB, current_score: 800 };
-        axios.post.mockResolvedValueOnce(
+        api.post.mockResolvedValueOnce(
             makeGameResponse([updatedTeamA, updatedTeamB], [round1], 'finished'),
         );
 
@@ -252,7 +269,7 @@ describe('RoundsCard', () => {
     it('does not play the winner sound when the round does not end the game', async () => {
         const updatedTeamA = { ...teamA, current_score: 100 };
         const updatedTeamB = { ...teamB, current_score: 400 };
-        axios.post.mockResolvedValueOnce(
+        api.post.mockResolvedValueOnce(
             makeGameResponse([updatedTeamA, updatedTeamB], [round1], 'in_progress'),
         );
 
@@ -267,12 +284,12 @@ describe('RoundsCard', () => {
         await screen.findAllByLabelText('Burako');
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
-        await waitFor(() => expect(axios.post).toHaveBeenCalled());
+        await waitFor(() => expect(api.post).toHaveBeenCalled());
         expect(mockPlayWinnerSound).not.toHaveBeenCalled();
     });
 
     it('calls unlockWinnerSound synchronously when the Record Round button is clicked', async () => {
-        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
 
         render(
             <RoundsCard
@@ -285,12 +302,12 @@ describe('RoundsCard', () => {
         await screen.findAllByLabelText('Burako');
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
-        await waitFor(() => expect(axios.post).toHaveBeenCalled());
+        await waitFor(() => expect(api.post).toHaveBeenCalled());
         expect(mockUnlockWinnerSound).toHaveBeenCalledTimes(1);
     });
 
     it('shows a save error and does not call onRoundRecorded when the API call fails', async () => {
-        axios.post.mockRejectedValueOnce(new Error('Network error'));
+        api.post.mockRejectedValueOnce(new Error('Network error'));
 
         const onRoundRecorded = vi.fn();
 
@@ -329,7 +346,7 @@ describe('RoundsCard', () => {
         await waitFor(() =>
             expect(screen.getByText('Clean Canastra must be a whole number ≥ 0.')).toBeInTheDocument(),
         );
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('renders cards in hand and cards on table inputs for each team', async () => {
@@ -349,7 +366,7 @@ describe('RoundsCard', () => {
         // Team Beta:  2 Clean Canastra (400) + cardsOnTable (50) = 450
         const updatedTeamA = { ...teamA, current_score: 60 };
         const updatedTeamB = { ...teamB, current_score: 450 };
-        axios.post.mockResolvedValueOnce(
+        api.post.mockResolvedValueOnce(
             makeGameResponse([updatedTeamA, updatedTeamB], [round1]),
         );
 
@@ -375,7 +392,7 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+            expect(api.post).toHaveBeenCalledWith('/games/5/rounds', {
                 scores: [
                     { team_id: 10, points: 60 },
                     { team_id: 11, points: 450 },
@@ -385,7 +402,7 @@ describe('RoundsCard', () => {
     });
 
     it('resets card inputs to zero after a successful round submission', async () => {
-        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
 
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -415,7 +432,7 @@ describe('RoundsCard', () => {
         await waitFor(() =>
             expect(screen.getByText('Cards in hand must be a whole number ≥ 0.')).toBeInTheDocument(),
         );
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('shows a validation error and blocks submission when points on table is a decimal', async () => {
@@ -434,14 +451,14 @@ describe('RoundsCard', () => {
         await waitFor(() =>
             expect(screen.getByText('Points on table must be a whole number ≥ 0.')).toBeInTheDocument(),
         );
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('subtracts both pointsInHand and pointsOnTable from base points when a score_override element is checked', async () => {
         const overrideEl = { id: 3, name: 'penalty_element', label: 'Penalty Element', points: 0, input_type: 'boolean', score_override: true };
         const extendedElements = [...baseElements, overrideEl];
-        axios.get.mockResolvedValue({ data: { data: { base_elements: extendedElements } } });
-        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+        api.get.mockResolvedValue({ data: { data: { base_elements: extendedElements } } });
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
 
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -465,7 +482,7 @@ describe('RoundsCard', () => {
 
         // Burako(100) + overrideEl(0) - pointsInHand(60) - pointsOnTable(100) = -60
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+            expect(api.post).toHaveBeenCalledWith('/games/5/rounds', {
                 scores: [
                     { team_id: 10, points: -60 },
                     { team_id: 11, points: 0 },
@@ -479,7 +496,7 @@ describe('RoundsCard', () => {
         // Team Beta:  2 Clean Canastra (400) + pointsOnTable (50) = 450 (canastra scored → added)
         const updatedTeamA = { ...teamA, current_score: 70 };
         const updatedTeamB = { ...teamB, current_score: 450 };
-        axios.post.mockResolvedValueOnce(
+        api.post.mockResolvedValueOnce(
             makeGameResponse([updatedTeamA, updatedTeamB], [round1]),
         );
 
@@ -503,7 +520,7 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+            expect(api.post).toHaveBeenCalledWith('/games/5/rounds', {
                 scores: [
                     { team_id: 10, points: 70 },
                     { team_id: 11, points: 450 },
@@ -514,7 +531,7 @@ describe('RoundsCard', () => {
 
     it('unchecks a mutually-exclusive boolean for other teams when checked for one team', async () => {
         const mutualEl = { id: 3, name: 'clean_cut', label: 'Clean Cut', points: 100, input_type: 'boolean', mutually_exclusive: true };
-        axios.get.mockResolvedValue({ data: { data: { base_elements: [...baseElements, mutualEl] } } });
+        api.get.mockResolvedValue({ data: { data: { base_elements: [...baseElements, mutualEl] } } });
 
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -549,8 +566,8 @@ describe('RoundsCard', () => {
 
     it('subtracts element penalty from the submitted score when a boolean element with penalty is unchecked', async () => {
         const penalizedBurako = { id: 1, name: 'burako', label: 'Burako', points: 100, penalty: 100, input_type: 'boolean' };
-        axios.get.mockResolvedValue({ data: { data: { base_elements: [penalizedBurako] } } });
-        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], []));
+        api.get.mockResolvedValue({ data: { data: { base_elements: [penalizedBurako] } } });
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], []));
 
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -559,7 +576,7 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+            expect(api.post).toHaveBeenCalledWith('/games/5/rounds', {
                 scores: [
                     { team_id: 10, points: -100 },
                     { team_id: 11, points: -100 },
@@ -570,8 +587,8 @@ describe('RoundsCard', () => {
 
     it('uses element points (not penalty) in the submitted score when a boolean element with penalty is checked', async () => {
         const penalizedBurako = { id: 1, name: 'burako', label: 'Burako', points: 100, penalty: 100, input_type: 'boolean' };
-        axios.get.mockResolvedValue({ data: { data: { base_elements: [penalizedBurako] } } });
-        axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], []));
+        api.get.mockResolvedValue({ data: { data: { base_elements: [penalizedBurako] } } });
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], []));
 
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -582,7 +599,7 @@ describe('RoundsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith('/api/v1/games/5/rounds', {
+            expect(api.post).toHaveBeenCalledWith('/games/5/rounds', {
                 scores: [
                     { team_id: 10, points: 100 },  // checked → normal 100 pts
                     { team_id: 11, points: -100 },  // unchecked → -100 penalty
@@ -610,7 +627,7 @@ describe('RoundsCard', () => {
                 },
             };
 
-            axios.get.mockImplementation((url) =>
+            api.get.mockImplementation((url) =>
                 url.includes('round-draft')
                     ? Promise.resolve(draftResponse)
                     : Promise.resolve(elementsResponse),
@@ -632,12 +649,12 @@ describe('RoundsCard', () => {
         });
 
         it('sends a PUT request to persist the draft when inputs change', async () => {
-            axios.get.mockImplementation((url) =>
+            api.get.mockImplementation((url) =>
                 url.includes('round-draft')
                     ? Promise.resolve({ data: { data: { round_draft: null } } })
                     : Promise.resolve(elementsResponse),
             );
-            axios.put = vi.fn().mockResolvedValue({});
+            api.put = vi.fn().mockResolvedValue({});
 
             render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -646,8 +663,8 @@ describe('RoundsCard', () => {
 
             await waitFor(
                 () =>
-                    expect(axios.put).toHaveBeenCalledWith(
-                        '/api/v1/games/5/round-draft',
+                    expect(api.put).toHaveBeenCalledWith(
+                        '/games/5/round-draft',
                         expect.objectContaining({ base_inputs: expect.any(Object) }),
                     ),
                 { timeout: 2000 },
@@ -655,13 +672,13 @@ describe('RoundsCard', () => {
         });
 
         it('does not save a draft immediately after a successful round submission', async () => {
-            axios.get.mockImplementation((url) =>
+            api.get.mockImplementation((url) =>
                 url.includes('round-draft')
                     ? Promise.resolve({ data: { data: { round_draft: null } } })
                     : Promise.resolve(elementsResponse),
             );
-            axios.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
-            axios.put = vi.fn().mockResolvedValue({});
+            api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+            api.put = vi.fn().mockResolvedValue({});
 
             render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -669,15 +686,15 @@ describe('RoundsCard', () => {
             await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
 
             // Wait for the round to be recorded
-            await waitFor(() => expect(axios.post).toHaveBeenCalled());
+            await waitFor(() => expect(api.post).toHaveBeenCalled());
 
             // Reset vi.fn call count after the round post
-            axios.put.mockClear();
+            api.put.mockClear();
 
             // No draft PUT should fire right after submission (inputs were just reset to defaults)
             // Use a short wait that is less than the 800ms debounce
             await new Promise((r) => setTimeout(r, 100));
-            expect(axios.put).not.toHaveBeenCalled();
+            expect(api.put).not.toHaveBeenCalled();
         });
     });
 
@@ -710,9 +727,9 @@ describe('RoundsCard', () => {
 
         beforeEach(() => {
             // Provide a no-op PUT so the debounced draft save doesn't throw.
-            axios.put = vi.fn().mockResolvedValue({});
+            api.put = vi.fn().mockResolvedValue({});
             // Mock all GET calls: active draft and per-round draft return null; elements return fixture.
-            axios.get.mockImplementation((url) => {
+            api.get.mockImplementation((url) => {
                 if (url.includes('/round-draft') || url.match(/\/rounds\/\d+\/draft/)) {
                     return Promise.resolve(nullDraftResponse);
                 }
@@ -823,7 +840,7 @@ describe('RoundsCard', () => {
         });
 
         it('shows read-only draft inputs when a draft is available for the round', async () => {
-            axios.get.mockImplementation((url) => {
+            api.get.mockImplementation((url) => {
                 if (url.match(/\/rounds\/\d+\/draft/)) return Promise.resolve(roundDraftResponse);
                 if (url.includes('/round-draft')) return Promise.resolve(nullDraftResponse);
                 return Promise.resolve(elementsResponse);
@@ -875,7 +892,7 @@ describe('RoundsCard', () => {
         });
 
         it('recording a round collapses any expanded detail', async () => {
-            axios.post.mockResolvedValueOnce(
+            api.post.mockResolvedValueOnce(
                 makeGameResponse([teamA, teamB], [round1]),
             );
 
@@ -925,7 +942,7 @@ describe('RoundsCard', () => {
         });
 
         it('shows the scoring form once both teams have equal player counts', async () => {
-            axios.get.mockImplementation((url) =>
+            api.get.mockImplementation((url) =>
                 url.includes('round-draft')
                     ? Promise.resolve({ data: { data: { round_draft: null } } })
                     : Promise.resolve(elementsResponse),
@@ -973,7 +990,7 @@ describe('RoundsCard', () => {
 
     describe('hasTwoTeams prop', () => {
         it('shows the scoring form when hasTwoTeams is true even with no local teams', async () => {
-            axios.get.mockImplementation((url) =>
+            api.get.mockImplementation((url) =>
                 url.includes('round-draft')
                     ? Promise.resolve({ data: { data: { round_draft: null } } })
                     : Promise.resolve(elementsResponse),
@@ -1008,7 +1025,7 @@ describe('RoundsCard', () => {
         });
 
         it('shows the scoring form when hasTwoTeams becomes true after team assignment', async () => {
-            axios.get.mockImplementation((url) =>
+            api.get.mockImplementation((url) =>
                 url.includes('round-draft')
                     ? Promise.resolve({ data: { data: { round_draft: null } } })
                     : Promise.resolve(elementsResponse),
@@ -1050,7 +1067,7 @@ describe('RoundsCard', () => {
                 : Promise.resolve(elementsResponse);
 
         it('renders a collapse button for each team card', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1071,7 +1088,7 @@ describe('RoundsCard', () => {
         });
 
         it('clicking the collapse button hides that team\'s score inputs', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1094,7 +1111,7 @@ describe('RoundsCard', () => {
         });
 
         it('clicking the button again expands the team\'s score inputs', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1121,7 +1138,7 @@ describe('RoundsCard', () => {
         });
 
         it('collapsing one team does not hide the other team\'s inputs', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1144,7 +1161,7 @@ describe('RoundsCard', () => {
         });
 
         it('collapse button has aria-expanded=false when collapsed and true when expanded', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1166,7 +1183,7 @@ describe('RoundsCard', () => {
         });
 
         it('collapsing a team scrolls the other team into view', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             const scrollIntoViewMock = vi.fn();
             window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
@@ -1234,7 +1251,7 @@ describe('RoundsCard', () => {
 
         it('when starting at non-stacked width, both team cards are expanded', async () => {
             setupMatchMedia(true);
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1250,7 +1267,7 @@ describe('RoundsCard', () => {
 
         it('transitioning to non-stacked expands both team cards regardless of prior collapse state', async () => {
             setupMatchMedia(false);
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1273,7 +1290,7 @@ describe('RoundsCard', () => {
 
         it('transitioning back to stacked restores the previous collapse state', async () => {
             setupMatchMedia(false);
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1300,7 +1317,7 @@ describe('RoundsCard', () => {
 
         it('transitioning back to stacked keeps all cards expanded when none were collapsed before', async () => {
             setupMatchMedia(false);
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1328,7 +1345,7 @@ describe('RoundsCard', () => {
                 : Promise.resolve(elementsResponse);
 
         it('shows 0 for each team when there are no previous rounds and no inputs entered', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1346,7 +1363,7 @@ describe('RoundsCard', () => {
         });
 
         it('reflects past-round accrued scores when rounds are provided', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
@@ -1364,7 +1381,7 @@ describe('RoundsCard', () => {
         });
 
         it('updates the running total live as the user types into a quantity input', async () => {
-            axios.get.mockImplementation(mockDraftAndElements);
+            api.get.mockImplementation(mockDraftAndElements);
             const user = userEvent.setup();
 
             render(
@@ -1392,7 +1409,7 @@ describe('RoundsCard', () => {
 
     describe('player circle toggle', () => {
         beforeEach(() => {
-            axios.put = vi.fn().mockResolvedValue({});
+            api.put = vi.fn().mockResolvedValue({});
         });
 
         const teamAWithPlayers = {
@@ -1718,12 +1735,12 @@ describe('RoundsCard', () => {
             });
 
             it('a team that was already collapsed before opening the circle remains collapsed after closing', async () => {
-                axios.get.mockImplementation((url) =>
+                api.get.mockImplementation((url) =>
                     url.includes('round-draft')
                         ? Promise.resolve({ data: { data: { round_draft: null } } })
                         : Promise.resolve(elementsResponse),
                 );
-                axios.put = vi.fn().mockResolvedValue({});
+                api.put = vi.fn().mockResolvedValue({});
 
                 const user = userEvent.setup();
 
@@ -1806,8 +1823,8 @@ describe('RoundsCard', () => {
             // Stub window.webkitSpeechRecognition so voiceSupported is true
             // and the + button is rendered.
             vi.stubGlobal('webkitSpeechRecognition', vi.fn());
-            axios.put = vi.fn().mockResolvedValue({});
-            axios.get.mockImplementation(mockDraftElementsAndAliases);
+            api.put = vi.fn().mockResolvedValue({});
+            api.get.mockImplementation(mockDraftElementsAndAliases);
         });
 
         afterEach(() => {
@@ -1838,7 +1855,7 @@ describe('RoundsCard', () => {
             await user.click(screen.getByRole('button', { name: 'Manage voice aliases' }));
 
             // The heading inside VoiceAliasManager should now be visible.
-            expect(screen.getByText(/voice aliases/i)).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: /voice aliases/i })).toBeInTheDocument();
             // The add form inputs must be present.
             expect(screen.getByLabelText(/misheard/i)).toBeInTheDocument();
             expect(screen.getByLabelText(/intended/i)).toBeInTheDocument();
@@ -1858,10 +1875,10 @@ describe('RoundsCard', () => {
             const aliasBtn = screen.getByRole('button', { name: 'Manage voice aliases' });
 
             await user.click(aliasBtn);
-            expect(screen.getByText(/voice aliases/i)).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: /voice aliases/i })).toBeInTheDocument();
 
             await user.click(screen.getByRole('button', { name: 'Hide voice aliases' }));
-            expect(screen.queryByText(/voice aliases/i)).not.toBeInTheDocument();
+            expect(screen.queryByRole('heading', { name: /voice aliases/i })).not.toBeInTheDocument();
         });
 
         it('the score entry form remains visible while the alias panel is open', async () => {
@@ -1918,7 +1935,7 @@ describe('RoundsCard', () => {
         beforeEach(() => {
             MockRecognition = makeMockRecognition();
             vi.stubGlobal('webkitSpeechRecognition', MockRecognition);
-            axios.get.mockImplementation(mockGetAndDraft);
+            api.get.mockImplementation(mockGetAndDraft);
         });
 
         afterEach(() => {
@@ -2040,7 +2057,7 @@ describe('RoundsCard', () => {
         const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
 
         // Burako (100 pts boolean) checked for teamA in the draft
-        axios.get.mockImplementation((url) => {
+        api.get.mockImplementation((url) => {
             if (url.includes('/round-draft')) {
                 return Promise.resolve({
                     data: {

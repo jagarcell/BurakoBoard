@@ -1,4 +1,5 @@
-import axios from 'axios';
+import api from '@/api/client';
+import { formatDefaultGameName } from '@/utils/formatGameName';
 import { createPortal } from 'react-dom';
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { usePage } from '@inertiajs/react';
@@ -90,7 +91,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
             setLoadError('');
 
             try {
-                const response = await axios.get('/api/v1/games');
+                const response = await api.get('/games');
                 const availableGames = response.data?.data?.games ?? [];
 
                 if (! isActive) {
@@ -164,14 +165,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setIsRematch(false);
         setRematchSourceId(null);
         resetForm();
-        const now = new Date();
-        const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        setForm((f) => ({ ...f, name: `${dayName} ${year}/${month}/${day} ${hours}:${minutes}` }));
+        setForm((f) => ({ ...f, name: formatDefaultGameName() }));
         setIsCreateModalOpen(true);
     };
 
@@ -190,14 +184,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setIsRematch(true);
         setRematchSourceId(game.id);
         setErrors({});
-        const now = new Date();
-        const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        setForm({ name: `${dayName} ${year}/${month}/${day} ${hours}:${minutes}`, targetPoints: String(game.target_points) });
+        setForm({ name: formatDefaultGameName(), targetPoints: String(game.target_points) });
         setIsCreateModalOpen(true);
     };
 
@@ -225,7 +212,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setInviteLoadError('');
 
         try {
-            const response = await axios.get(`/api/v1/games/${gameId}/invitable-users`, {
+            const response = await api.get(`/games/${gameId}/invitable-users`, {
                 params: { page },
             });
             const payload = response.data?.data?.users ?? {};
@@ -270,7 +257,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setIsFetchingInvitations(true);
 
         try {
-            const response = await axios.get('/api/v1/invitations');
+            const response = await api.get('/invitations');
             const freshPending = response.data?.data?.invitations ?? [];
 
             setPendingGames(freshPending);
@@ -305,7 +292,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setAcceptInviteError('');
 
         try {
-            const response = await axios.put(`/api/v1/games/${gameId}/invitation`);
+            const response = await api.put(`/games/${gameId}/invitation`);
             const updatedGame = response.data?.data?.game;
 
             if (! updatedGame) {
@@ -360,8 +347,8 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setInviteSendSuccess('');
 
         try {
-            const response = await axios.post(
-                `/api/v1/games/${selectedGame.id}/invitations`,
+            const response = await api.post(
+                `/games/${selectedGame.id}/invitations`,
                 { user_ids: Array.from(selectedInviteUserIds) },
             );
             const count = response.data?.data?.invited_count ?? 0;
@@ -419,7 +406,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setIsSaving(true);
 
         try {
-            const response = await axios.put(`/api/v1/games/${selectedGameId}`, {
+            const response = await api.put(`/games/${selectedGameId}`, {
                 name: trimmedName,
                 target_points: targetPoints,
             });
@@ -464,7 +451,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         setErrors({});
 
         try {
-            await axios.delete(`/api/v1/games/${selectedGameId}`);
+            await api.delete(`/games/${selectedGameId}`);
 
             startTransition(() => {
                 setGames((currentGames) =>
@@ -507,10 +494,10 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
         try {
             const endpoint = isRematch
-                ? `/api/v1/games/${rematchSourceId}/rematch`
-                : '/api/v1/games';
+                ? `/games/${rematchSourceId}/rematch`
+                : '/games';
 
-            const response = await axios.post(endpoint, {
+            const response = await api.post(endpoint, {
                 name: trimmedName,
                 target_points: targetPoints,
             });

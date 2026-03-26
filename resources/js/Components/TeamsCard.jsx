@@ -1,4 +1,5 @@
-import axios from 'axios';
+import api from '@/api/client';
+import { normalizeName } from '@/utils/strings';
 import { Fragment, startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
@@ -46,7 +47,25 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
     }, [initialTeams]);
 
     const fetchAllTeams = useCallback(() => {
-        axios.get('/api/v1/teams').then((response) => {
+        api.get('/teams').then((response) => {
+            setAllTeams(response.data?.data?.teams ?? []);
+        });
+    }, []);
+
+    /**
+     * Re-fetches the users and all-teams catalogs used in the create/edit modal.
+     * Called imperatively when any modal is opened so the dropdown options
+     * reflect data that may have been added by another session since mount.
+     *
+     * @return {void}
+     * Logic: Issues two parallel GET requests for /users and /teams, then
+     *        updates the corresponding state slices when each resolves.
+     */
+    const fetchCatalog = useCallback(() => {
+        api.get('/users').then((response) => {
+            setUsers(response.data?.data?.users ?? []);
+        });
+        api.get('/teams').then((response) => {
             setAllTeams(response.data?.data?.teams ?? []);
         });
     }, []);
@@ -54,11 +73,11 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
     useEffect(() => {
         let isActive = true;
 
-        axios.get('/api/v1/users').then((response) => {
+        api.get('/users').then((response) => {
             if (isActive) setUsers(response.data?.data?.users ?? []);
         });
 
-        axios.get('/api/v1/teams').then((response) => {
+        api.get('/teams').then((response) => {
             if (isActive) setAllTeams(response.data?.data?.teams ?? []);
         });
 
@@ -179,6 +198,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
     const openModal = (slot = null) => {
         resetModal();
         setCreatingSlot(slot);
+        fetchCatalog();
         setIsModalOpen(true);
     };
 
@@ -188,6 +208,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
         setPlayerInput(defaultPlayerInput);
         setErrors({});
         setRemovedExistingPlayerIds([]);
+        fetchCatalog();
         setIsModalOpen(true);
     };
 
@@ -315,8 +336,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
         setSlotAddErrors((s) => ({ ...s, [slot]: '' }));
 
         try {
-            const response = await axios.post(
-                `/api/v1/games/${selectedGame.id}/teams/${selectedTeam.id}/attach`,
+            const response = await api.post(
+                `/games/${selectedGame.id}/teams/${selectedTeam.id}/attach`,
             );
 
             const newTeams = response.data?.data?.game?.teams ?? [];
@@ -368,14 +389,14 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
 
         try {
             if (editingTeam) {
-                let lastResponse = await axios.put(
-                    `/api/v1/games/${selectedGame.id}/teams/${editingTeam.id}`,
+                let lastResponse = await api.put(
+                    `/games/${selectedGame.id}/teams/${editingTeam.id}`,
                     { name },
                 );
 
                 for (const playerId of removedExistingPlayerIds) {
-                    lastResponse = await axios.delete(
-                        `/api/v1/games/${selectedGame.id}/teams/${editingTeam.id}/players/${playerId}`,
+                    lastResponse = await api.delete(
+                        `/games/${selectedGame.id}/teams/${editingTeam.id}/players/${playerId}`,
                     );
                 }
 
@@ -384,15 +405,15 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                         ? { user_id: Number(player.userId), name: player.name }
                         : { name: player.name };
 
-                    lastResponse = await axios.post(
-                        `/api/v1/games/${selectedGame.id}/teams/${editingTeam.id}/players`,
+                    lastResponse = await api.post(
+                        `/games/${selectedGame.id}/teams/${editingTeam.id}/players`,
                         payload,
                     );
                 }
 
                 for (const { playerIdA, playerIdB } of pendingSeatSwaps) {
-                    lastResponse = await axios.put(
-                        `/api/v1/games/${selectedGame.id}/players/swap-seats`,
+                    lastResponse = await api.put(
+                        `/games/${selectedGame.id}/players/swap-seats`,
                         { player_id_a: playerIdA, player_id_b: playerIdB },
                     );
                 }
@@ -403,8 +424,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                 });
                 onTeamsChange?.(newTeamsFromEdit);
             } else {
-                const teamResponse = await axios.post(
-                    `/api/v1/games/${selectedGame.id}/teams`,
+                const teamResponse = await api.post(
+                    `/games/${selectedGame.id}/teams`,
                     { name },
                 );
 
@@ -424,8 +445,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                         ? { user_id: Number(player.userId), name: player.name }
                         : { name: player.name };
 
-                    lastResponse = await axios.post(
-                        `/api/v1/games/${selectedGame.id}/teams/${createdTeam.id}/players`,
+                    lastResponse = await api.post(
+                        `/games/${selectedGame.id}/teams/${createdTeam.id}/players`,
                         payload,
                     );
                 }
@@ -503,9 +524,6 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
 
         return null;
     };
-
-    /** Trim and collapse inner whitespace so '  Team  Alpha  ' → 'Team Alpha'. */
-    const normalizeName = (str) => str.trim().replace(/\s+/g, ' ');
 
     const triangleWidth = arrowHalfWidth !== null ? `${arrowHalfWidth * 2}px` : null;
 

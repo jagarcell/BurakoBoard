@@ -1,10 +1,17 @@
 import '@testing-library/jest-dom/vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import axios from 'axios';
+import api from '@/api/client';
 import TeamsCard from '@/Components/TeamsCard';
 
-vi.mock('axios');
+vi.mock('@/api/client', () => ({
+    default: {
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        delete: vi.fn(),
+    },
+}));
 
 const mockUsers = [
     { id: 1, name: 'Alice' },
@@ -48,12 +55,12 @@ const makeTeam = (id, name, players = []) => ({
 });
 
 const setupGetMocks = (allTeams = mockAllTeams) => {
-    axios.get.mockImplementation((url) => {
-        if (url === '/api/v1/users') {
+    api.get.mockImplementation((url) => {
+        if (url === '/users') {
             return Promise.resolve({ data: { data: { users: mockUsers } } });
         }
 
-        if (url === '/api/v1/teams') {
+        if (url === '/teams') {
             return Promise.resolve({ data: { data: { teams: allTeams } } });
         }
 
@@ -179,7 +186,7 @@ describe('TeamsCard', () => {
         setupGetMocks(mockAllTeams);
 
         const attachedTeam = makeTeam(100, 'Old Team A', []);
-        axios.post.mockResolvedValueOnce(makeGameSummary([attachedTeam]));
+        api.post.mockResolvedValueOnce(makeGameSummary([attachedTeam]));
 
         render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
@@ -189,8 +196,8 @@ describe('TeamsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Add team' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams/100/attach',
+            expect(api.post).toHaveBeenCalledWith(
+                '/games/5/teams/100/attach',
             ),
         );
 
@@ -201,7 +208,7 @@ describe('TeamsCard', () => {
         setupGetMocks(mockAllTeams);
 
         const attachedTeam = makeTeam(101, 'Old Team B', [{ id: 11, user_id: null, display_name: 'Carlos' }]);
-        axios.post.mockResolvedValueOnce(makeGameSummary([attachedTeam]));
+        api.post.mockResolvedValueOnce(makeGameSummary([attachedTeam]));
 
         render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
@@ -211,13 +218,13 @@ describe('TeamsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Add team' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams/101/attach',
+            expect(api.post).toHaveBeenCalledWith(
+                '/games/5/teams/101/attach',
             ),
         );
 
         // Only one POST call — the attach endpoint, no separate player calls.
-        expect(axios.post).toHaveBeenCalledTimes(1);
+        expect(api.post).toHaveBeenCalledTimes(1);
     });
 
     it('shows registered users in the player dropdown after opening the create modal', async () => {
@@ -247,7 +254,7 @@ describe('TeamsCard', () => {
             { id: 5, user_id: 1, display_name: 'Alice' },
         ]);
 
-        axios.post
+        api.post
             .mockResolvedValueOnce(makeGameSummary([createdTeam]))
             .mockResolvedValueOnce(makeGameSummary([createdTeam]));
 
@@ -276,15 +283,15 @@ describe('TeamsCard', () => {
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams',
+            expect(api.post).toHaveBeenCalledWith(
+                '/games/5/teams',
                 { name: 'Team Alpha' },
             ),
         );
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams/20/players',
+            expect(api.post).toHaveBeenCalledWith(
+                '/games/5/teams/20/players',
                 { user_id: 1, name: 'Alice' },
             ),
         );
@@ -303,7 +310,7 @@ describe('TeamsCard', () => {
             { id: 6, user_id: null, display_name: 'Roberto' },
         ]);
 
-        axios.post
+        api.post
             .mockResolvedValueOnce(makeGameSummary([createdTeam]))
             .mockResolvedValueOnce(makeGameSummary([createdTeam]));
 
@@ -322,8 +329,8 @@ describe('TeamsCard', () => {
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
         await waitFor(() =>
-            expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams/21/players',
+            expect(api.post).toHaveBeenCalledWith(
+                '/games/5/teams/21/players',
                 { name: 'Roberto' },
             ),
         );
@@ -346,7 +353,7 @@ describe('TeamsCard', () => {
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
         expect(screen.getByText('A team name is required.')).toBeInTheDocument();
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('shows a validation error when adding a player with an empty name', async () => {
@@ -394,7 +401,7 @@ describe('TeamsCard', () => {
         setupGetMocks();
 
         const updatedTeam = makeTeam(10, 'Team Alpha Updated');
-        axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+        api.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
 
         render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
 
@@ -408,8 +415,8 @@ describe('TeamsCard', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
 
         await waitFor(() =>
-            expect(axios.put).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams/10',
+            expect(api.put).toHaveBeenCalledWith(
+                '/games/5/teams/10',
                 { name: 'Team Alpha Updated' },
             ),
         );
@@ -433,7 +440,7 @@ describe('TeamsCard', () => {
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
         expect(screen.getByText('A team with this name already exists.')).toBeInTheDocument();
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('normalises extra spaces when checking for duplicate names on create', async () => {
@@ -448,7 +455,7 @@ describe('TeamsCard', () => {
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
         expect(screen.getByText('A team with this name already exists.')).toBeInTheDocument();
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('rejects a globally-existing team name even when that team is not yet in the current game', async () => {
@@ -469,7 +476,7 @@ describe('TeamsCard', () => {
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
         expect(screen.getByText('A team with this name already exists.')).toBeInTheDocument();
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('rejects a duplicate name that differs only in casing when creating', async () => {
@@ -484,7 +491,7 @@ describe('TeamsCard', () => {
         await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create team' }));
 
         expect(screen.getByText('A team with this name already exists.')).toBeInTheDocument();
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('shows a duplicate-player error and does not add when player name already exists in pending list', async () => {
@@ -742,14 +749,14 @@ describe('TeamsCard', () => {
             expect(screen.getByRole('generic', { name: 'Team Alpha score' })).toHaveTextContent('800'),
         );
 
-        expect(axios.get).toHaveBeenCalledTimes(2); // users + teams only — no GET for game summary or score update
+        expect(api.get).toHaveBeenCalledTimes(2); // users + teams only — no GET for game summary or score update
     });
 
     it('shows API error message from the game field when the update fails because the game is finished', async () => {
         setupGetMocks();
 
         const apiError = { response: { data: { data: { errors: { game: ['Cannot update teams in a finished game.'] } } } } };
-        axios.put.mockRejectedValueOnce(apiError);
+        api.put.mockRejectedValueOnce(apiError);
 
         render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
 
@@ -771,7 +778,7 @@ describe('TeamsCard', () => {
         setupGetMocks();
 
         const apiError = { response: { data: { data: { errors: { name: ['A team with this name already exists in this game.'] } } } } };
-        axios.put.mockRejectedValueOnce(apiError);
+        api.put.mockRejectedValueOnce(apiError);
 
         render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
 
@@ -792,7 +799,7 @@ describe('TeamsCard', () => {
     it('shows a generic fallback error when the API returns no structured errors', async () => {
         setupGetMocks();
 
-        axios.put.mockRejectedValueOnce(new Error('Network Error'));
+        api.put.mockRejectedValueOnce(new Error('Network Error'));
 
         render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} selectedGame={selectedGame} />);
 
@@ -940,7 +947,7 @@ describe('TeamsCard', () => {
 
         const onTeamsChange = vi.fn();
         const createdTeam = makeTeam(20, 'Team Alpha');
-        axios.post.mockResolvedValueOnce(makeGameSummary([createdTeam]));
+        api.post.mockResolvedValueOnce(makeGameSummary([createdTeam]));
 
         render(<TeamsCard initialTeams={[]} onTeamsChange={onTeamsChange} selectedGame={selectedGame} />);
 
@@ -962,7 +969,7 @@ describe('TeamsCard', () => {
 
         const onTeamsChange = vi.fn();
         const updatedTeam = makeTeam(10, 'Team Alpha Updated');
-        axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+        api.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
 
         render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} onTeamsChange={onTeamsChange} selectedGame={selectedGame} />);
 
@@ -984,7 +991,7 @@ describe('TeamsCard', () => {
 
         const onTeamsChange = vi.fn();
         const copiedTeam = makeTeam(20, 'Old Team A');
-        axios.post.mockResolvedValueOnce(makeGameSummary([copiedTeam]));
+        api.post.mockResolvedValueOnce(makeGameSummary([copiedTeam]));
 
         render(<TeamsCard initialTeams={[]} onTeamsChange={onTeamsChange} selectedGame={selectedGame} />);
 
@@ -1003,7 +1010,7 @@ describe('TeamsCard', () => {
 
         const onTeamCreated = vi.fn();
         const createdTeam = makeTeam(20, 'Team Alpha');
-        axios.post.mockResolvedValueOnce(makeGameSummary([createdTeam]));
+        api.post.mockResolvedValueOnce(makeGameSummary([createdTeam]));
 
         render(<TeamsCard initialTeams={[]} onTeamCreated={onTeamCreated} selectedGame={selectedGame} />);
 
@@ -1023,7 +1030,7 @@ describe('TeamsCard', () => {
 
         const onTeamCreated = vi.fn();
         const copiedTeam = makeTeam(20, 'Old Team A');
-        axios.post.mockResolvedValueOnce(makeGameSummary([copiedTeam]));
+        api.post.mockResolvedValueOnce(makeGameSummary([copiedTeam]));
 
         render(<TeamsCard initialTeams={[]} onTeamCreated={onTeamCreated} selectedGame={selectedGame} />);
 
@@ -1040,7 +1047,7 @@ describe('TeamsCard', () => {
 
         const onTeamCreated = vi.fn();
         const updatedTeam = makeTeam(10, 'Team Alpha Updated');
-        axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+        api.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
 
         render(<TeamsCard initialTeams={[makeTeam(10, 'Team Alpha')]} onTeamCreated={onTeamCreated} selectedGame={selectedGame} />);
 
@@ -1266,11 +1273,11 @@ describe('TeamsCard', () => {
             const preExistingTeam = { id: 100, name: 'Old Team A', players: [] };
 
             let teamsCallCount = 0;
-            axios.get.mockImplementation((url) => {
-                if (url === '/api/v1/users') {
+            api.get.mockImplementation((url) => {
+                if (url === '/users') {
                     return Promise.resolve({ data: { data: { users: mockUsers } } });
                 }
-                if (url === '/api/v1/teams') {
+                if (url === '/teams') {
                     teamsCallCount += 1;
                     // First call (on mount): teamFromOtherSession does not exist yet.
                     // Subsequent calls (post-create refresh): it does.
@@ -1284,7 +1291,7 @@ describe('TeamsCard', () => {
             });
 
             // The create endpoint returns a game with 'Brand New Team' (id 102) attached.
-            axios.post.mockResolvedValueOnce(makeGameSummary([makeTeam(102, 'Brand New Team')]));
+            api.post.mockResolvedValueOnce(makeGameSummary([makeTeam(102, 'Brand New Team')]));
 
             render(<TeamsCard initialTeams={[]} selectedGame={selectedGame} />);
 
@@ -1477,8 +1484,8 @@ describe('TeamsCard', () => {
             setupGetMocks();
 
             const updatedTeam = makeTeam(10, 'Team Alpha', []);
-            axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
-            axios.delete
+            api.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+            api.delete
                 .mockResolvedValueOnce(makeGameSummary([updatedTeam]))
                 .mockResolvedValueOnce(makeGameSummary([updatedTeam]));
 
@@ -1493,18 +1500,18 @@ describe('TeamsCard', () => {
             await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
 
             await waitFor(() =>
-                expect(axios.delete).toHaveBeenCalledWith(
-                    '/api/v1/games/5/teams/10/players/1',
+                expect(api.delete).toHaveBeenCalledWith(
+                    '/games/5/teams/10/players/1',
                 ),
             );
 
             await waitFor(() =>
-                expect(axios.delete).toHaveBeenCalledWith(
-                    '/api/v1/games/5/teams/10/players/2',
+                expect(api.delete).toHaveBeenCalledWith(
+                    '/games/5/teams/10/players/2',
                 ),
             );
 
-            expect(axios.delete).toHaveBeenCalledTimes(2);
+            expect(api.delete).toHaveBeenCalledTimes(2);
         });
 
         it('calls DELETE for removed players before adding new ones on submit', async () => {
@@ -1515,9 +1522,9 @@ describe('TeamsCard', () => {
 
             const interimTeam = makeTeam(10, 'Team Alpha', []);
             const finalTeam   = makeTeam(10, 'Team Alpha', [{ id: 3, user_id: null, display_name: 'Elena' }]);
-            axios.put.mockResolvedValueOnce(makeGameSummary([interimTeam]));
-            axios.delete.mockResolvedValueOnce(makeGameSummary([interimTeam]));
-            axios.post.mockResolvedValueOnce(makeGameSummary([finalTeam]));
+            api.put.mockResolvedValueOnce(makeGameSummary([interimTeam]));
+            api.delete.mockResolvedValueOnce(makeGameSummary([interimTeam]));
+            api.post.mockResolvedValueOnce(makeGameSummary([finalTeam]));
 
             render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
 
@@ -1530,9 +1537,9 @@ describe('TeamsCard', () => {
 
             await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
 
-            await waitFor(() => expect(axios.delete).toHaveBeenCalledTimes(1));
-            await waitFor(() => expect(axios.post).toHaveBeenCalledWith(
-                '/api/v1/games/5/teams/10/players',
+            await waitFor(() => expect(api.delete).toHaveBeenCalledTimes(1));
+            await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+                '/games/5/teams/10/players',
                 { name: 'Elena' },
             ));
         });
@@ -1546,7 +1553,7 @@ describe('TeamsCard', () => {
             const updatedTeam = makeTeam(10, 'Team Alpha Updated', [
                 { id: 1, user_id: null, display_name: 'Carlos' },
             ]);
-            axios.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
+            api.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
 
             render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
 
@@ -1560,7 +1567,7 @@ describe('TeamsCard', () => {
             await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
 
             await waitFor(() => expect(screen.getByText('Team Alpha Updated')).toBeInTheDocument());
-            expect(axios.delete).not.toHaveBeenCalled();
+            expect(api.delete).not.toHaveBeenCalled();
         });
 
         it('allows adding an existing player name again once they have been removed', async () => {
@@ -1909,7 +1916,7 @@ describe('TeamsCard', () => {
             ]);
 
             // First PUT resolves the team-name update; second PUT resolves the swap-seats call.
-            axios.put
+            api.put
                 .mockResolvedValueOnce(makeGameSummary([makeSeatedTeam()]))
                 .mockResolvedValueOnce(makeGameSummary([swappedTeam]));
 
@@ -1927,14 +1934,14 @@ describe('TeamsCard', () => {
             fireEvent.drop(bobRow);
 
             // No API call yet — the drag only updates modal state.
-            expect(axios.put).not.toHaveBeenCalled();
+            expect(api.put).not.toHaveBeenCalled();
 
             // Now submit — the swap-seats call should be made.
             await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
 
             await waitFor(() =>
-                expect(axios.put).toHaveBeenCalledWith(
-                    '/api/v1/games/5/players/swap-seats',
+                expect(api.put).toHaveBeenCalledWith(
+                    '/games/5/players/swap-seats',
                     { player_id_a: 1, player_id_b: 2 },
                 ),
             );
@@ -1960,7 +1967,7 @@ describe('TeamsCard', () => {
             // with no API call.
             expect(within(aliceRow).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
             expect(within(bobRow).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
-            expect(axios.put).not.toHaveBeenCalled();
+            expect(api.put).not.toHaveBeenCalled();
         });
 
         it('restores original seat badges when Cancel is clicked after a drag swap', async () => {
@@ -1984,7 +1991,7 @@ describe('TeamsCard', () => {
 
             // Click Cancel — no API should have been called.
             await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-            expect(axios.put).not.toHaveBeenCalled();
+            expect(api.put).not.toHaveBeenCalled();
 
             // Re-open the modal — original seats must be restored.
             await userEvent.click(screen.getByRole('button', { name: 'Edit team' }));
@@ -2001,7 +2008,7 @@ describe('TeamsCard', () => {
                 { id: 2, user_id: null, display_name: 'Bob',   seat_number: 1 },
                 { id: 1, user_id: null, display_name: 'Alice', seat_number: 3 },
             ]);
-            axios.put
+            api.put
                 .mockResolvedValueOnce(makeGameSummary([makeSeatedTeam()]))
                 .mockResolvedValueOnce(makeGameSummary([swappedTeam]));
 
@@ -2051,7 +2058,7 @@ describe('TeamsCard', () => {
             fireEvent.dragOver(aliceRow);
             fireEvent.drop(aliceRow);
 
-            expect(axios.put).not.toHaveBeenCalled();
+            expect(api.put).not.toHaveBeenCalled();
         });
 
         it('swaps seat badges via touch events (iOS/mobile)', async () => {
@@ -2097,7 +2104,7 @@ describe('TeamsCard', () => {
             // Seat badges must be swapped immediately in the modal without an API call.
             expect(within(aliceRow).getByRole('generic', { name: 'Seat 3' })).toBeInTheDocument();
             expect(within(bobRow).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
-            expect(axios.put).not.toHaveBeenCalled();
+            expect(api.put).not.toHaveBeenCalled();
         });
 
         it('does not swap seats via touch when the finger lifts over the same row', async () => {
@@ -2128,7 +2135,7 @@ describe('TeamsCard', () => {
             delete document.elementFromPoint;
 
             expect(within(aliceRow).getByRole('generic', { name: 'Seat 1' })).toBeInTheDocument();
-            expect(axios.put).not.toHaveBeenCalled();
+            expect(api.put).not.toHaveBeenCalled();
         });
 
         it('applies opacity-40 class on touchstart and removes it on touchend', async () => {
