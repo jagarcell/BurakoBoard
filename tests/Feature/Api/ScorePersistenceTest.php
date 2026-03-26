@@ -8,7 +8,9 @@ use App\Models\User;
 use App\Repositories\BurakoGameRepository;
 use App\Services\BurakoGameService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class ScorePersistenceTest extends TestCase
@@ -287,5 +289,56 @@ class ScorePersistenceTest extends TestCase
         ]);
 
         $response->assertUnprocessable();
+    }
+
+    /**
+     * A QueryException inside DB::transaction logs an error and returns a 422 with a user-facing message.
+     *
+     * @return void Asserts Log::error('DB transaction failed in recordRound') fires and
+     *   the response shape contains the round validation error message.
+     * Logic: spy on the Log facade, partially mock the repository so only createRound throws a
+     *   QueryException (leaving all other repository methods intact), POST a valid round payload,
+     *   and assert the error log entry and 422 response shape.
+     */
+    public function test_db_transaction_failure_logs_error_and_returns_422(): void
+    {
+        $spy = Log::spy();
+
+        $gameId  = $this->createGameAndGetId();
+        $teamAId = $this->addTeamAndGetId($gameId, 'Alpha');
+        $teamBId = $this->addTeamAndGetId($gameId, 'Beta');
+
+        // Partially mock the repository so only createRound throws a QueryException,
+        // leaving all other repository methods (findGameOrFail, getTeamsForGame, etc.) intact.
+        // A non-deadlock message is used intentionally: RefreshDatabase wraps the test in an
+        // outer transaction (level 1), so DB::transaction() runs at level 2. When a deadlock
+        // error is detected at level > 1, Laravel wraps it in DeadlockException (extends PDOException)
+        // rather than re-throwing the QueryException — so the service catch block would never fire.
+        // A generic SQL error propagates as the original QueryException and exercises the catch correctly.
+        $this->partialMock(BurakoGameRepository::class, function ($mock): void {
+            $mock->shouldReceive('createRound')
+                ->once()
+                ->andThrow(new QueryException(
+                    'mysql',
+                    'INSERT INTO `rounds` ...',
+                    [],
+                    new \Exception('SQLSTATE[HY000]: General error: 1 no such table: rounds'),
+                ));
+        });
+
+        $response = $this->actingAs($this->user)->postJson("/api/v1/games/{$gameId}/rounds", [
+            'scores' => [
+                ['team_id' => $teamAId, 'points' => 100],
+                ['team_id' => $teamBId, 'points' => 200],
+            ],
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('data.errors.round.0', 'The round could not be saved due to a database error. Please try again.');
+
+        $spy->shouldHaveReceived('error')->withArgs(function (string $message, array $context) use ($gameId): bool {
+            return $message === 'DB transaction failed in recordRound'
+                && ($context['game_id'] ?? null) === $gameId;
+        });
     }
 }
