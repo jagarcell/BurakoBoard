@@ -47,6 +47,20 @@ return Application::configure(basePath: dirname(__DIR__))
         // Prevent sensitive values from being flashed into error sessions.
         $exceptions->dontFlash(['password', 'password_confirmation', 'token', 'secret']);
 
+        // Map ValidationException to the standard API envelope so every client
+        // can reliably access validation errors at data.data.errors.
+        $exceptions->renderable(function (ValidationException $e, Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status'    => 'error',
+                    'data'      => ['message' => $e->getMessage(), 'errors' => $e->errors()],
+                    'meta'      => [],
+                    'links'     => [],
+                    'http_code' => 422,
+                ], 422);
+            }
+        });
+
         // Return a clean 404 JSON for API callers instead of Laravel's raw prose.
         // Note: Laravel's prepareException() converts ModelNotFoundException to
         // NotFoundHttpException before renderables run, so we catch the latter.
