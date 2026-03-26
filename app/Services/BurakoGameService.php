@@ -13,9 +13,12 @@ use App\Models\User;
 use App\Repositories\BurakoGameRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class BurakoGameService
 {
@@ -78,6 +81,8 @@ class BurakoGameService
         ]);
 
         $this->repository->attachUserToGame($game->id, $userId, 'creator');
+
+        Log::info('Game created', ['game_id' => $game->id, 'creator_id' => $userId]);
 
         return $this->repository->getGameSummary($game->id);
     }
@@ -409,32 +414,50 @@ class BurakoGameService
 
         $committedRoundNumber = 0;
 
-        DB::transaction(function () use ($game, $gameId, $scores, &$committedRoundNumber): void {
-            $roundNumber = $this->repository->getNextRoundNumber($gameId);
-            $round = $this->repository->createRound($gameId, $roundNumber);
-            $committedRoundNumber = $roundNumber;
+        try {
+            DB::transaction(function () use ($game, $gameId, $scores, &$committedRoundNumber): void {
+                $roundNumber = $this->repository->getNextRoundNumber($gameId);
+                $round = $this->repository->createRound($gameId, $roundNumber);
+                $committedRoundNumber = $roundNumber;
 
-            $updatedTeams = collect();
+                $updatedTeams = collect();
 
-            foreach ($scores as $score) {
-                $team = $this->repository->findTeamInGameOrFail($gameId, (int) $score['team_id']);
-                $points = (int) $score['points'];
+                foreach ($scores as $score) {
+                    $team = $this->repository->findTeamInGameOrFail($gameId, (int) $score['team_id']);
+                    $points = (int) $score['points'];
 
-                $this->repository->createRoundScore($round->id, $team->id, $points);
-                $updatedTeam = $this->repository->incrementTeamScore($gameId, $team->id, $points);
-                $updatedTeams->push($updatedTeam);
-            }
+                    $this->repository->createRoundScore($round->id, $team->id, $points);
+                    $updatedTeam = $this->repository->incrementTeamScore($gameId, $team->id, $points);
+                    $updatedTeams->push($updatedTeam);
+                }
 
-            $winner = $this->resolveWinner($updatedTeams, (int) $game->target_points);
+                $winner = $this->resolveWinner($updatedTeams, (int) $game->target_points);
 
-            if ($winner !== null) {
-                $this->repository->finishGameWithWinner($game, $winner->id, $round->round_number);
+                if ($winner !== null) {
+                    $this->repository->finishGameWithWinner($game, $winner->id, $round->round_number);
 
-                return;
-            }
+                    return;
+                }
 
-            $this->repository->updateGameRoundCounter($game, $round->round_number);
-        });
+                $this->repository->updateGameRoundCounter($game, $round->round_number);
+            });
+        } catch (QueryException $e) {
+            Log::error('DB transaction failed in recordRound', [
+                'game_id'  => $gameId,
+                'sql'      => $e->getSql(),
+                'bindings' => $e->getBindings(),
+                'message'  => $e->getMessage(),
+                'user_id'  => auth()->id(),
+            ]);
+            throw ValidationException::withMessages([
+                'round' => ['The round could not be saved due to a database error. Please try again.'],
+            ]);
+        }
+
+        Log::info('Round recorded', [
+            'game_id'      => $gameId,
+            'round_number' => $committedRoundNumber,
+        ]);
 
         // Archive the active draft under the committed round number so it can be
         // retrieved later as a read-only scoring breakdown for that round.
@@ -620,6 +643,8 @@ class BurakoGameService
         }
 
         $this->repository->deleteGame($gameId);
+
+        Log::info('Game deleted', ['game_id' => $gameId, 'deleted_by' => $userId]);
     }
 
     /**
@@ -676,7 +701,15 @@ class BurakoGameService
         $invitees = $this->repository->getUsersByIds($newUserIds);
 
         foreach ($invitees as $invitee) {
-            Mail::to($invitee->email)->send(new GameInvitationMail($game, $invitee, $inviter));
+            try {
+                Mail::to($invitee->email)->send(new GameInvitationMail($game, $invitee, $inviter));
+            } catch (TransportExceptionInterface $e) {
+                Log::warning('Invitation email failed', [
+                    'game_id'   => $game->id,
+                    'recipient' => $invitee->email,
+                    'reason'    => $e->getMessage(),
+                ]);
+            }
             broadcast(new GameInvitationSent(
                 inviteeId:   $invitee->id,
                 gameId:      $game->id,
@@ -684,6 +717,12 @@ class BurakoGameService
                 inviterName: $inviter->name,
             ))->toOthers();
         }
+
+        Log::info('Invitations sent', [
+            'game_id'    => $game->id,
+            'count'      => count($newUserIds),
+            'recipients' => $invitees->pluck('email')->all(),
+        ]);
 
         return count($newUserIds);
     }
