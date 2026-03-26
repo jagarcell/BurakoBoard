@@ -6,6 +6,7 @@ import Checkbox from '@/Components/Checkbox';
 import DangerButton from '@/Components/DangerButton';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
+import InvitationPopup from '@/Components/InvitationPopup';
 import Modal from '@/Components/Modal';
 import NotificationBell from '@/Components/NotificationBell';
 import PrimaryButton from '@/Components/PrimaryButton';
@@ -59,6 +60,21 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
     const [isRematch, setIsRematch] = useState(false);
     const [rematchSourceId, setRematchSourceId] = useState(null);
+
+    const [latestInvitation, setLatestInvitation] = useState(null);
+    const [showInvitationPopup, setShowInvitationPopup] = useState(false);
+
+    // Auto-close the popup when the invitation it is showing has been accepted
+    // (i.e. the game is no longer in pendingGames).
+    useEffect(() => {
+        if (
+            showInvitationPopup &&
+            latestInvitation !== null &&
+            !pendingGames.some((g) => String(g.id) === String(latestInvitation.id))
+        ) {
+            setShowInvitationPopup(false);
+        }
+    }, [pendingGames, latestInvitation, showInvitationPopup]);
 
     const selectedGame = games.find((g) => String(g.id) === selectedGameId) ?? null;
 
@@ -257,14 +273,26 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
             const response = await axios.get('/api/v1/invitations');
             const freshPending = response.data?.data?.invitations ?? [];
 
-            startTransition(() => {
-                setPendingGames(freshPending);
-                setHasPending(freshPending.length > 0);
-            });
+            setPendingGames(freshPending);
+            setHasPending(freshPending.length > 0);
+
+            return freshPending;
         } catch {
             // Silent failure — existing list remains displayed.
         } finally {
             setIsFetchingInvitations(false);
+        }
+
+        return [];
+    };
+
+    const handleNewInvitation = async () => {
+        setHasPending(true);
+        const freshPending = await fetchPendingInvitations();
+
+        if (freshPending.length > 0) {
+            setLatestInvitation(freshPending[0]);
+            setShowInvitationPopup(true);
         }
     };
 
@@ -607,10 +635,13 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                                     userId={user?.id}
                                     hasPending={hasPending}
                                     pendingGames={pendingGames}
-                                    onNewInvitation={() => setHasPending(true)}
+                                    onNewInvitation={handleNewInvitation}
                                     onAcceptInvitation={handleAcceptInvite}
                                     acceptingGameIds={acceptingGameIds}
-                                    onOpen={fetchPendingInvitations}
+                                    onOpen={() => {
+                                        setShowInvitationPopup(false);
+                                        fetchPendingInvitations();
+                                    }}
                                     isLoadingGames={isFetchingInvitations}
                                 />
                             </div>
@@ -792,6 +823,14 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                     ) : null}
                 </div>
             </section>
+
+            <InvitationPopup
+                game={latestInvitation}
+                isVisible={showInvitationPopup}
+                isAccepting={latestInvitation !== null && acceptingGameIds.has(latestInvitation.id)}
+                onAccept={handleAcceptInvite}
+                onClose={() => setShowInvitationPopup(false)}
+            />
 
             <Modal maxWidth="lg" onClose={closeEditModal} show={isEditModalOpen}>
                 <form className="space-y-6 p-6" onSubmit={handleEditGame}>

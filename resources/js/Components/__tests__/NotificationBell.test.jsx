@@ -95,6 +95,30 @@ describe('NotificationBell', () => {
         expect(onNewInvitation).toHaveBeenCalledTimes(1);
     });
 
+    it('does not leave or rejoin the channel when only onNewInvitation reference changes', async () => {
+        const { triggerInvitation } = buildEchoMock();
+        const firstCallback = vi.fn();
+        const secondCallback = vi.fn();
+
+        const { rerender } = render(
+            <NotificationBell userId={1} hasPending={false} onNewInvitation={firstCallback} />,
+        );
+
+        // Re-render with a brand-new function reference — same userId.
+        rerender(<NotificationBell userId={1} hasPending={false} onNewInvitation={secondCallback} />);
+
+        // The channel must never have been torn down (leave not called mid-lifecycle).
+        expect(window.Echo.leave).not.toHaveBeenCalled();
+
+        // Triggering the event after the re-render must invoke the latest callback.
+        await act(async () => {
+            triggerInvitation();
+        });
+
+        expect(secondCallback).toHaveBeenCalledTimes(1);
+        expect(firstCallback).not.toHaveBeenCalled();
+    });
+
     it('does not subscribe when userId is not provided', () => {
         buildEchoMock();
         render(<NotificationBell userId={null} hasPending={false} onNewInvitation={vi.fn()} />);

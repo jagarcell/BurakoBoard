@@ -49,6 +49,28 @@ services:
             - sail
         depends_on:
             - redis
+    queue:
+        build:
+            context: './vendor/laravel/sail/runtimes/8.5'
+            dockerfile: Dockerfile
+            args:
+                WWWGROUP: '${WWWGROUP}'
+        image: 'sail-8.5/app'
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
+            XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
+            IGNITION_LOCAL_SITES_PATH: '${PWD}'
+        volumes:
+            - '.:/var/www/html'
+        command: php artisan queue:listen --timeout=0
+        restart: always
+        networks:
+            - sail
+        depends_on:
+            - mysql
+            - redis
     mysql:
         image: 'mysql:8.4'
         ports:

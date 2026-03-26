@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axios from 'axios';
 import { usePage } from '@inertiajs/react';
@@ -1919,6 +1919,104 @@ describe('GameCard', () => {
         await userEvent.click(screen.getByRole('button', { name: /start rematch/i }));
 
         expect(localStorage.getItem('burako_selected_game_id')).toBe('100');
+    });
+
+    // -------------------------------------------------------------------------
+    // Invitation popup — real-time arrival banner
+    // -------------------------------------------------------------------------
+
+    it('shows the invitation popup when a real-time invitation event arrives', async () => {
+        let capturedCallback = null;
+        const channelStub = {
+            listen: vi.fn((_event, cb) => { capturedCallback = cb; return channelStub; }),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn(() => channelStub),
+            leave: vi.fn(),
+        };
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        // fetchPendingInvitations called inside handleNewInvitation
+        axios.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+        await screen.findByRole('combobox');
+
+        // Fire the real-time event from Reverb
+        await act(async () => {
+            capturedCallback?.({ game_id: pendingGame.id });
+        });
+
+        await waitFor(() =>
+            expect(screen.getByRole('dialog', { name: 'New game invitation' })).toBeInTheDocument(),
+        );
+        expect(screen.getByText('Pending Game')).toBeInTheDocument();
+    });
+
+    it('closes the invitation popup when the × button is clicked', async () => {
+        let capturedCallback = null;
+        const channelStub = {
+            listen: vi.fn((_event, cb) => { capturedCallback = cb; return channelStub; }),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn(() => channelStub),
+            leave: vi.fn(),
+        };
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        axios.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+        await screen.findByRole('combobox');
+
+        await act(async () => { capturedCallback?.({ game_id: pendingGame.id }); });
+
+        await waitFor(() =>
+            expect(screen.getByRole('dialog', { name: 'New game invitation' })).toBeInTheDocument(),
+        );
+
+        await userEvent.click(screen.getByRole('button', { name: 'Close invitation popup' }));
+
+        await waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: 'New game invitation' })).not.toBeInTheDocument(),
+        );
+    });
+
+    it('auto-closes the invitation popup after the invitation is accepted', async () => {
+        let capturedCallback = null;
+        const channelStub = {
+            listen: vi.fn((_event, cb) => { capturedCallback = cb; return channelStub; }),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn(() => channelStub),
+            leave: vi.fn(),
+        };
+
+        const updatedGame = { ...pendingGame, user_role: 'viewer' };
+
+        axios.get.mockResolvedValueOnce({ data: { data: { games: gamesWithRoles } } });
+        axios.get.mockResolvedValueOnce({ data: { data: { invitations: [pendingGame] } } });
+        axios.put.mockResolvedValueOnce({ data: { data: { game: updatedGame } } });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+        await screen.findByRole('combobox');
+
+        await act(async () => { capturedCallback?.({ game_id: pendingGame.id }); });
+
+        await waitFor(() =>
+            expect(screen.getByRole('dialog', { name: 'New game invitation' })).toBeInTheDocument(),
+        );
+
+        await userEvent.click(
+            screen.getByRole('button', { name: `Accept invitation to ${pendingGame.name}` }),
+        );
+
+        await waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: 'New game invitation' })).not.toBeInTheDocument(),
+        );
     });
 
 });
