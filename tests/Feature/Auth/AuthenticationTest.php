@@ -6,6 +6,7 @@ use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -201,5 +202,33 @@ class AuthenticationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect('/dashboard?game=9999');
+    }
+
+    /**
+     * A failed login attempt emits a Log::warning with email, ip, and user_agent context.
+     *
+     * @return void Asserts that Log::warning('Failed login attempt') fires on bad credentials.
+     * Logic: fake the Log facade, post invalid credentials, and assert the warning channel
+     *   received exactly one message keyed 'Failed login attempt' with the expected context keys.
+     */
+    public function test_failed_login_attempt_logs_warning(): void
+    {
+        $spy = Log::spy();
+
+        $user = User::factory()->create();
+
+        $this->post('/login', [
+            'email'    => $user->email,
+            'password' => 'wrong-password',
+        ]);
+
+        $this->assertGuest();
+
+        $spy->shouldHaveReceived('warning')->withArgs(function (string $message, array $context) use ($user): bool {
+            return $message === 'Failed login attempt'
+                && $context['email'] == $user->email
+                && isset($context['ip'])
+                && isset($context['user_agent']);
+        });
     }
 }
