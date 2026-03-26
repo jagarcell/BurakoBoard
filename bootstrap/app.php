@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -47,7 +48,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->dontFlash(['password', 'password_confirmation', 'token', 'secret']);
 
         // Return a clean 404 JSON for API callers instead of Laravel's raw prose.
-        $exceptions->renderable(function (ModelNotFoundException $e, Request $request) {
+        // Note: Laravel's prepareException() converts ModelNotFoundException to
+        // NotFoundHttpException before renderables run, so we catch the latter.
+        $exceptions->renderable(function (NotFoundHttpException $e, Request $request) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'message' => 'The requested resource was not found.',
