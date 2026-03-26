@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\BurakoGameService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\InvalidStateException;
@@ -61,10 +62,20 @@ class GoogleAuthController extends Controller
     {
         try {
             $googleUser = Socialite::driver('google')->user();
-        } catch (InvalidStateException) {
+        } catch (InvalidStateException $e) {
+            Log::info('OAuth invalid state (user action)', [
+                'provider' => 'google',
+                'ip'       => request()->ip(),
+            ]);
             return redirect()->route('login')
                 ->with('error', 'The sign-in request was invalid or has expired. Please try again.');
-        } catch (\Exception) {
+        } catch (\Exception $e) {
+            Log::error('OAuth authentication failure', [
+                'provider'  => 'google',
+                'exception' => get_class($e),
+                'message'   => $e->getMessage(),
+                'ip'        => request()->ip(),
+            ]);
             return redirect()->route('login')
                 ->with('error', 'Sign-in with Google failed. Please try again.');
         }

@@ -6,7 +6,9 @@ use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Tests\TestCase;
 
 class GameInvitationStoreTest extends TestCase
@@ -264,5 +266,56 @@ class GameInvitationStoreTest extends TestCase
         $this->actingAs($creator)
             ->postJson('/api/v1/games/99999/invitations', ['user_ids' => [$invitee->id]])
             ->assertNotFound();
+    }
+
+    /**
+     * A mail transport failure logs a warning but the invitation pivot row is still stored.
+     *
+     * @param  void
+     * @return void Asserts that a TransportException during send is caught, logged as a warning,
+     *   and the overall endpoint still returns 201 with the invitation persisted.
+     * Logic: use Mail::shouldReceive to force a TransportExceptionInterface throw on send(),
+     *   fake the Log facade, POST the invitation, assert the pivot row exists and
+     *   Log::warning('Invitation email failed') was emitted with the correct game_id and recipient.
+     */
+    public function test_mail_transport_failure_logs_warning_but_invitation_is_still_stored(): void
+    {
+        $spy = Log::spy();
+
+        $creator = User::factory()->create();
+        $invitee = User::factory()->create(['email' => 'invitee@example.com']);
+        $game    = $this->createGame();
+        $this->attachUserToGame($game->id, $creator->id, 'creator');
+
+        // Build a concrete anonymous class that implements both interfaces required
+        // by Symfony's mailer so it passes the instanceof check inside the service.
+        $transportException = new class('SMTP connection refused') extends \RuntimeException
+            implements TransportExceptionInterface
+        {
+            public function getDebug(): string { return ''; }
+            public function appendDebug(string $debug): void {}
+        };
+
+        Mail::shouldReceive('to->send')->andThrow($transportException);
+
+        $response = $this->actingAs($creator)->postJson(
+            "/api/v1/games/{$game->id}/invitations",
+            ['user_ids' => [$invitee->id]],
+        );
+
+        $response->assertCreated()
+            ->assertJsonPath('data.invited_count', 1);
+
+        $this->assertDatabaseHas('game_user', [
+            'game_id' => $game->id,
+            'user_id' => $invitee->id,
+            'role'    => 'pending_invitee',
+        ]);
+
+        $spy->shouldHaveReceived('warning')->withArgs(function (string $message, array $context) use ($game, $invitee): bool {
+            return $message === 'Invitation email failed'
+                && ($context['game_id'] ?? null) === $game->id
+                && ($context['recipient'] ?? null) === $invitee->email;
+        });
     }
 }

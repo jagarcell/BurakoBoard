@@ -58,8 +58,6 @@ class StoreVoiceAliasRequest extends FormRequest
      */
     public function messages(): array
     {
-        return [
-            'alias.unique' => 'You already have an alias for that word.',
-        ];
+        return [];
     }
 }

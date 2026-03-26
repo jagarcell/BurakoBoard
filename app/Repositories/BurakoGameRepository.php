@@ -11,6 +11,7 @@ use App\Models\RoundScore;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -232,7 +233,7 @@ class BurakoGameRepository
             ->exists();
 
         if (! $inGame) {
-            abort(404);
+            throw new ModelNotFoundException("Team [{$teamId}] is not attached to Game [{$gameId}].");
         }
 
         return $team;

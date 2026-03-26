@@ -6,6 +6,7 @@ use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as SocialiteUser;
@@ -170,6 +171,33 @@ class AppleAuthTest extends TestCase
         );
     }
 
+    /**
+     * An InvalidStateException during Apple callback logs an info entry, not an error.
+     *
+     * @return void Asserts Log::info('OAuth invalid state (user action)') fires with provider and ip.
+     * Logic: fake the Log facade, simulate InvalidStateException from Socialite, and assert
+     *   the info channel received the expected message and context keys.
+     */
+    public function test_invalid_state_exception_logs_info(): void
+    {
+        $spy = Log::spy();
+
+        $driver = Mockery::mock('SocialiteProviders\Apple\Provider');
+        $driver->shouldReceive('user')->andThrow(new InvalidStateException());
+
+        Socialite::shouldReceive('driver')
+            ->with('apple')
+            ->andReturn($driver);
+
+        $this->post(route('auth.apple.callback'));
+
+        $spy->shouldHaveReceived('info')->withArgs(function (string $message, array $context): bool {
+            return $message === 'OAuth invalid state (user action)'
+                && ($context['provider'] ?? null) === 'apple'
+                && isset($context['ip']);
+        });
+    }
+
     // -------------------------------------------------------------------------
     // Callback — generic exception (network error, revoked credentials, etc.)
     // -------------------------------------------------------------------------
@@ -188,6 +216,34 @@ class AppleAuthTest extends TestCase
         $this->assertGuest();
         $response->assertRedirect(route('login'));
         $response->assertSessionHas('error', 'Sign-in with Apple failed. Please try again.');
+    }
+
+    /**
+     * A generic exception during Apple callback logs an error entry before redirecting.
+     *
+     * @return void Asserts Log::error('OAuth authentication failure') fires with provider, exception, and ip.
+     * Logic: fake the Log facade, throw a generic Exception from the Socialite driver, and assert
+     *   the error channel received the expected message with the correct context keys.
+     */
+    public function test_generic_exception_logs_error(): void
+    {
+        $spy = Log::spy();
+
+        $driver = Mockery::mock('SocialiteProviders\Apple\Provider');
+        $driver->shouldReceive('user')->andThrow(new \Exception('Apple credentials revoked'));
+
+        Socialite::shouldReceive('driver')
+            ->with('apple')
+            ->andReturn($driver);
+
+        $this->post(route('auth.apple.callback'));
+
+        $spy->shouldHaveReceived('error')->withArgs(function (string $message, array $context): bool {
+            return $message === 'OAuth authentication failure'
+                && ($context['provider'] ?? null) === 'apple'
+                && ($context['exception'] ?? null) === \Exception::class
+                && isset($context['ip']);
+        });
     }
 
     // -------------------------------------------------------------------------
