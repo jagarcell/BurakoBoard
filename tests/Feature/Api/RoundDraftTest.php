@@ -7,7 +7,8 @@ use App\Models\Game;
 use App\Models\RoundDraft;
 use App\Models\Team;
 use App\Models\User;
-use App\Repositories\BurakoGameRepository;
+use App\Repositories\GameRepository;
+use App\Repositories\TeamRepository;
 use App\Services\BurakoGameService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -17,7 +18,8 @@ class RoundDraftTest extends TestCase
 {
     use RefreshDatabase;
 
-    private BurakoGameRepository $repository;
+    private GameRepository $gameRepository;
+    private TeamRepository $teamRepository;
     private BurakoGameService $service;
     private Game $game;
     private Team $teamA;
@@ -34,13 +36,14 @@ class RoundDraftTest extends TestCase
     {
         parent::setUp();
 
-        $this->repository = $this->app->make(BurakoGameRepository::class);
+        $this->gameRepository = $this->app->make(GameRepository::class);
+        $this->teamRepository = $this->app->make(TeamRepository::class);
         $this->service = $this->app->make(BurakoGameService::class);
 
         $this->user = User::factory()->create();
         $this->actingAs($this->user);
 
-        $this->game = $this->repository->createGame([
+        $this->game = $this->gameRepository->createGame([
             'name' => 'Draft Test Game',
             'target_points' => 2000,
             'status' => 'in_progress',
@@ -48,10 +51,10 @@ class RoundDraftTest extends TestCase
             'current_round_number' => 0,
         ]);
 
-        $this->teamA = $this->repository->createTeam(['name' => 'Alpha']);
-        $this->repository->attachTeamToGame($this->game->id, $this->teamA->id);
-        $this->teamB = $this->repository->createTeam(['name' => 'Beta']);
-        $this->repository->attachTeamToGame($this->game->id, $this->teamB->id);
+        $this->teamA = $this->teamRepository->createTeam(['name' => 'Alpha']);
+        $this->teamRepository->attachTeamToGame($this->game->id, $this->teamA->id);
+        $this->teamB = $this->teamRepository->createTeam(['name' => 'Beta']);
+        $this->teamRepository->attachTeamToGame($this->game->id, $this->teamB->id);
     }
 
     /**

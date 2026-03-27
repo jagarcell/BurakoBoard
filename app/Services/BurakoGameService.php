@@ -12,7 +12,13 @@ use App\Models\Game;
 use App\Models\Player;
 use App\Models\RoundDraft;
 use App\Models\User;
-use App\Repositories\BurakoGameRepository;
+use App\Repositories\GameRepository;
+use App\Repositories\InvitationRepository;
+use App\Repositories\PlayerRepository;
+use App\Repositories\RoundDraftRepository;
+use App\Repositories\RoundRepository;
+use App\Repositories\SeatRepository;
+use App\Repositories\TeamRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Database\QueryException;
@@ -25,14 +31,28 @@ use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 class BurakoGameService
 {
     /**
-     * Construct the service with repository dependency.
+     * Construct the service with domain repository dependencies.
      *
-     * @param  \App\Repositories\BurakoGameRepository  $repository  Repository that handles all persistence operations.
-     * @return void Initializes the service dependency used by all orchestration methods.
-     * Logic: inject one repository so services stay free of inline queries and delegate persistence consistently.
+     * @param  \App\Repositories\GameRepository  $gameRepository  Handles game CRUD and game_user pivot.
+     * @param  \App\Repositories\TeamRepository  $teamRepository  Handles team CRUD and game_team pivot.
+     * @param  \App\Repositories\PlayerRepository  $playerRepository  Handles player CRUD and team_player pivot.
+     * @param  \App\Repositories\SeatRepository  $seatRepository  Handles game_player_seat read/write.
+     * @param  \App\Repositories\RoundRepository  $roundRepository  Handles Round and RoundScore creation.
+     * @param  \App\Repositories\RoundDraftRepository  $roundDraftRepository  Handles draft upsert, archive, delete.
+     * @param  \App\Repositories\InvitationRepository  $invitationRepository  Handles pending-invitee queries and lifecycle.
+     * @return void
+     * Logic: inject each domain repository so that constructor arguments are explicit and each
+     * repository can be mocked independently in tests without accounting for unrelated methods.
      */
-    public function __construct(private readonly BurakoGameRepository $repository)
-    {
+    public function __construct(
+        private readonly GameRepository $gameRepository,
+        private readonly TeamRepository $teamRepository,
+        private readonly PlayerRepository $playerRepository,
+        private readonly SeatRepository $seatRepository,
+        private readonly RoundRepository $roundRepository,
+        private readonly RoundDraftRepository $roundDraftRepository,
+        private readonly InvitationRepository $invitationRepository,
+    ) {
     }
 
     /**
@@ -45,7 +65,7 @@ class BurakoGameService
      */
     public function listGames(int $userId): Collection
     {
-        return $this->repository->getGameList($userId);
+        return $this->gameRepository->getGameList($userId);
     }
 
     /**
@@ -59,7 +79,20 @@ class BurakoGameService
      */
     public function listPendingInvitations(int $userId): Collection
     {
-        return $this->repository->getPendingInvitations($userId);
+        return $this->invitationRepository->getPendingInvitations($userId);
+    }
+
+    /**
+     * Determine whether a user has at least one pending game invitation.
+     *
+     * @param  int  $userId  Identifier of the authenticated user.
+     * @return bool True when the user has one or more pending_invitee rows in game_user.
+     * Logic: delegate the existence check to the invitation repository so callers such as
+     *   middleware can query this without bypassing the service layer.
+     */
+    public function userHasPendingInvitations(int $userId): bool
+    {
+        return $this->invitationRepository->hasPendingInvitations($userId);
     }
 
     /**
@@ -73,7 +106,7 @@ class BurakoGameService
      */
     public function createGame(array $payload, int $userId): array
     {
-        $game = $this->repository->createGame([
+        $game = $this->gameRepository->createGame([
             'name' => $payload['name'],
             'target_points' => (int) $payload['target_points'],
             'status' => GameStatus::InProgress,
@@ -82,11 +115,11 @@ class BurakoGameService
             'initial_shuffler_seat_number' => null,
         ]);
 
-        $this->repository->attachUserToGame($game->id, $userId, GameUserRole::Creator->value);
+        $this->gameRepository->attachUserToGame($game->id, $userId, GameUserRole::Creator->value);
 
         Log::info('Game created', ['game_id' => $game->id, 'creator_id' => $userId]);
 
-        return $this->repository->getGameSummary($game->id);
+        return $this->gameRepository->getGameSummary($game->id);
     }
 
     /**
@@ -99,7 +132,7 @@ class BurakoGameService
      */
     public function updateGame(int $gameId, array $payload): Game
     {
-        return $this->repository->updateGame($gameId, [
+        return $this->gameRepository->updateGame($gameId, [
             'name' => $payload['name'],
             'target_points' => (int) $payload['target_points'],
         ]);
@@ -113,7 +146,7 @@ class BurakoGameService
      */
     public function listUsers(): Collection
     {
-        return $this->repository->getUserList();
+        return $this->playerRepository->getUserList();
     }
 
     /**
@@ -129,7 +162,7 @@ class BurakoGameService
      */
     public function listInvitableUsers(int $gameId, int $excludeUserId, int $page, int $perPage = 10): LengthAwarePaginator
     {
-        return $this->repository->getInvitableUsersForGame($gameId, $excludeUserId, $page, $perPage);
+        return $this->invitationRepository->getInvitableUsersForGame($gameId, $excludeUserId, $page, $perPage);
     }
 
     /**
@@ -141,7 +174,7 @@ class BurakoGameService
      */
     public function listBaseElements(): Collection
     {
-        return $this->repository->getBaseElements();
+        return $this->gameRepository->getBaseElements();
     }
 
     /**
@@ -152,7 +185,7 @@ class BurakoGameService
      */
     public function listTeams(): Collection
     {
-        return $this->repository->getAllTeams();
+        return $this->teamRepository->getAllTeams();
     }
 
     /**
@@ -166,7 +199,7 @@ class BurakoGameService
      */
     public function addTeam(int $gameId, array $payload): array
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -174,11 +207,11 @@ class BurakoGameService
             ]);
         }
 
-        $team = $this->repository->createTeam([
+        $team = $this->teamRepository->createTeam([
             'name' => $payload['name'],
         ]);
 
-        $this->repository->attachTeamToGame($gameId, $team->id);
+        $this->teamRepository->attachTeamToGame($gameId, $team->id);
 
         return $this->broadcastAndReturn($gameId);
     }
@@ -195,7 +228,7 @@ class BurakoGameService
      */
     public function attachExistingTeam(int $gameId, int $teamId): array
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -203,9 +236,9 @@ class BurakoGameService
             ]);
         }
 
-        $team = $this->repository->findTeamOrFail($teamId);
+        $team = $this->teamRepository->findTeamOrFail($teamId);
 
-        $alreadyAttached = $this->repository->isTeamAttachedToGame($gameId, $team->id);
+        $alreadyAttached = $this->teamRepository->isTeamAttachedToGame($gameId, $team->id);
 
         if ($alreadyAttached) {
             throw ValidationException::withMessages([
@@ -213,12 +246,12 @@ class BurakoGameService
             ]);
         }
 
-        $this->repository->attachTeamToGame($gameId, $team->id);
+        $this->teamRepository->attachTeamToGame($gameId, $team->id);
 
         // Reassign all seats from scratch so that a team with a lower id added after
         // a team with a higher id gets the correct odd-slot seats, and the existing
         // team's players are moved to the even slot where required.
-        $this->repository->reassignAllSeatsForGame($gameId);
+        $this->seatRepository->reassignAllSeatsForGame($gameId);
 
         return $this->broadcastAndReturn($gameId);
     }
@@ -234,7 +267,7 @@ class BurakoGameService
      */
     public function updateTeam(int $gameId, int $teamId, array $payload): array
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -242,8 +275,8 @@ class BurakoGameService
             ]);
         }
 
-        $team = $this->repository->findTeamInGameOrFail($gameId, $teamId);
-        $this->repository->updateTeam($team, $payload);
+        $team = $this->teamRepository->findTeamInGameOrFail($gameId, $teamId);
+        $this->teamRepository->updateTeam($team, $payload);
 
         return $this->broadcastAndReturn($gameId);
     }
@@ -260,7 +293,7 @@ class BurakoGameService
      */
     public function addPlayerToTeam(int $gameId, int $teamId, array $payload): array
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -268,11 +301,11 @@ class BurakoGameService
             ]);
         }
 
-        $team = $this->repository->findTeamInGameOrFail($gameId, $teamId);
+        $team = $this->teamRepository->findTeamInGameOrFail($gameId, $teamId);
 
         $incomingName = $payload['name'] ?? null;
 
-        if ($incomingName !== null && $this->repository->teamHasPlayerWithName($team->id, $incomingName)) {
+        if ($incomingName !== null && $this->playerRepository->teamHasPlayerWithName($team->id, $incomingName)) {
             throw ValidationException::withMessages([
                 'name' => 'A player with this name already exists in this team.',
             ]);
@@ -280,8 +313,8 @@ class BurakoGameService
 
         $player = $this->resolvePlayerForPayload($payload);
 
-        $this->repository->attachPlayerToTeam($team->id, $player->id);
-        $this->repository->assignPlayerSeat($gameId, $team->id, $player->id);
+        $this->playerRepository->attachPlayerToTeam($team->id, $player->id);
+        $this->seatRepository->assignPlayerSeat($gameId, $team->id, $player->id);
 
         return $this->broadcastAndReturn($gameId);
     }
@@ -298,7 +331,7 @@ class BurakoGameService
      */
     public function removePlayerFromTeam(int $gameId, int $teamId, int $playerId): array
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -306,10 +339,10 @@ class BurakoGameService
             ]);
         }
 
-        $this->repository->findTeamInGameOrFail($gameId, $teamId);
+        $this->teamRepository->findTeamInGameOrFail($gameId, $teamId);
 
-        $this->repository->removePlayerSeatForTeam($teamId, $playerId);
-        $this->repository->detachPlayerFromTeam($teamId, $playerId);
+        $this->seatRepository->removePlayerSeatForTeam($teamId, $playerId);
+        $this->playerRepository->detachPlayerFromTeam($teamId, $playerId);
 
         return $this->broadcastAndReturn($gameId);
     }
@@ -326,7 +359,7 @@ class BurakoGameService
      */
     public function swapPlayerSeats(int $gameId, int $playerIdA, int $playerIdB): array
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -334,7 +367,7 @@ class BurakoGameService
             ]);
         }
 
-        $this->repository->swapPlayerSeats($gameId, $playerIdA, $playerIdB);
+        $this->seatRepository->swapPlayerSeats($gameId, $playerIdA, $playerIdB);
 
         return $this->broadcastAndReturn($gameId);
     }
@@ -350,7 +383,7 @@ class BurakoGameService
      */
     public function setInitialShuffler(int $gameId, int $playerId): array
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -364,7 +397,7 @@ class BurakoGameService
             ]);
         }
 
-        $seatedPlayer = $this->repository->findSeatedPlayerInGame($gameId, $playerId);
+        $seatedPlayer = $this->seatRepository->findSeatedPlayerInGame($gameId, $playerId);
 
         if ($seatedPlayer === null) {
             throw ValidationException::withMessages([
@@ -372,7 +405,7 @@ class BurakoGameService
             ]);
         }
 
-        $this->repository->updateGameInitialShufflerSeat($game, (int) $seatedPlayer->seat_number);
+        $this->gameRepository->updateGameInitialShufflerSeat($game, (int) $seatedPlayer->seat_number);
 
         return $this->broadcastAndReturn($gameId);
     }
@@ -389,7 +422,7 @@ class BurakoGameService
      */
     public function recordRound(int $gameId, array $payload): array
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -398,7 +431,7 @@ class BurakoGameService
         }
 
         $scores = collect($payload['scores']);
-        $teams = $this->repository->getTeamsForGame($gameId);
+        $teams = $this->teamRepository->getTeamsForGame($gameId);
         $teamIds = $teams->pluck('id');
         $inputTeamIds = $scores->pluck('team_id');
 
@@ -418,30 +451,30 @@ class BurakoGameService
 
         try {
             DB::transaction(function () use ($game, $gameId, $scores, &$committedRoundNumber): void {
-                $roundNumber = $this->repository->getNextRoundNumber($gameId);
-                $round = $this->repository->createRound($gameId, $roundNumber);
+                $roundNumber = $this->roundRepository->getNextRoundNumber($gameId);
+                $round = $this->roundRepository->createRound($gameId, $roundNumber);
                 $committedRoundNumber = $roundNumber;
 
                 $updatedTeams = collect();
 
                 foreach ($scores as $score) {
-                    $team = $this->repository->findTeamInGameOrFail($gameId, (int) $score['team_id']);
+                    $team = $this->teamRepository->findTeamInGameOrFail($gameId, (int) $score['team_id']);
                     $points = (int) $score['points'];
 
-                    $this->repository->createRoundScore($round->id, $team->id, $points);
-                    $updatedTeam = $this->repository->incrementTeamScore($gameId, $team->id, $points);
+                    $this->roundRepository->createRoundScore($round->id, $team->id, $points);
+                    $updatedTeam = $this->teamRepository->incrementTeamScore($gameId, $team->id, $points);
                     $updatedTeams->push($updatedTeam);
                 }
 
                 $winner = $this->resolveWinner($updatedTeams, (int) $game->target_points);
 
                 if ($winner !== null) {
-                    $this->repository->finishGameWithWinner($game, $winner->id, $round->round_number);
+                    $this->gameRepository->finishGameWithWinner($game, $winner->id, $round->round_number);
 
                     return;
                 }
 
-                $this->repository->updateGameRoundCounter($game, $round->round_number);
+                $this->gameRepository->updateGameRoundCounter($game, $round->round_number);
             });
         } catch (QueryException $e) {
             Log::error('DB transaction failed in recordRound', [
@@ -463,7 +496,7 @@ class BurakoGameService
 
         // Archive the active draft under the committed round number so it can be
         // retrieved later as a read-only scoring breakdown for that round.
-        $this->repository->archiveRoundDraft($gameId, $committedRoundNumber);
+        $this->roundDraftRepository->archiveRoundDraft($gameId, $committedRoundNumber);
 
         return $this->broadcastAndReturn($gameId);
     }
@@ -477,7 +510,7 @@ class BurakoGameService
      */
     public function getGameSummary(int $gameId): array
     {
-        return $this->repository->getGameSummary($gameId);
+        return $this->gameRepository->getGameSummary($gameId);
     }
 
     /**
@@ -489,9 +522,9 @@ class BurakoGameService
      */
     public function gameHasTwoTeams(int $gameId): bool
     {
-        $this->repository->findGameOrFail($gameId);
+        $this->gameRepository->findGameOrFail($gameId);
 
-        return $this->repository->gameHasTwoTeams($gameId);
+        return $this->teamRepository->gameHasTwoTeams($gameId);
     }
 
     /**
@@ -503,16 +536,9 @@ class BurakoGameService
      */
     public function syncGameScores(int $gameId): void
     {
-        $this->repository->syncTeamScoresForGame($gameId);
+        $this->teamRepository->syncTeamScoresForGame($gameId);
     }
 
-    /**
-     * Build a player model from payload rules.
-     *
-     * @param  array<string, mixed>  $payload  Validated player payload containing either user_id or name.
-     * @return \App\Models\Player The resolved player model.
-     * Logic: reuse existing player record for registered users, otherwise create an ad-hoc named player entry.
-     */
     /**
      * Return the current round draft for a game, or null if none exists.
      *
@@ -523,9 +549,9 @@ class BurakoGameService
      */
     public function getRoundDraft(int $gameId): ?RoundDraft
     {
-        $this->repository->findGameOrFail($gameId);
+        $this->gameRepository->findGameOrFail($gameId);
 
-        return $this->repository->getRoundDraft($gameId);
+        return $this->roundDraftRepository->getRoundDraft($gameId);
     }
 
     /**
@@ -539,9 +565,9 @@ class BurakoGameService
      */
     public function getRoundDraftForRound(int $gameId, int $roundNumber): ?RoundDraft
     {
-        $this->repository->findGameOrFail($gameId);
+        $this->gameRepository->findGameOrFail($gameId);
 
-        return $this->repository->getRoundDraftForRound($gameId, $roundNumber);
+        return $this->roundDraftRepository->getRoundDraftForRound($gameId, $roundNumber);
     }
 
     /**
@@ -555,7 +581,7 @@ class BurakoGameService
      */
     public function saveRoundDraft(int $gameId, array $payload): RoundDraft
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
         if ($game->status !== GameStatus::InProgress) {
             throw ValidationException::withMessages([
@@ -563,7 +589,7 @@ class BurakoGameService
             ]);
         }
 
-        $draft = $this->repository->upsertRoundDraft(
+        $draft = $this->roundDraftRepository->upsertRoundDraft(
             $gameId,
             $payload['base_inputs'] ?? [],
             $payload['card_inputs'] ?? [],
@@ -589,7 +615,7 @@ class BurakoGameService
      */
     private function broadcastAndReturn(int $gameId): array
     {
-        $summary = $this->repository->getGameSummary($gameId);
+        $summary = $this->gameRepository->getGameSummary($gameId);
 
         broadcast(new GameUpdated($gameId, $summary))->toOthers();
 
@@ -608,13 +634,13 @@ class BurakoGameService
         $userId = $payload['user_id'] ?? null;
 
         if ($userId !== null) {
-            return $this->repository->findOrCreatePlayerFromUser(
+            return $this->playerRepository->findOrCreatePlayerFromUser(
                 (int) $userId,
                 (string) ($payload['name'] ?? 'Registered Player')
             );
         }
 
-        return $this->repository->createNamedPlayer((string) $payload['name']);
+        return $this->playerRepository->createNamedPlayer((string) $payload['name']);
     }
 
     /**
@@ -632,19 +658,19 @@ class BurakoGameService
      */
     public function deleteGame(int $gameId, int $userId): void
     {
-        $this->repository->findGameOrFail($gameId);
+        $this->gameRepository->findGameOrFail($gameId);
 
-        if (! $this->repository->isGameCreator($gameId, $userId)) {
+        if (! $this->gameRepository->isGameCreator($gameId, $userId)) {
             abort(403, 'Only the game creator can delete this game.');
         }
 
-        if ($this->repository->gameHasRounds($gameId)) {
+        if ($this->gameRepository->gameHasRounds($gameId)) {
             throw ValidationException::withMessages([
                 'game' => ['This game cannot be deleted because it already has recorded rounds.'],
             ]);
         }
 
-        $this->repository->deleteGame($gameId);
+        $this->gameRepository->deleteGame($gameId);
 
         Log::info('Game deleted', ['game_id' => $gameId, 'deleted_by' => $userId]);
     }
@@ -689,18 +715,18 @@ class BurakoGameService
      */
     public function sendInvitations(int $gameId, array $userIds, User $inviter): int
     {
-        $game = $this->repository->findGameOrFail($gameId);
+        $game = $this->gameRepository->findGameOrFail($gameId);
 
-        $existingIds = $this->repository->getExistingGameUserIds($gameId, $userIds);
+        $existingIds = $this->invitationRepository->getExistingGameUserIds($gameId, $userIds);
         $newUserIds  = array_values(array_diff($userIds, $existingIds));
 
         if (empty($newUserIds)) {
             return 0;
         }
 
-        $this->repository->bulkAttachPendingInviteesToGame($gameId, $newUserIds);
+        $this->invitationRepository->bulkAttachPendingInviteesToGame($gameId, $newUserIds);
 
-        $invitees = $this->repository->getUsersByIds($newUserIds);
+        $invitees = $this->invitationRepository->getUsersByIds($newUserIds);
 
         foreach ($invitees as $invitee) {
             try {
@@ -743,9 +769,9 @@ class BurakoGameService
      */
     public function acceptInvitation(int $gameId, int $userId): Game
     {
-        $this->repository->findGameOrFail($gameId);
+        $this->gameRepository->findGameOrFail($gameId);
 
-        $upgraded = $this->repository->upgradeInvitationToViewer($gameId, $userId);
+        $upgraded = $this->invitationRepository->upgradeInvitationToViewer($gameId, $userId);
 
         if (! $upgraded) {
             throw ValidationException::withMessages([
@@ -753,7 +779,7 @@ class BurakoGameService
             ]);
         }
 
-        return $this->repository->getGameWithUserRole($gameId, $userId);
+        return $this->gameRepository->getGameWithUserRole($gameId, $userId);
     }
 
     /**
@@ -774,7 +800,7 @@ class BurakoGameService
      */
     public function createRematch(int $sourceGameId, array $payload, int $userId): array
     {
-        $sourceGame = $this->repository->findGameOrFail($sourceGameId);
+        $sourceGame = $this->gameRepository->findGameOrFail($sourceGameId);
 
         if ($sourceGame->status !== GameStatus::Finished) {
             throw ValidationException::withMessages([
@@ -782,24 +808,53 @@ class BurakoGameService
             ]);
         }
 
-        if (! $this->repository->isGameCreator($sourceGameId, $userId)) {
+        if (! $this->gameRepository->isGameCreator($sourceGameId, $userId)) {
             abort(403, 'Only the game creator can start a rematch.');
         }
 
-        $newGameId = $this->repository->createRematchGame(
-            $sourceGameId,
-            [
-                'name'                         => $payload['name'],
-                'target_points'                => (int) $payload['target_points'],
-                'status'                       => GameStatus::InProgress,
-                'winning_team_id'              => null,
-                'current_round_number'         => 0,
-                'initial_shuffler_seat_number' => null,
-            ],
-            $userId,
-        );
+        try {
+            $newGameId = DB::transaction(function () use ($sourceGameId, $sourceGame, $payload, $userId): int {
+                $newGame = $this->gameRepository->createGame([
+                    'name'                         => $payload['name'],
+                    'target_points'                => (int) $payload['target_points'],
+                    'status'                       => GameStatus::InProgress,
+                    'winning_team_id'              => null,
+                    'current_round_number'         => 0,
+                    'initial_shuffler_seat_number' => null,
+                ]);
 
-        return $this->repository->getGameSummary($newGameId);
+                $this->gameRepository->attachUserToGame($newGame->id, $userId, GameUserRole::Creator->value);
+
+                $teamIds = $this->teamRepository->getOrderedTeamIdsForGame($sourceGameId);
+
+                foreach ($teamIds as $teamId) {
+                    $this->teamRepository->attachTeamToGame($newGame->id, (int) $teamId);
+                }
+
+                $this->seatRepository->copySeatsFromGame($sourceGameId, $newGame->id);
+
+                $nextCutterSeat = $this->seatRepository->computeNextCutterSeatNumber($sourceGame);
+
+                if ($nextCutterSeat !== null) {
+                    $this->gameRepository->updateGameInitialShufflerSeat($newGame, $nextCutterSeat);
+                }
+
+                return $newGame->id;
+            });
+        } catch (QueryException $e) {
+            Log::error('DB transaction failed in createRematch', [
+                'source_game_id' => $sourceGameId,
+                'sql'            => $e->getSql(),
+                'bindings'       => $e->getBindings(),
+                'message'        => $e->getMessage(),
+                'user_id'        => $userId,
+            ]);
+            throw ValidationException::withMessages([
+                'game' => ['The rematch could not be created due to a database error. Please try again.'],
+            ]);
+        }
+
+        return $this->gameRepository->getGameSummary($newGameId);
     }
 
     /**
@@ -815,6 +870,6 @@ class BurakoGameService
      */
     public function acceptInvitationIfPending(int $gameId, int $userId): bool
     {
-        return $this->repository->upgradeInvitationToViewer($gameId, $userId);
+        return $this->invitationRepository->upgradeInvitationToViewer($gameId, $userId);
     }
 }

@@ -2,7 +2,7 @@
 
 namespace App\Http\Middleware;
 
-use App\Repositories\BurakoGameRepository;
+use App\Services\BurakoGameService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -16,13 +16,13 @@ class HandleInertiaRequests extends Middleware
     protected $rootView = 'app';
 
     /**
-     * Initialise the middleware with the game repository.
+     * Initialise the middleware with the game service.
      *
-     * @param  \App\Repositories\BurakoGameRepository  $gameRepository  Repository for game-related queries.
-     * Logic: injects the repository so share() can query pending invitations without coupling the
-     *   middleware to a global facade or inline query.
+     * @param  \App\Services\BurakoGameService  $gameService  Service for game-related operations.
+     * Logic: injects the service so share() can query pending invitations without coupling the
+     *   middleware to a repository directly, preserving the service-layer boundary.
      */
-    public function __construct(private BurakoGameRepository $gameRepository)
+    public function __construct(private BurakoGameService $gameService)
     {
     }
 
@@ -53,7 +53,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
             ],
             'hasPendingInvitations' => $user
-                ? $this->gameRepository->hasPendingInvitations($user->id)
+                ? $this->gameService->userHasPendingInvitations($user->id)
                 : false,
         ];
     }
