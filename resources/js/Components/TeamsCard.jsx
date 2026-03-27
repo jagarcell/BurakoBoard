@@ -43,7 +43,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
 
     // Sync teams whenever the parent's initialTeams reference changes (data loaded or game changed)
     useEffect(() => {
-        startTransition(() => setTeams(initialTeams));
+        setTeams(initialTeams);
     }, [initialTeams]);
 
     const fetchAllTeams = useCallback(() => {
@@ -87,14 +87,12 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
     useEffect(() => {
         if (! scoreUpdate?.length) return;
 
-        startTransition(() =>
-            setTeams((prev) =>
-                prev.map((t) => {
-                    const updated = scoreUpdate.find((u) => u.id === t.id);
+        setTeams((prev) =>
+            prev.map((t) => {
+                const updated = scoreUpdate.find((u) => u.id === t.id);
 
-                    return updated ? { ...t, current_score: updated.current_score } : t;
-                }),
-            ),
+                return updated ? { ...t, current_score: updated.current_score } : t;
+            }),
         );
     }, [scoreUpdate]);
 
