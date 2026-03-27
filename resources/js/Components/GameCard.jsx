@@ -98,30 +98,28 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                     return;
                 }
 
-                startTransition(() => {
-                    setGames(availableGames);
-                    setSelectedGameId((currentGameId) => {
-                        // URL-specified preselect takes priority over localStorage.
-                        if (
-                            preselectedGameId !== null &&
-                            availableGames.some(
-                                (game) => String(game.id) === String(preselectedGameId),
-                            )
-                        ) {
-                            return String(preselectedGameId);
-                        }
+                setGames(availableGames);
+                setSelectedGameId((currentGameId) => {
+                    // URL-specified preselect takes priority over localStorage.
+                    if (
+                        preselectedGameId !== null &&
+                        availableGames.some(
+                            (game) => String(game.id) === String(preselectedGameId),
+                        )
+                    ) {
+                        return String(preselectedGameId);
+                    }
 
-                        if (
-                            currentGameId !== '' &&
-                            availableGames.some(
-                                (game) => String(game.id) === currentGameId,
-                            )
-                        ) {
-                            return currentGameId;
-                        }
+                    if (
+                        currentGameId !== '' &&
+                        availableGames.some(
+                            (game) => String(game.id) === currentGameId,
+                        )
+                    ) {
+                        return currentGameId;
+                    }
 
-                        return '';
-                    });
+                    return '';
                 });
             } catch (error) {
                 if (! isActive) {

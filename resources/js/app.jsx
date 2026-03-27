@@ -5,13 +5,21 @@ import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 
-// When the session has expired and the CSRF token is stale the server returns
-// 419. Cancel the default error modal and reload the page so the user gets a
-// fresh session and is redirected to login instead of seeing a raw error.
+// When the session expires or the CSRF token goes stale the server returns 401
+// or 419 for an Inertia navigation request. Cancel the default error modal and
+// navigate to /login via Inertia's router.
+//
+// router.visit() rather than window.location.* is intentional: a raw location
+// change lets React's MessageChannel scheduler fire deferred startTransition
+// work against the partially-torn-down fiber tree, corrupting the update queue.
+// router.visit() calls ReactDOM.flushSync() when swapping the component tree,
+// which drains all pending React work synchronously before replacing the tree.
+// replace: true avoids leaving a back-navigation entry to the expired state.
 document.addEventListener('inertia:invalid', (e) => {
-    if (e.detail.response.status === 419) {
+    const status = e.detail.response.status;
+    if (status === 401 || status === 419) {
         e.preventDefault();
-        router.reload();
+        router.visit('/login', { replace: true });
     }
 });
 
