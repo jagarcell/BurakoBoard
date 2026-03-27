@@ -7,7 +7,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Repositories\RoundRepository;
 use App\Repositories\TeamRepository;
-use App\Services\BurakoGameService;
+use App\Services\RoundService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +19,7 @@ class ScorePersistenceTest extends TestCase
     use RefreshDatabase;
 
     private TeamRepository $teamRepository;
-    private BurakoGameService $service;
+    private RoundService $service;
     private User $user;
 
     /**
@@ -34,7 +34,7 @@ class ScorePersistenceTest extends TestCase
         parent::setUp();
 
         $this->teamRepository = $this->app->make(TeamRepository::class);
-        $this->service    = $this->app->make(BurakoGameService::class);
+        $this->service    = $this->app->make(RoundService::class);
         $this->user       = User::factory()->create();
         $this->actingAs($this->user);
     }
