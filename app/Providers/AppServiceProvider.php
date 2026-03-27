@@ -2,6 +2,13 @@
 
 namespace App\Providers;
 
+use App\Repositories\GameRepository;
+use App\Repositories\InvitationRepository;
+use App\Repositories\PlayerRepository;
+use App\Repositories\RoundDraftRepository;
+use App\Repositories\RoundRepository;
+use App\Repositories\SeatRepository;
+use App\Repositories\TeamRepository;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -15,10 +22,20 @@ class AppServiceProvider extends ServiceProvider
 {
     /**
      * Register any application services.
+     *
+     * @return void
+     * Logic: bind each domain repository to its concrete class so the Laravel container
+     * can inject them by type-hint into services and controllers without extra configuration.
      */
     public function register(): void
     {
-        //
+        $this->app->bind(GameRepository::class, GameRepository::class);
+        $this->app->bind(TeamRepository::class, TeamRepository::class);
+        $this->app->bind(PlayerRepository::class, PlayerRepository::class);
+        $this->app->bind(SeatRepository::class, SeatRepository::class);
+        $this->app->bind(RoundRepository::class, RoundRepository::class);
+        $this->app->bind(RoundDraftRepository::class, RoundDraftRepository::class);
+        $this->app->bind(InvitationRepository::class, InvitationRepository::class);
     }
 
     /**
