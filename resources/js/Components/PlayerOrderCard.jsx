@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from '@/api/client';
 import { useState } from 'react';
 
 /**
@@ -107,7 +107,7 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
      */
     const handleSetInitialCutter = async (playerId) => {
         try {
-            const response = await axios.put(`/api/v1/games/${selectedGame.id}/shuffler`, {
+            const response = await api.put(`/games/${selectedGame.id}/shuffler`, {
                 player_id: playerId,
             });
 
