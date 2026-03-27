@@ -10,20 +10,28 @@ use App\Http\Requests\Api\V1\StoreGameRequest;
 use App\Http\Requests\Api\V1\UpdateGameRequest;
 use App\Http\Resources\Api\V1\GameListItemResource;
 use App\Http\Resources\Api\V1\GameSummaryResource;
-use App\Services\BurakoGameService;
+use App\Services\GameService;
+use App\Services\InvitationService;
+use App\Services\RoundService;
 use Illuminate\Http\JsonResponse;
 
 class GameController extends Controller
 {
     /**
-     * Construct the controller with its domain service.
+     * Construct the controller with focused domain service dependencies.
      *
-     * @param  \App\Services\BurakoGameService  $service  Service that orchestrates game operations.
-     * @return void Stores the service dependency used by HTTP action methods.
-     * Logic: keep controller thin by delegating all business logic to the Burako service layer.
+     * @param  \App\Services\GameService        $gameService        Service that orchestrates game lifecycle operations.
+     * @param  \App\Services\RoundService       $roundService       Service that orchestrates round-related operations.
+     * @param  \App\Services\InvitationService  $invitationService  Service that orchestrates invitation operations.
+     * @return void
+     * Logic: inject focused services so each controller action delegates to the service that owns
+     *   the corresponding domain concern, keeping the controller thin.
      */
-    public function __construct(private readonly BurakoGameService $service)
-    {
+    public function __construct(
+        private readonly GameService $gameService,
+        private readonly RoundService $roundService,
+        private readonly InvitationService $invitationService,
+    ) {
     }
 
     /**
@@ -35,7 +43,7 @@ class GameController extends Controller
      */
     public function index(): JsonResponse
     {
-        $games = $this->service->listGames((int) auth()->id());
+        $games = $this->gameService->listGames((int) auth()->id());
 
         return response()->json([
             'games' => GameListItemResource::collection($games),
@@ -52,7 +60,7 @@ class GameController extends Controller
      */
     public function store(StoreGameRequest $request): JsonResponse
     {
-        $summary = $this->service->createGame($request->validated(), (int) auth()->id());
+        $summary = $this->gameService->createGame($request->validated(), (int) auth()->id());
 
         return response()->json([
             'game' => new GameSummaryResource($summary),
@@ -68,7 +76,7 @@ class GameController extends Controller
      */
     public function show(int $gameId): JsonResponse
     {
-        $summary = $this->service->getGameSummary($gameId);
+        $summary = $this->gameService->getGameSummary($gameId);
 
         return response()->json([
             'game' => new GameSummaryResource($summary),
@@ -85,7 +93,7 @@ class GameController extends Controller
      */
     public function update(UpdateGameRequest $request, int $gameId): JsonResponse
     {
-        $game = $this->service->updateGame($gameId, $request->validated());
+        $game = $this->gameService->updateGame($gameId, $request->validated());
 
         return response()->json([
             'game' => new GameListItemResource($game),
@@ -97,11 +105,12 @@ class GameController extends Controller
      *
      * @param  int  $gameId  Identifier of the game.
      * @return \Illuminate\Http\JsonResponse Response containing a boolean has_two_teams flag.
-     * Logic: delegate the team count check to the service and return a lightweight flag the frontend uses to determine when the round scoring inputs should become visible.
+     * Logic: delegate the team count check to the service and return a lightweight flag the
+     *   frontend uses to determine when the round scoring inputs should become visible.
      */
     public function hasTwoTeams(int $gameId): JsonResponse
     {
-        $hasTwoTeams = $this->service->gameHasTwoTeams($gameId);
+        $hasTwoTeams = $this->gameService->gameHasTwoTeams($gameId);
 
         return response()->json([
             'has_two_teams' => $hasTwoTeams,
@@ -114,11 +123,11 @@ class GameController extends Controller
      * @param  \App\Http\Requests\Api\V1\SetInitialShufflerRequest  $request  Validated request with selected player id.
      * @param  int  $gameId  Identifier of the game.
      * @return \Illuminate\Http\JsonResponse Updated game summary response.
-     * Logic: delegate cutter selection rules to the service and return the refreshed summary payload.
+     * Logic: delegate cutter selection rules to the round service and return the refreshed summary payload.
      */
     public function setInitialShuffler(SetInitialShufflerRequest $request, int $gameId): JsonResponse
     {
-        $summary = $this->service->setInitialShuffler($gameId, (int) $request->validated('player_id'));
+        $summary = $this->roundService->setInitialShuffler($gameId, (int) $request->validated('player_id'));
 
         return response()->json([
             'game' => new GameSummaryResource($summary),
@@ -136,7 +145,7 @@ class GameController extends Controller
      */
     public function destroy(int $gameId): JsonResponse
     {
-        $this->service->deleteGame($gameId, (int) auth()->id());
+        $this->gameService->deleteGame($gameId, (int) auth()->id());
 
         return response()->json([
             'message' => 'Game deleted successfully.',
@@ -151,12 +160,12 @@ class GameController extends Controller
      * @param  int  $gameId  Identifier of the game for which invitations are being sent.
      * @return \Illuminate\Http\JsonResponse 201 response with the count of new invitations created.
      * Logic: extract the validated user_ids array, delegate persistence and mail dispatch to the
-     *   service, and return the number of newly-created pending_invitee rows so the client can
-     *   confirm success without a full re-fetch.
+     *   invitation service, and return the number of newly-created pending_invitee rows so the
+     *   client can confirm success without a full re-fetch.
      */
     public function storeInvitations(StoreGameInviteRequest $request, int $gameId): JsonResponse
     {
-        $count = $this->service->sendInvitations(
+        $count = $this->invitationService->sendInvitations(
             $gameId,
             $request->validated('user_ids'),
             $request->user(),
@@ -172,13 +181,12 @@ class GameController extends Controller
      * Return the authenticated user's pending game invitations.
      *
      * @return \Illuminate\Http\JsonResponse Pending invitation games serialised as list-item resources.
-     * Logic: pass the authenticated user's id to the service, which retrieves only games where
-     *   the user holds a pending_invitee pivot role; the response is fetched on each bell click
-     *   so the popup always reflects the live server state.
+     * Logic: pass the authenticated user's id to the invitation service, which retrieves only
+     *   games where the user holds a pending_invitee pivot role.
      */
     public function pendingInvitations(): JsonResponse
     {
-        $invitations = $this->service->listPendingInvitations((int) auth()->id());
+        $invitations = $this->invitationService->listPendingInvitations((int) auth()->id());
 
         return response()->json([
             'invitations' => GameListItemResource::collection($invitations),
@@ -190,13 +198,13 @@ class GameController extends Controller
      *
      * @param  \App\Http\Requests\Api\V1\StoreGameRematchRequest  $request  Validated request with name and target_points.
      * @param  int  $gameId  Identifier of the finished game to rematch.
-     * @return \Illuminate\Http\JsonResponse  201 response containing the new game's summary.
+     * @return \Illuminate\Http\JsonResponse 201 response containing the new game's summary.
      * Logic: delegate all business rules and persistence to the service layer; return the
      *   full game summary as a 201 so the frontend can select and display the new game immediately.
      */
     public function rematch(StoreGameRematchRequest $request, int $gameId): JsonResponse
     {
-        $summary = $this->service->createRematch($gameId, $request->validated(), (int) auth()->id());
+        $summary = $this->gameService->createRematch($gameId, $request->validated(), (int) auth()->id());
 
         return response()->json([
             'game' => new GameSummaryResource($summary),
@@ -208,13 +216,13 @@ class GameController extends Controller
      *
      * @param  int  $gameId  Identifier of the game whose invitation is being accepted.
      * @return \Illuminate\Http\JsonResponse Updated game list-item response with viewer role.
-     * Logic: delegate role promotion from pending_invitee to viewer to the service layer;
+     * Logic: delegate role promotion from pending_invitee to viewer to the invitation service;
      *   return a GameListItemResource carrying user_role='viewer' so the frontend can
      *   update the game entry in-place without re-fetching the full games list.
      */
     public function acceptInvitation(int $gameId): JsonResponse
     {
-        $game = $this->service->acceptInvitation($gameId, (int) auth()->id());
+        $game = $this->invitationService->acceptInvitation($gameId, (int) auth()->id());
 
         return response()->json([
             'game' => new GameListItemResource($game),

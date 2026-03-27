@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreTeamRequest;
 use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Http\Resources\Api\V1\TeamListItemResource;
-use App\Services\BurakoGameService;
+use App\Services\TeamService;
 use Illuminate\Http\JsonResponse;
 
 class TeamController extends Controller
@@ -14,11 +14,11 @@ class TeamController extends Controller
     /**
      * Construct the controller with its domain service.
      *
-     * @param  \App\Services\BurakoGameService  $service  Service that orchestrates team operations.
-     * @return void Stores the service dependency used by this controller.
+     * @param  \App\Services\TeamService  $service  Service that orchestrates team operations.
+     * @return void
      * Logic: keep write orchestration in the service so controller only handles HTTP transport concerns.
      */
-    public function __construct(private readonly BurakoGameService $service)
+    public function __construct(private readonly TeamService $service)
     {
     }
 

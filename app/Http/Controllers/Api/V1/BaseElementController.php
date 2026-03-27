@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\BaseElementResource;
-use App\Services\BurakoGameService;
+use App\Services\GameService;
 use Illuminate\Http\JsonResponse;
 
 class BaseElementController extends Controller
@@ -12,11 +12,11 @@ class BaseElementController extends Controller
     /**
      * Construct the controller with its domain service.
      *
-     * @param  \App\Services\BurakoGameService  $service  Service that provides base element data.
-     * @return void Stores the service dependency used by this controller.
+     * @param  \App\Services\GameService  $service  Service that provides base element data.
+     * @return void
      * Logic: keep the controller thin by delegating all retrieval of scoring elements to the service layer.
      */
-    public function __construct(private readonly BurakoGameService $service)
+    public function __construct(private readonly GameService $service)
     {
     }
 

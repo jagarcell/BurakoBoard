@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AddTeamPlayerRequest;
 use App\Http\Requests\Api\V1\SwapPlayerSeatsRequest;
 use App\Http\Resources\Api\V1\GameSummaryResource;
-use App\Services\BurakoGameService;
+use App\Services\PlayerService;
 use Illuminate\Http\JsonResponse;
 
 class TeamPlayerController extends Controller
@@ -14,11 +14,11 @@ class TeamPlayerController extends Controller
     /**
      * Construct the controller with its domain service.
      *
-     * @param  \App\Services\BurakoGameService  $service  Service that orchestrates player assignment.
-     * @return void Stores the service dependency used by this controller.
+     * @param  \App\Services\PlayerService  $service  Service that orchestrates player assignment.
+     * @return void
      * Logic: route player-assignment business rules to service layer to keep controller minimal.
      */
-    public function __construct(private readonly BurakoGameService $service)
+    public function __construct(private readonly PlayerService $service)
     {
     }
 
