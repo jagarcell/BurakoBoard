@@ -5,7 +5,8 @@ namespace Tests\Feature\Api;
 use App\Models\Game;
 use App\Models\Team;
 use App\Models\User;
-use App\Repositories\BurakoGameRepository;
+use App\Repositories\RoundRepository;
+use App\Repositories\TeamRepository;
 use App\Services\BurakoGameService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\QueryException;
@@ -17,7 +18,7 @@ class ScorePersistenceTest extends TestCase
 {
     use RefreshDatabase;
 
-    private BurakoGameRepository $repository;
+    private TeamRepository $teamRepository;
     private BurakoGameService $service;
     private User $user;
 
@@ -32,7 +33,7 @@ class ScorePersistenceTest extends TestCase
     {
         parent::setUp();
 
-        $this->repository = $this->app->make(BurakoGameRepository::class);
+        $this->teamRepository = $this->app->make(TeamRepository::class);
         $this->service    = $this->app->make(BurakoGameService::class);
         $this->user       = User::factory()->create();
         $this->actingAs($this->user);
@@ -111,7 +112,7 @@ class ScorePersistenceTest extends TestCase
         DB::table('game_team')->where('team_id', $teamAId)->where('game_id', $gameId)->update(['current_score' => 9999]);
         $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 9999]);
 
-        $recomputed = $this->repository->recomputeTeamScoreFromHistory($gameId, $teamAId);
+        $recomputed = $this->teamRepository->recomputeTeamScoreFromHistory($gameId, $teamAId);
 
         $this->assertSame(600, $recomputed);
         $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 600]);
@@ -138,7 +139,7 @@ class ScorePersistenceTest extends TestCase
         // Corrupt both scores.
         DB::table('game_team')->where('game_id', $gameId)->whereIn('team_id', [$teamAId, $teamBId])->update(['current_score' => 0]);
 
-        $this->repository->syncTeamScoresForGame($gameId);
+        $this->teamRepository->syncTeamScoresForGame($gameId);
 
         $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 700]);
         $this->assertDatabaseHas('game_team', ['team_id' => $teamBId, 'current_score' => 300]);
@@ -185,7 +186,7 @@ class ScorePersistenceTest extends TestCase
         // No rounds recorded yet; manually set a non-zero value to prove overwrite.
         DB::table('game_team')->where('team_id', $teamAId)->where('game_id', $gameId)->update(['current_score' => 500]);
 
-        $recomputed = $this->repository->recomputeTeamScoreFromHistory($gameId, $teamAId);
+        $recomputed = $this->teamRepository->recomputeTeamScoreFromHistory($gameId, $teamAId);
 
         $this->assertSame(0, $recomputed);
         $this->assertDatabaseHas('game_team', ['team_id' => $teamAId, 'current_score' => 0]);
@@ -297,7 +298,7 @@ class ScorePersistenceTest extends TestCase
      *
      * @return void Asserts Log::error('DB transaction failed in recordRound') fires and
      *   the response shape contains the round validation error message.
-     * Logic: spy on the Log facade, partially mock the repository so only createRound throws a
+     * Logic: spy on the Log facade, partially mock the RoundRepository so only createRound throws a
      *   QueryException (leaving all other repository methods intact), POST a valid round payload,
      *   and assert the error log entry and 422 response shape.
      */
@@ -309,14 +310,14 @@ class ScorePersistenceTest extends TestCase
         $teamAId = $this->addTeamAndGetId($gameId, 'Alpha');
         $teamBId = $this->addTeamAndGetId($gameId, 'Beta');
 
-        // Partially mock the repository so only createRound throws a QueryException,
+        // Partially mock RoundRepository so only createRound throws a QueryException,
         // leaving all other repository methods (findGameOrFail, getTeamsForGame, etc.) intact.
         // A non-deadlock message is used intentionally: RefreshDatabase wraps the test in an
         // outer transaction (level 1), so DB::transaction() runs at level 2. When a deadlock
         // error is detected at level > 1, Laravel wraps it in DeadlockException (extends PDOException)
         // rather than re-throwing the QueryException — so the service catch block would never fire.
         // A generic SQL error propagates as the original QueryException and exercises the catch correctly.
-        $this->partialMock(BurakoGameRepository::class, function ($mock): void {
+        $this->partialMock(RoundRepository::class, function ($mock): void {
             $mock->shouldReceive('createRound')
                 ->once()
                 ->andThrow(new QueryException(
