@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\Services\BurakoGameService;
+use App\Services\InvitationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,14 +15,14 @@ use Inertia\Response;
 class AuthenticatedSessionController extends Controller
 {
     /**
-     * Construct the controller with the game service dependency.
+     * Construct the controller with the invitation service dependency.
      *
-     * @param  \App\Services\BurakoGameService  $service  Service used to auto-accept pending invitations after login.
+     * @param  \App\Services\InvitationService  $service  Service used to auto-accept pending invitations after login.
      * @return void
-     * Logic: inject the game service so the store() method can silently upgrade any
+     * Logic: inject the invitation service so the store() method can silently upgrade any
      *   pending_invitee pivot row when the user logs in via an invitation link.
      */
-    public function __construct(private readonly BurakoGameService $service) {}
+    public function __construct(private readonly InvitationService $service) {}
 
     /**
      * Display the login view.

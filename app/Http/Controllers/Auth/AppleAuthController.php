@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Services\BurakoGameService;
+use App\Services\InvitationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -15,14 +15,14 @@ use Laravel\Socialite\Two\InvalidStateException;
 class AppleAuthController extends Controller
 {
     /**
-     * Construct the controller with the game service dependency.
+     * Construct the controller with the invitation service dependency.
      *
-     * @param  \App\Services\BurakoGameService  $service  Service used to auto-accept pending invitations after login.
+     * @param  \App\Services\InvitationService  $service  Service used to auto-accept pending invitations after login.
      * @return void
-     * Logic: inject the game service so the callback() method can silently upgrade any
+     * Logic: inject the invitation service so the callback() method can silently upgrade any
      *   pending_invitee pivot row when the user signs in via Apple from an invitation link.
      */
-    public function __construct(private readonly BurakoGameService $service) {}
+    public function __construct(private readonly InvitationService $service) {}
 
     /**
      * Redirect the user to the Apple Sign In authorisation page.

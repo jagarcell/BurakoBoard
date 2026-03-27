@@ -9,7 +9,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Repositories\GameRepository;
 use App\Repositories\TeamRepository;
-use App\Services\BurakoGameService;
+use App\Services\RoundService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
@@ -20,7 +20,7 @@ class RoundDraftTest extends TestCase
 
     private GameRepository $gameRepository;
     private TeamRepository $teamRepository;
-    private BurakoGameService $service;
+    private RoundService $service;
     private Game $game;
     private Team $teamA;
     private Team $teamB;
@@ -38,7 +38,7 @@ class RoundDraftTest extends TestCase
 
         $this->gameRepository = $this->app->make(GameRepository::class);
         $this->teamRepository = $this->app->make(TeamRepository::class);
-        $this->service = $this->app->make(BurakoGameService::class);
+        $this->service = $this->app->make(RoundService::class);
 
         $this->user = User::factory()->create();
         $this->actingAs($this->user);

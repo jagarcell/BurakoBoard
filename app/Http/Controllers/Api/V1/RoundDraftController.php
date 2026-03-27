@@ -4,20 +4,20 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\UpsertRoundDraftRequest;
-use App\Services\BurakoGameService;
+use App\Services\RoundDraftService;
 use Illuminate\Http\JsonResponse;
 
 class RoundDraftController extends Controller
 {
     /**
-     * Construct the controller with the game service dependency.
+     * Construct the controller with the round draft service dependency.
      *
-     * @param  \App\Services\BurakoGameService  $service  Service that handles game business logic.
+     * @param  \App\Services\RoundDraftService  $service  Service that handles round draft business logic.
      * @return void
-     * Logic: inject the shared service so draft operations stay consistent with
-     * the rest of the game workflow.
+     * Logic: inject the focused draft service so draft operations stay consistent with
+     *   the rest of the game workflow.
      */
-    public function __construct(private readonly BurakoGameService $service)
+    public function __construct(private readonly RoundDraftService $service)
     {
     }
 

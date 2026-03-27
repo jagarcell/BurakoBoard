@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\RecordRoundRequest;
 use App\Http\Resources\Api\V1\GameSummaryResource;
-use App\Services\BurakoGameService;
+use App\Services\RoundService;
 use Illuminate\Http\JsonResponse;
 
 class RoundController extends Controller
@@ -13,11 +13,11 @@ class RoundController extends Controller
     /**
      * Construct the controller with its domain service.
      *
-     * @param  \App\Services\BurakoGameService  $service  Service that orchestrates round scoring.
-     * @return void Stores the service dependency used by this controller.
+     * @param  \App\Services\RoundService  $service  Service that orchestrates round scoring.
+     * @return void
      * Logic: keep round-scoring rules in service layer and leave controller responsible for request/response handling.
      */
-    public function __construct(private readonly BurakoGameService $service)
+    public function __construct(private readonly RoundService $service)
     {
     }
 
