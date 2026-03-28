@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services;
 
+use App\Data\GameSummaryData;
 use App\Enums\GameStatus;
 use App\Events\GameUpdated;
 use App\Models\Game;
@@ -35,6 +36,20 @@ class TeamServiceTest extends TestCase
             $this->teamRepository,
             $this->seatRepository,
         );
+    }
+
+    private function makeGameSummaryData(int $id = 1): GameSummaryData
+    {
+        $game = new Game([
+            'name'                         => 'Test Game',
+            'target_points'                => 2000,
+            'status'                       => GameStatus::InProgress,
+            'winning_team_id'              => null,
+            'current_round_number'         => 0,
+            'initial_shuffler_seat_number' => null,
+        ]);
+        $game->id = $id;
+        return new GameSummaryData($game, collect(), collect(), collect());
     }
 
     public function test_list_teams_delegates_to_repository(): void
@@ -72,7 +87,7 @@ class TeamServiceTest extends TestCase
         $team     = new Team(['id' => 5, 'name' => 'Alpha']);
         $team->id = 5;
 
-        $summary = ['id' => 1, 'teams' => []];
+        $summaryData = $this->makeGameSummaryData(1);
 
         $this->gameRepository->shouldReceive('findGameOrFail')
             ->once()
@@ -91,11 +106,13 @@ class TeamServiceTest extends TestCase
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
-            ->andReturn($summary);
+            ->andReturn($summaryData);
 
         $result = $this->service->addTeam(1, ['name' => 'Alpha']);
 
-        $this->assertSame($summary, $result);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
     }
 
     public function test_attach_existing_team_throws_when_game_is_finished(): void
@@ -150,7 +167,7 @@ class TeamServiceTest extends TestCase
         $team     = new Team(['id' => 3]);
         $team->id = 3;
 
-        $summary = ['id' => 1];
+        $summaryData = $this->makeGameSummaryData(1);
 
         $this->gameRepository->shouldReceive('findGameOrFail')
             ->once()
@@ -178,11 +195,13 @@ class TeamServiceTest extends TestCase
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
-            ->andReturn($summary);
+            ->andReturn($summaryData);
 
         $result = $this->service->attachExistingTeam(1, 3);
 
-        $this->assertSame($summary, $result);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
     }
 
     public function test_update_team_throws_when_game_is_finished(): void
@@ -209,7 +228,7 @@ class TeamServiceTest extends TestCase
         $team     = new Team(['id' => 2, 'name' => 'Old']);
         $team->id = 2;
 
-        $summary = ['id' => 1];
+        $summaryData = $this->makeGameSummaryData(1);
 
         $this->gameRepository->shouldReceive('findGameOrFail')
             ->once()
@@ -228,10 +247,12 @@ class TeamServiceTest extends TestCase
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
-            ->andReturn($summary);
+            ->andReturn($summaryData);
 
         $result = $this->service->updateTeam(1, 2, ['name' => 'New']);
 
-        $this->assertSame($summary, $result);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
     }
 }

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\RecordRoundRequest;
-use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Services\RoundService;
 use Illuminate\Http\JsonResponse;
 
@@ -34,7 +33,7 @@ class RoundController extends Controller
         $summary = $this->service->recordRound($gameId, $request->validated());
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ]);
     }
 }

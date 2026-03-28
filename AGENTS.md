@@ -15,7 +15,7 @@ During every coding session:
 
 ## Workflow
 
-- On a prompt "create commits" show a preview of meaningful commits and wait for approval to commit; the approval prompt will be "approved".
+- On a prompt "create commits" show a preview of meaningful commits and wait for approval to commit; the approval prompt will be "approved". Each commit must include the active agent as a co-author using a `Co-authored-by:` trailer with no email address (e.g. `Co-authored-by: GitHub Copilot <>`). When the active agent is GitHub Copilot, also add a second `Co-authored-by:` trailer identifying the sub-agent model being used (e.g. `Co-authored-by: Claude Sonnet 4.6 <>`). Use an interactive rebase (`git rebase -i`) after committing to amend each commit and append the trailer(s) to its message body.
 - On a prompt "create PR" show a preview of the PR and wait for approval to create the PR; the approval prompt will be "approved". Before writing the preview, read every relevant route file (e.g. `routes/api.php`, `routes/web.php`, `routes/auth.php`) and cross-reference each endpoint mentioned in the description — HTTP method, full path, and parameter names — against the actual `Route::` declarations. Never invent, paraphrase, or carry over endpoint details from commit messages alone; every endpoint reference in the PR must exactly match its definition in the source PHP route files. Every PR description must follow this structure, including only the sections that apply:
 
   **Title** — imperative, prefixed with the conventional commit type (e.g. `feat:`, `fix:`, `chore:`).

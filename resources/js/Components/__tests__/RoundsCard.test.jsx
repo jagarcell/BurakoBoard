@@ -1060,6 +1060,68 @@ describe('RoundsCard', () => {
         });
     });
 
+    describe('hasCutter prop', () => {
+        it('shows the cutter-required message when teams are set but no cutter is designated', async () => {
+            render(
+                <RoundsCard
+                    hasCutter={false}
+                    hasTwoTeams={true}
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText(
+                'Waiting for round 1 cutter to be set in the Player Order section ...',
+            );
+            expect(
+                screen.queryByText('Add both teams before recording rounds.'),
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows the scoring form once hasCutter becomes true', async () => {
+            api.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+
+            const { rerender } = render(
+                <RoundsCard
+                    hasCutter={false}
+                    hasTwoTeams={true}
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            expect(
+                screen.getByText(
+                    'Waiting for round 1 cutter to be set in the Player Order section ...',
+                ),
+            ).toBeInTheDocument();
+
+            rerender(
+                <RoundsCard
+                    hasCutter={true}
+                    hasTwoTeams={true}
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Round 1');
+            expect(
+                screen.queryByText(
+                    'Waiting for round 1 cutter to be set in the Player Order section ...',
+                ),
+            ).not.toBeInTheDocument();
+        });
+    });
+
     describe('team card collapse control (mobile)', () => {
         const mockDraftAndElements = (url) =>
             url.includes('round-draft')
@@ -2337,6 +2399,63 @@ describe('RoundsCard', () => {
             await waitFor(() => {
                 const inHandInputs = screen.getAllByLabelText('Points in Hand');
                 expect(inHandInputs[0]).toHaveValue(7);
+            });
+        });
+
+        it('clears viewer inputs when a round-completion notification arrives (initialRounds grows)', async () => {
+            const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+            const { rerender } = render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            await screen.findByText('Live');
+
+            // Simulate a live draft update filling in the inputs
+            await act(async () => {
+                echoListenCallback({
+                    base_inputs: {
+                        [teamA.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 3 },
+                        [teamB.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 1 },
+                    },
+                    card_inputs: {
+                        [teamA.id]: { cardsInHand: 10, cardsOnTable: 5 },
+                        [teamB.id]: { cardsInHand: 2, cardsOnTable: 0 },
+                    },
+                });
+            });
+
+            // Confirm inputs now have non-zero values
+            await waitFor(() => {
+                const inHandInputs = screen.getAllByLabelText('Points in Hand');
+                expect(inHandInputs[0]).toHaveValue(10);
+            });
+
+            // Simulate a .game.updated notification: parent pushes a new round
+            await act(async () => {
+                rerender(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[round1]}
+                        initialTeams={[teamA, teamB]}
+                        selectedGame={viewerGame}
+                    />,
+                );
+            });
+
+            // All scoring inputs must be cleared back to their defaults
+            await waitFor(() => {
+                const inHandInputs = screen.getAllByLabelText('Points in Hand');
+                expect(inHandInputs[0]).toHaveValue(0);
+                expect(inHandInputs[1]).toHaveValue(0);
+                const onTableInputs = screen.getAllByLabelText('Points on Table');
+                expect(onTableInputs[0]).toHaveValue(0);
+                expect(onTableInputs[1]).toHaveValue(0);
             });
         });
     });

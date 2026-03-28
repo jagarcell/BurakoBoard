@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services;
 
+use App\Data\GameSummaryData;
 use App\Enums\GameStatus;
 use App\Enums\GameUserRole;
 use App\Models\Game;
@@ -36,6 +37,20 @@ class GameServiceTest extends TestCase
         );
     }
 
+    private function makeGameSummaryData(int $id = 1): GameSummaryData
+    {
+        $game = new Game([
+            'name'                         => 'Test Game',
+            'target_points'                => 2000,
+            'status'                       => GameStatus::InProgress,
+            'winning_team_id'              => null,
+            'current_round_number'         => 0,
+            'initial_shuffler_seat_number' => null,
+        ]);
+        $game->id = $id;
+        return new GameSummaryData($game, collect(), collect(), collect());
+    }
+
     public function test_list_games_delegates_to_repository(): void
     {
         $this->gameRepository->shouldReceive('getGameList')
@@ -52,7 +67,7 @@ class GameServiceTest extends TestCase
     {
         $game     = new Game(['id' => 10]);
         $game->id = 10;
-        $summary  = ['id' => 10, 'name' => 'Alpha'];
+        $summaryData = $this->makeGameSummaryData(10);
 
         $this->gameRepository->shouldReceive('createGame')
             ->once()
@@ -65,11 +80,15 @@ class GameServiceTest extends TestCase
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(10)
-            ->andReturn($summary);
+            ->andReturn($summaryData);
 
         $result = $this->service->createGame(['name' => 'Alpha', 'target_points' => 2000], 5);
 
-        $this->assertSame($summary, $result);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
+        $this->assertArrayHasKey('rounds', $result);
+        $this->assertArrayHasKey('round_roles', $result);
     }
 
     public function test_update_game_delegates_to_repository(): void
@@ -99,16 +118,20 @@ class GameServiceTest extends TestCase
 
     public function test_get_game_summary_delegates_to_repository(): void
     {
-        $summary = ['id' => 2, 'teams' => []];
+        $summaryData = $this->makeGameSummaryData(2);
 
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(2)
-            ->andReturn($summary);
+            ->andReturn($summaryData);
 
         $result = $this->service->getGameSummary(2);
 
-        $this->assertSame($summary, $result);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
+        $this->assertArrayHasKey('rounds', $result);
+        $this->assertArrayHasKey('round_roles', $result);
     }
 
     public function test_game_has_two_teams_returns_true_when_teams_present(): void
