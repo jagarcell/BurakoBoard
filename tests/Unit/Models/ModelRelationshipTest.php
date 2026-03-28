@@ -10,6 +10,7 @@ use App\Models\RoundScore;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class ModelRelationshipTest extends TestCase
@@ -412,5 +413,25 @@ class ModelRelationshipTest extends TestCase
             'label'  => 'Duplicate',
             'points' => 50,
         ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // User – cache invalidation
+    // -------------------------------------------------------------------------
+
+    /**
+     * Ensure creating a User model flushes the 'user_list' cache key.
+     *
+     * @return void Verifies the User::created event removes the stale user list from cache.
+     * Logic: pre-populate the 'user_list' cache key, create a User via the factory to trigger
+     *   the Eloquent created event, and assert the key is no longer present in the cache.
+     */
+    public function test_creating_user_invalidates_user_list_cache(): void
+    {
+        Cache::put('user_list', collect([['id' => 1, 'name' => 'Old User']]));
+
+        User::factory()->create();
+
+        $this->assertNull(Cache::get('user_list'));
     }
 }
