@@ -121,6 +121,13 @@ During every coding session:
 - **Cache stable, rarely-changing data** using `Cache::remember()` (or equivalent). Never use a
   database-backed cache store as the default in production; prefer an in-memory store (Redis,
   Memcached).
+- **Always use Redis as the application cache store.** Set `CACHE_STORE=redis` in `.env` for every
+  environment (local, staging, production). A database-backed cache store (`database`) adds write
+  pressure to the same database being offloaded and must never be used. Whenever caching is
+  introduced or modified, add a companion test in `tests/Unit/` that asserts
+  `config('cache.default')` equals `'redis'`, confirming the environment is correctly configured
+  before any cache operation is exercised. Name the test class after its domain (e.g.
+  `CacheConfigurationTest`) and place it in `tests/Unit/`.
 - **Avoid race conditions on computed sequences.** When deriving a next-sequence value inside a
   transaction (e.g. `MAX() + 1`), use a row-level lock to serialise concurrent writes.
 
