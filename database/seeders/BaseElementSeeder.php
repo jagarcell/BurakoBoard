@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\BaseElement;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Cache;
 
 class BaseElementSeeder extends Seeder
 {
@@ -19,6 +20,8 @@ class BaseElementSeeder extends Seeder
      * Elements with input_type 'boolean' represent an all-or-nothing condition (present / not present)
      * while 'quantity' elements are counted and their contribution is points × quantity.
      * A negative points value on a boolean element represents a penalty deducted from the team score.
+     * After all upserts, the 'base_elements' cache key is flushed so the next API request
+     * re-fetches the updated catalogue from the database.
      */
     public function run(): void
     {
@@ -102,5 +105,7 @@ class BaseElementSeeder extends Seeder
                 ]
             );
         }
+
+        Cache::forget('base_elements');
     }
 }

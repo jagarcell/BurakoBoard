@@ -35,6 +35,21 @@ All game-state mutations broadcast Laravel events over **Laravel Reverb** (WebSo
 ### Voice Aliases
 Each user can register custom voice aliases — a display alias paired with a keyword — to enable voice-command-driven score entry directly from the game board.
 
+### Caching
+
+BurakoBoard caches two hot read paths to avoid redundant database queries on every page mount.
+
+| Cache key       | TTL       | Source                                                                          | Invalidated by                              |
+|-----------------|-----------|---------------------------------------------------------------------------------|---------------------------------------------|
+| `base_elements` | 24 hours  | `GameRepository::getBaseElements()` and `BurakoGameRepository::getBaseElements()` | `BaseElementSeeder::run()` on each seed     |
+| `user_list`     | 5 minutes | `PlayerRepository::getUserList()`                                               | `User::created` Eloquent event (automatic)  |
+
+**`base_elements`** — The scoring catalogue is seeded once and rarely changes. Both repository methods that serve `GET /api/v1/base-elements` wrap their query in `Cache::remember('base_elements', now()->addDay(), ...)`. When `BaseElementSeeder` is re-run (e.g. after updating catalogue entries), it calls `Cache::forget('base_elements')` so the next API request re-fetches from the database.
+
+**`user_list`** — The registered-user list is fetched on every team-creation modal open. `PlayerRepository::getUserList()` caches the result for 5 minutes. The `User` model registers a `booted()` hook that calls `Cache::forget('user_list')` on the `created` event, so newly registered users (via email or OAuth) appear in the invite list within at most one cache cycle.
+
+> **Cache driver recommendation:** for caching to be effective, configure an in-memory store. The `database` driver (the default when `CACHE_STORE` is unset) adds write load to the same database you are trying to offload. Set `CACHE_STORE=redis` in `.env` — Redis is already included in the Docker Compose stack and is a declared prerequisite for the bare-metal track.
+
 ### Authentication
 - Email/password registration and login via **Laravel Breeze**.
 - Social login via **Apple OAuth** (`socialiteproviders/apple`).

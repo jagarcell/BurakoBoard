@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\Player;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class PlayerRepository
@@ -115,9 +116,11 @@ class PlayerRepository
      */
     public function getUserList(): Collection
     {
-        return User::query()
-            ->select(['id', 'name'])
-            ->orderBy('name')
-            ->get();
+        return Cache::remember('user_list', now()->addMinutes(5), fn (): Collection =>
+            User::query()
+                ->select(['id', 'name'])
+                ->orderBy('name')
+                ->get()
+        );
     }
 }

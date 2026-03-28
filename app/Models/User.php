@@ -9,12 +9,29 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Cache;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    /**
+     * Register Eloquent model event listeners.
+     *
+     * @return void
+     * Logic: flush the cached user list whenever a new user is created so that the
+     *   next call to PlayerRepository::getUserList() returns fresh data. This covers
+     *   both the form-based registration path (RegisteredUserController) and the
+     *   OAuth social-auth path (SocialAuthService / UserRepository::createFromProvider).
+     */
+    protected static function booted(): void
+    {
+        static::created(function (): void {
+            Cache::forget('user_list');
+        });
+    }
 
     /**
      * The table associated with the model.
