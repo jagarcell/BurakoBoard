@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreTeamRequest;
-use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Http\Resources\Api\V1\TeamListItemResource;
 use App\Services\TeamService;
 use Illuminate\Http\JsonResponse;
@@ -50,7 +49,7 @@ class TeamController extends Controller
         $summary = $this->service->addTeam($gameId, $request->validated());
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ], 201);
     }
 
@@ -68,7 +67,7 @@ class TeamController extends Controller
         $summary = $this->service->updateTeam($gameId, $teamId, $request->validated());
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ]);
     }
 
@@ -86,7 +85,7 @@ class TeamController extends Controller
         $summary = $this->service->attachExistingTeam($gameId, $teamId);
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ], 201);
     }
 }

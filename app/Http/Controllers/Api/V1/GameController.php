@@ -9,7 +9,6 @@ use App\Http\Requests\Api\V1\StoreGameRematchRequest;
 use App\Http\Requests\Api\V1\StoreGameRequest;
 use App\Http\Requests\Api\V1\UpdateGameRequest;
 use App\Http\Resources\Api\V1\GameListItemResource;
-use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Services\GameService;
 use App\Services\InvitationService;
 use App\Services\RoundService;
@@ -63,7 +62,7 @@ class GameController extends Controller
         $summary = $this->gameService->createGame($request->validated(), (int) auth()->id());
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ], 201);
     }
 
@@ -79,7 +78,7 @@ class GameController extends Controller
         $summary = $this->gameService->getGameSummary($gameId);
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ]);
     }
 
@@ -130,7 +129,7 @@ class GameController extends Controller
         $summary = $this->roundService->setInitialShuffler($gameId, (int) $request->validated('player_id'));
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ]);
     }
 
@@ -207,7 +206,7 @@ class GameController extends Controller
         $summary = $this->gameService->createRematch($gameId, $request->validated(), (int) auth()->id());
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ], 201);
     }
 

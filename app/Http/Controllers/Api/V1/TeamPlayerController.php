@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AddTeamPlayerRequest;
 use App\Http\Requests\Api\V1\SwapPlayerSeatsRequest;
-use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Services\PlayerService;
 use Illuminate\Http\JsonResponse;
 
@@ -36,7 +35,7 @@ class TeamPlayerController extends Controller
         $summary = $this->service->addPlayerToTeam($gameId, $teamId, $request->validated());
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ], 201);
     }
 
@@ -54,7 +53,7 @@ class TeamPlayerController extends Controller
         $summary = $this->service->removePlayerFromTeam($gameId, $teamId, $playerId);
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ], 200);
     }
 
@@ -78,7 +77,7 @@ class TeamPlayerController extends Controller
         );
 
         return response()->json([
-            'game' => new GameSummaryResource($summary),
+            'game' => $summary,
         ]);
     }
 }

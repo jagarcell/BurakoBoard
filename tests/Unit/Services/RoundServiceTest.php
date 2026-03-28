@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services;
 
+use App\Data\GameSummaryData;
 use App\Enums\GameStatus;
 use App\Models\Game;
 use App\Repositories\GameRepository;
@@ -41,6 +42,20 @@ class RoundServiceTest extends TestCase
             $this->roundDraftRepository,
             $this->seatRepository,
         );
+    }
+
+    private function makeGameSummaryData(int $id = 1): GameSummaryData
+    {
+        $game = new Game([
+            'name'                         => 'Test Game',
+            'target_points'                => 2000,
+            'status'                       => GameStatus::InProgress,
+            'winning_team_id'              => null,
+            'current_round_number'         => 0,
+            'initial_shuffler_seat_number' => null,
+        ]);
+        $game->id = $id;
+        return new GameSummaryData($game, collect(), collect(), collect());
     }
 
     public function test_set_initial_shuffler_throws_when_game_is_finished(): void
@@ -105,7 +120,7 @@ class RoundServiceTest extends TestCase
         $seatedPlayer              = new \stdClass();
         $seatedPlayer->seat_number = 3;
 
-        $summary = ['id' => 1];
+        $summaryData = $this->makeGameSummaryData(1);
 
         $this->gameRepository->shouldReceive('findGameOrFail')
             ->once()
@@ -124,11 +139,13 @@ class RoundServiceTest extends TestCase
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
-            ->andReturn($summary);
+            ->andReturn($summaryData);
 
         $result = $this->service->setInitialShuffler(1, 5);
 
-        $this->assertSame($summary, $result);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
     }
 
     public function test_record_round_throws_when_game_is_finished(): void

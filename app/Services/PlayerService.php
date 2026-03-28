@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\GameStatus;
 use App\Events\GameUpdated;
+use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Models\Player;
 use App\Repositories\GameRepository;
 use App\Repositories\PlayerRepository;
@@ -169,7 +170,8 @@ class PlayerService
      */
     private function broadcastAndReturn(int $gameId): array
     {
-        $summary = $this->gameRepository->getGameSummary($gameId);
+        $data = $this->gameRepository->getGameSummary($gameId);
+        $summary = (new GameSummaryResource($data))->resolve();
 
         broadcast(new GameUpdated($gameId, $summary))->toOthers();
 

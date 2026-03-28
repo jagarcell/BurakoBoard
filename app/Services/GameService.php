@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\GameStatus;
 use App\Enums\GameUserRole;
+use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Models\Game;
 use App\Repositories\GameRepository;
 use App\Repositories\SeatRepository;
@@ -69,7 +70,7 @@ class GameService
 
         Log::info('Game created', ['game_id' => $game->id, 'creator_id' => $userId]);
 
-        return $this->gameRepository->getGameSummary($game->id);
+        return (new GameSummaryResource($this->gameRepository->getGameSummary($game->id)))->resolve();
     }
 
     /**
@@ -109,7 +110,7 @@ class GameService
      */
     public function getGameSummary(int $gameId): array
     {
-        return $this->gameRepository->getGameSummary($gameId);
+        return (new GameSummaryResource($this->gameRepository->getGameSummary($gameId)))->resolve();
     }
 
     /**
@@ -230,6 +231,6 @@ class GameService
             ]);
         }
 
-        return $this->gameRepository->getGameSummary($newGameId);
+        return (new GameSummaryResource($this->gameRepository->getGameSummary($newGameId)))->resolve();
     }
 }
