@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\Api;
 
+use App\Events\GameDeleted;
 use App\Models\Game;
 use App\Models\Round;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class GameDestroyTest extends TestCase
@@ -176,5 +178,48 @@ class GameDestroyTest extends TestCase
             'game_id' => $game->id,
             'user_id' => $user->id,
         ]);
+    }
+
+    /**
+     * Ensure the GameDeleted broadcast event is dispatched when a creator deletes a game.
+     *
+     * @return void Verifies that the event is dispatched with the correct game ID.
+     * Logic: fake the Event facade, act as the creator, delete the game, and assert
+     *   GameDeleted was dispatched with the matching game_id so all other connected
+     *   clients can reset their dropdowns in real time.
+     */
+    public function test_game_deleted_event_is_dispatched_when_creator_deletes_game(): void
+    {
+        Event::fake([GameDeleted::class]);
+
+        $user = User::factory()->create();
+        $game = $this->makeGame();
+        $this->attachUserToGame($game->id, $user->id, 'creator');
+
+        $this->actingAs($user)->deleteJson("/api/v1/games/{$game->id}")->assertOk();
+
+        Event::assertDispatched(GameDeleted::class, function (GameDeleted $event) use ($game): bool {
+            return $event->gameId === $game->id;
+        });
+    }
+
+    /**
+     * Ensure the GameDeleted event is NOT dispatched when the deletion is rejected.
+     *
+     * @return void Verifies no broadcast fires on a failed delete attempt.
+     * Logic: fake the Event facade, attempt deletion as a viewer (rejected with 403),
+     *   and assert no GameDeleted event was dispatched.
+     */
+    public function test_game_deleted_event_is_not_dispatched_on_failed_deletion(): void
+    {
+        Event::fake([GameDeleted::class]);
+
+        $user = User::factory()->create();
+        $game = $this->makeGame();
+        $this->attachUserToGame($game->id, $user->id, 'viewer');
+
+        $this->actingAs($user)->deleteJson("/api/v1/games/{$game->id}")->assertForbidden();
+
+        Event::assertNotDispatched(GameDeleted::class);
     }
 }

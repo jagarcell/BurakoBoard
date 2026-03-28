@@ -149,6 +149,30 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         }
     }, [selectedGameId]);
 
+    // Subscribe to the game channel for the currently selected game so that when
+    // another user (or the same user in another tab) deletes the game, this UI
+    // resets the dropdown to the placeholder option in real time.
+    useEffect(() => {
+        if (! selectedGameId || typeof window === 'undefined' || ! window.Echo) return;
+
+        const echo = window.Echo;
+        const gameId = selectedGameId;
+
+        echo.private(`game.${gameId}`)
+            .listen('.game.deleted', () => {
+                startTransition(() => {
+                    setGames((current) => current.filter((g) => String(g.id) !== gameId));
+                    setSelectedGameId('');
+                });
+            });
+
+        return () => {
+            echo.leave(`game.${gameId}`);
+        };
+    // selectedGameId is the only dependency that drives channel (re)subscription.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedGameId]);
+
     useEffect(() => {
         setAcceptInviteError('');
         onGameSelect(selectedGame);

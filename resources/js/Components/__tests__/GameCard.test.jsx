@@ -2026,5 +2026,118 @@ describe('GameCard', () => {
         );
     });
 
+    // -------------------------------------------------------------------------
+    // Real-time game deletion — .game.deleted Echo event
+    // -------------------------------------------------------------------------
+
+    it('resets the dropdown to the placeholder when the selected game is deleted by another user', async () => {
+        let capturedCallbacks = {};
+        const channelStub = {
+            listen: vi.fn((event, cb) => { capturedCallbacks[event] = cb; return channelStub; }),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn(() => channelStub),
+            leave: vi.fn(),
+        };
+
+        const onGameSelect = vi.fn();
+
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={onGameSelect} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+
+        // Select the creator game
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+        await waitFor(() => expect(trigger).toHaveTextContent(/My Game/));
+
+        // Simulate the server broadcasting .game.deleted
+        await act(async () => {
+            capturedCallbacks['.game.deleted']?.({ game_id: 10 });
+        });
+
+        // Dropdown should reset to placeholder
+        await waitFor(() => expect(trigger).toHaveTextContent('Select or create a game'));
+
+        // The game is removed from the list
+        await userEvent.click(trigger);
+        expect(screen.queryByRole('option', { name: 'My Game (2000 pts)' })).not.toBeInTheDocument();
+
+        // onGameSelect must have been called with null
+        await waitFor(() =>
+            expect(onGameSelect).toHaveBeenLastCalledWith(null),
+        );
+    });
+
+    it('resets the dropdown to placeholder for a viewer when the game owner deletes it', async () => {
+        let capturedCallbacks = {};
+        const channelStub = {
+            listen: vi.fn((event, cb) => { capturedCallbacks[event] = cb; return channelStub; }),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn(() => channelStub),
+            leave: vi.fn(),
+        };
+
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+
+        // Select the viewer game
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Their Game (2000 pts)' }));
+        await waitFor(() => expect(trigger).toHaveTextContent(/Their Game/));
+
+        // Simulate .game.deleted broadcast for the viewer's selected game
+        await act(async () => {
+            capturedCallbacks['.game.deleted']?.({ game_id: 11 });
+        });
+
+        await waitFor(() => expect(trigger).toHaveTextContent('Select or create a game'));
+
+        await userEvent.click(trigger);
+        expect(screen.queryByRole('option', { name: 'Their Game (2000 pts)' })).not.toBeInTheDocument();
+    });
+
+    it('does not set up a game channel subscription when no game is selected', async () => {
+        const channelStub = {
+            listen: vi.fn().mockReturnThis(),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn(() => channelStub),
+            leave: vi.fn(),
+        };
+
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        // Wait for games to load without selecting any game
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        expect(trigger).toHaveTextContent('Select or create a game');
+
+        // No private channel subscription for a game should have been opened
+        const gameChannelCalls = window.Echo.private.mock.calls.filter(
+            ([ch]) => ch.startsWith('game.'),
+        );
+        expect(gameChannelCalls).toHaveLength(0);
+    });
+
 });
 
