@@ -2,7 +2,10 @@ import axios from 'axios';
 window.axios = axios;
 
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
-window.axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+// Do NOT set a static X-CSRF-TOKEN header here. Capturing the token once at page-load time
+// results in a stale value after session()->regenerate() runs during login/logout:
+// the XSRF-TOKEN cookie is refreshed by VerifyCsrfToken on every response, so axios's
+// built-in XSRF-TOKEN cookie → X-XSRF-TOKEN header mechanism is always up to date.
 
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
