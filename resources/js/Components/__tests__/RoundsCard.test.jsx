@@ -1060,6 +1060,68 @@ describe('RoundsCard', () => {
         });
     });
 
+    describe('hasCutter prop', () => {
+        it('shows the cutter-required message when teams are set but no cutter is designated', async () => {
+            render(
+                <RoundsCard
+                    hasCutter={false}
+                    hasTwoTeams={true}
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText(
+                'Waiting for round 1 cutter to be set in the Player Order section ...',
+            );
+            expect(
+                screen.queryByText('Add both teams before recording rounds.'),
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows the scoring form once hasCutter becomes true', async () => {
+            api.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+
+            const { rerender } = render(
+                <RoundsCard
+                    hasCutter={false}
+                    hasTwoTeams={true}
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            expect(
+                screen.getByText(
+                    'Waiting for round 1 cutter to be set in the Player Order section ...',
+                ),
+            ).toBeInTheDocument();
+
+            rerender(
+                <RoundsCard
+                    hasCutter={true}
+                    hasTwoTeams={true}
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findByText('Round 1');
+            expect(
+                screen.queryByText(
+                    'Waiting for round 1 cutter to be set in the Player Order section ...',
+                ),
+            ).not.toBeInTheDocument();
+        });
+    });
+
     describe('team card collapse control (mobile)', () => {
         const mockDraftAndElements = (url) =>
             url.includes('round-draft')

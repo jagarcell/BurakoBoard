@@ -133,6 +133,11 @@ export default function Dashboard() {
         [gameSummary],
     );
 
+    const hasCutter = useMemo(
+        () => (gameSummary?.game?.initial_shuffler_seat_number ?? null) !== null,
+        [gameSummary],
+    );
+
     return (
         <AuthenticatedLayout
             header={
@@ -165,6 +170,7 @@ export default function Dashboard() {
                     />
 
                     <RoundsCard
+                        hasCutter={hasCutter}
                         hasTwoTeams={hasTwoTeams}
                         initialRounds={initialRounds}
                         roundRoles={initialRoundRoles}

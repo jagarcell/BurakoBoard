@@ -19,7 +19,7 @@ import PlayerCircle from '@/Components/PlayerCircle';
 import PrimaryButton from '@/Components/PrimaryButton';
 import useWinnerSound from '@/hooks/useWinnerSound';
 
-export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false, hasTwoTeams = false, roundRoles = [] }) {
+export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false, hasTwoTeams = false, hasCutter = true, roundRoles = [] }) {
     const [teams, setTeams] = useState(initialTeams);
     const [rounds, setRounds] = useState(initialRounds);
     const [elements, setElements] = useState([]);
@@ -728,6 +728,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             ) : ! showScoringForm ? (
                 <p className="px-6 py-5 text-sm text-slate-400">
                     Add both teams before recording rounds.
+                </p>
+            ) : ! hasCutter ? (
+                <p className="px-6 py-5 text-sm text-slate-400">
+                    Waiting for round 1 cutter to be set in the Player Order section ...
                 </p>
             ) : (
                 <>
