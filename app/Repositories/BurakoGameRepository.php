@@ -16,6 +16,7 @@ use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class BurakoGameRepository
@@ -680,10 +681,12 @@ class BurakoGameRepository
      */
     public function getBaseElements(): Collection
     {
-        return BaseElement::query()
-            ->select(['id', 'name', 'label', 'points', 'penalty', 'input_type', 'mutually_exclusive', 'score_override'])
-            ->orderBy('id')
-            ->get();
+        return Cache::remember('base_elements', now()->addDay(), fn (): Collection =>
+            BaseElement::query()
+                ->select(['id', 'name', 'label', 'points', 'penalty', 'input_type', 'mutually_exclusive', 'score_override'])
+                ->orderBy('id')
+                ->get()
+        );
     }
 
     /**
