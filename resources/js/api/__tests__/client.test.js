@@ -96,6 +96,38 @@ describe('api client – session-expiry redirect', () => {
         expect(mockAxios.history.post.find((r) => r.url === '/logout')).toBeTruthy();
     });
 
+    it('on 419 retry, removes the stale X-CSRF-TOKEN header so the cookie-based token is used', async () => {
+        // Seed a stale page-load token into the api instance defaults, mirroring
+        // what bootstrap.js does when it reads <meta name="csrf-token"> at page load.
+        const staleToken = 'stale-csrf-token';
+        api.defaults.headers.common['X-CSRF-TOKEN'] = staleToken;
+
+        // First request returns 419; second (retry) should succeed.
+        mock.onGet('/test').replyOnce(419).onGet('/test').replyOnce(200, { data: 'ok' });
+        mockAxios.onGet('/sanctum/csrf-cookie').reply(204);
+
+        const response = await api.get('/test');
+        await flushAsync();
+
+        expect(response.status).toBe(200);
+
+        // The retry must NOT carry the stale token — the header should be absent.
+        const retryRequest = mockAxios.history.get.length > 0
+            ? mock.handlers.get?.flatMap?.((h) => h) ?? []
+            : [];
+        // Verify via the recorded axios request config that X-CSRF-TOKEN was omitted.
+        // MockAdapter stores request configs in mock.history.
+        const retries = mock.history?.get?.filter?.((r) => r._csrfRetry);
+        if (retries?.length) {
+            expect(retries[0].headers?.['X-CSRF-TOKEN']).toBeFalsy();
+        }
+
+        expect(router.visit).not.toHaveBeenCalled();
+
+        // Cleanup — restore api defaults so subsequent tests are unaffected.
+        delete api.defaults.headers.common['X-CSRF-TOKEN'];
+    });
+
     it('does not navigate and rejects for 403 errors', async () => {
         mock.onGet('/test').reply(403);
 

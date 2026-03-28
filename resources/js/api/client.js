@@ -83,6 +83,13 @@ api.interceptors.response.use(
 
             originalRequest._csrfRetry = true;
 
+            // Remove the stale page-load X-CSRF-TOKEN so Laravel's VerifyCsrfToken
+            // falls through to the freshly-refreshed XSRF-TOKEN cookie instead of
+            // matching the old snapshot first and returning 419 on the retry.
+            // AxiosHeaders.toJSON() skips entries whose value is `false`, so the
+            // header is completely omitted from the outgoing retry request.
+            originalRequest.headers?.set('X-CSRF-TOKEN', false);
+
             // Replay the original request with the freshly-issued CSRF token.
             try {
                 return await api(originalRequest);
