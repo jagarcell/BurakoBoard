@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\GameStatus;
 use App\Enums\GameUserRole;
+use App\Events\GameDeleted;
 use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Models\Game;
 use App\Repositories\GameRepository;
@@ -138,7 +139,10 @@ class GameService
      *   2. Verify the requesting user is the creator via the game_user pivot; abort 403 if not.
      *   3. Guard against deletion when rounds have already been recorded; throw a validation
      *      exception so the HTTP layer converts it to a 422 with a descriptive message.
-     *   4. Delegate the permanent removal to the repository, relying on DB cascade for related rows.
+     *   4. Broadcast a GameDeleted event on the game's private channel *before* the DB row
+     *      is removed so channel-auth can still verify membership. Use toOthers() to exclude
+     *      the deleting tab, which already resets its own dropdown synchronously.
+     *   5. Delegate the permanent removal to the repository, relying on DB cascade for related rows.
      */
     public function deleteGame(int $gameId, int $userId): void
     {
@@ -153,6 +157,11 @@ class GameService
                 'game' => ['This game cannot be deleted because it already has recorded rounds.'],
             ]);
         }
+
+        // Broadcast before the DB row is removed so the channel-auth guard can
+        // still verify membership. toOthers() excludes the deleting tab which
+        // already resets its own dropdown synchronously via handleDeleteGame().
+        broadcast(new GameDeleted($gameId))->toOthers();
 
         $this->gameRepository->deleteGame($gameId);
 
