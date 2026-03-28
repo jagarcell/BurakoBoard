@@ -190,6 +190,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // to prevent saving the reset-to-default inputs as a new draft).
     const skipNextDraftSave = useRef(false);
     const draftSaveTimerRef = useRef(null);
+    // Tracks the previous initialRounds length so we can detect when a new round
+    // has been recorded by another user (via .game.updated) and clear the inputs.
+    const prevRoundsLengthRef = useRef(initialRounds.length);
     // Always-current reference to selectedGame used inside debounced callbacks.
     const selectedGameRef = useRef(selectedGame);
     useEffect(() => { selectedGameRef.current = selectedGame; }, [selectedGame]);
@@ -223,6 +226,23 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     useEffect(() => {
         setTeams(initialTeams);
         setRounds(initialRounds);
+
+        // Detect a round-completion broadcast: another user recorded a round and
+        // the parent pushed a longer initialRounds array via `.game.updated`.
+        // Clear inputs so the viewer (or an idle scorer) does not see stale values.
+        const roundsGrew = initialRounds.length > prevRoundsLengthRef.current;
+        prevRoundsLengthRef.current = initialRounds.length;
+
+        if (roundsGrew) {
+            if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+            skipNextDraftSave.current = true;
+            setBaseInputs(buildDefaultBaseInputs(initialTeams, elements));
+            setCardInputs(buildDefaultCardInputs(initialTeams));
+            setInputErrors({});
+            setSaveError('');
+            return;
+        }
+
         setBaseInputs((prev) => {
             const newIds = new Set(initialTeams.map((t) => t.id));
             const prevIds = new Set(Object.keys(prev).map(Number));
@@ -243,11 +263,13 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         });
         setInputErrors((prev) => (Object.keys(prev).length > 0 ? {} : prev));
         setSaveError((prev) => (prev !== '' ? '' : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draftSaveTimerRef and skipNextDraftSave are stable refs; elements is intentionally excluded to avoid disrupting the dedicated elements-load reset
     }, [initialTeams, initialRounds]);
 
-    // Reset game status when the selected game changes
+    // Reset game status and round-length tracker when the selected game changes
     useEffect(() => {
         setGameStatus(selectedGame?.status ?? 'in_progress');
+        prevRoundsLengthRef.current = 0;
     }, [selectedGame?.id]);
 
     // Also re-seed baseInputs when elements load (if teams are already present)

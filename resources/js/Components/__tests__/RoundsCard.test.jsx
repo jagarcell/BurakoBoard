@@ -2401,6 +2401,63 @@ describe('RoundsCard', () => {
                 expect(inHandInputs[0]).toHaveValue(7);
             });
         });
+
+        it('clears viewer inputs when a round-completion notification arrives (initialRounds grows)', async () => {
+            const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+            const { rerender } = render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            await screen.findByText('Live');
+
+            // Simulate a live draft update filling in the inputs
+            await act(async () => {
+                echoListenCallback({
+                    base_inputs: {
+                        [teamA.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 3 },
+                        [teamB.id]: { [baseElements[0].id]: false, [baseElements[1].id]: 1 },
+                    },
+                    card_inputs: {
+                        [teamA.id]: { cardsInHand: 10, cardsOnTable: 5 },
+                        [teamB.id]: { cardsInHand: 2, cardsOnTable: 0 },
+                    },
+                });
+            });
+
+            // Confirm inputs now have non-zero values
+            await waitFor(() => {
+                const inHandInputs = screen.getAllByLabelText('Points in Hand');
+                expect(inHandInputs[0]).toHaveValue(10);
+            });
+
+            // Simulate a .game.updated notification: parent pushes a new round
+            await act(async () => {
+                rerender(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialRounds={[round1]}
+                        initialTeams={[teamA, teamB]}
+                        selectedGame={viewerGame}
+                    />,
+                );
+            });
+
+            // All scoring inputs must be cleared back to their defaults
+            await waitFor(() => {
+                const inHandInputs = screen.getAllByLabelText('Points in Hand');
+                expect(inHandInputs[0]).toHaveValue(0);
+                expect(inHandInputs[1]).toHaveValue(0);
+                const onTableInputs = screen.getAllByLabelText('Points on Table');
+                expect(onTableInputs[0]).toHaveValue(0);
+                expect(onTableInputs[1]).toHaveValue(0);
+            });
+        });
     });
 
 });
