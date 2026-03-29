@@ -162,4 +162,23 @@ class InvitationRepository
             ->where('role', GameUserRole::PendingInvitee->value)
             ->update(['role' => GameUserRole::Viewer->value, 'updated_at' => now()]);
     }
+
+    /**
+     * Return the user IDs that hold any of the given roles in a game.
+     *
+     * @param  int            $gameId  Identifier of the game.
+     * @param  array<string>  $roles   Role values to filter by (e.g. ['pending_invitee', 'viewer']).
+     * @return array<int>     User IDs enrolled in the game with any of the specified roles.
+     * Logic: query the game_user pivot filtering by game_id and any of the supplied role values,
+     *   then return the matching user IDs cast to integers for safe downstream comparison.
+     */
+    public function getUserIdsByRolesInGame(int $gameId, array $roles): array
+    {
+        return DB::table('game_user')
+            ->where('game_id', $gameId)
+            ->whereIn('role', $roles)
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
 }
