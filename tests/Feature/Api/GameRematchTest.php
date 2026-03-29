@@ -325,4 +325,59 @@ class GameRematchTest extends TestCase
             $this->assertEquals(0, (int) $score);
         }
     }
+
+    /**
+     * Ensure that pending_invitee and viewer users from the source game automatically
+     * receive invitations to the rematch game when it is created.
+     *
+     * @return void Verifies game_user rows are created for both users in the new game.
+     * Logic: seed a finished game with one pending_invitee and one viewer, call the rematch
+     *   endpoint, and assert both users appear as pending_invitee in the new game's pivot.
+     */
+    public function test_rematch_sends_invitations_to_pending_invitees_and_viewers(): void
+    {
+        ['game' => $game] = $this->makeFinishedGame();
+
+        $pendingInvitee = User::factory()->create();
+        $viewer         = User::factory()->create();
+
+        DB::table('game_user')->insert([
+            [
+                'game_id'    => $game->id,
+                'user_id'    => $pendingInvitee->id,
+                'role'       => 'pending_invitee',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'game_id'    => $game->id,
+                'user_id'    => $viewer->id,
+                'role'       => 'viewer',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $response = $this->actingAs($this->creator)
+            ->postJson("/api/v1/games/{$game->id}/rematch", [
+                'name'          => 'Rematch',
+                'target_points' => 2000,
+            ]);
+
+        $response->assertStatus(201);
+
+        $newGameId = $response->json('data.game.game.id');
+
+        $this->assertDatabaseHas('game_user', [
+            'game_id' => $newGameId,
+            'user_id' => $pendingInvitee->id,
+            'role'    => 'pending_invitee',
+        ]);
+
+        $this->assertDatabaseHas('game_user', [
+            'game_id' => $newGameId,
+            'user_id' => $viewer->id,
+            'role'    => 'pending_invitee',
+        ]);
+    }
 }

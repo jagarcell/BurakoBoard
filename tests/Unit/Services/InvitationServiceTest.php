@@ -209,4 +209,69 @@ class InvitationServiceTest extends TestCase
 
         $this->assertFalse($this->service->acceptInvitationIfPending(1, 5));
     }
+
+    public function test_send_rematch_invitations_returns_zero_when_no_eligible_users(): void
+    {
+        $inviter     = new User();
+        $inviter->id = 10;
+
+        $this->invitationRepository->shouldReceive('getUserIdsByRolesInGame')
+            ->once()
+            ->with(1, ['pending_invitee', 'viewer'])
+            ->andReturn([]);
+
+        $result = $this->service->sendRematchInvitations(1, 2, $inviter);
+
+        $this->assertSame(0, $result);
+    }
+
+    public function test_send_rematch_invitations_filters_out_inviter_and_invites_eligible_users(): void
+    {
+        Mail::fake();
+
+        $inviter       = new User(['id' => 10, 'name' => 'Host']);
+        $inviter->id   = 10;
+        $inviter->name = 'Host';
+
+        $invitee        = new User(['id' => 3, 'name' => 'Bob', 'email' => 'bob@example.com']);
+        $invitee->id    = 3;
+        $invitee->email = 'bob@example.com';
+        $invitee->name  = 'Bob';
+
+        $newGame       = new Game(['id' => 2, 'name' => 'Rematch']);
+        $newGame->id   = 2;
+        $newGame->name = 'Rematch';
+
+        // source game has inviter (id=10) and eligible invitee (id=3)
+        $this->invitationRepository->shouldReceive('getUserIdsByRolesInGame')
+            ->once()
+            ->with(1, ['pending_invitee', 'viewer'])
+            ->andReturn([10, 3]);
+
+        // sendInvitations() will verify the new game exists
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(2)
+            ->andReturn($newGame);
+
+        // inviter (id=10) is excluded; only user 3 is passed on
+        $this->invitationRepository->shouldReceive('getExistingGameUserIds')
+            ->once()
+            ->with(2, [3])
+            ->andReturn([]);
+
+        $this->invitationRepository->shouldReceive('bulkAttachPendingInviteesToGame')
+            ->once()
+            ->with(2, [3]);
+
+        $this->invitationRepository->shouldReceive('getUsersByIds')
+            ->once()
+            ->with([3])
+            ->andReturn(collect([$invitee]));
+
+        $result = $this->service->sendRematchInvitations(1, 2, $inviter);
+
+        $this->assertSame(1, $result);
+        Mail::assertSent(GameInvitationMail::class);
+    }
 }

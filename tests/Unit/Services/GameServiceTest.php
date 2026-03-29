@@ -6,10 +6,12 @@ use App\Data\GameSummaryData;
 use App\Enums\GameStatus;
 use App\Enums\GameUserRole;
 use App\Models\Game;
+use App\Models\User;
 use App\Repositories\GameRepository;
 use App\Repositories\SeatRepository;
 use App\Repositories\TeamRepository;
 use App\Services\GameService;
+use App\Services\InvitationService;
 use Illuminate\Validation\ValidationException;
 use Mockery;
 use Mockery\MockInterface;
@@ -20,20 +22,23 @@ class GameServiceTest extends TestCase
     private GameRepository&MockInterface $gameRepository;
     private TeamRepository&MockInterface $teamRepository;
     private SeatRepository&MockInterface $seatRepository;
+    private InvitationService&MockInterface $invitationService;
     private GameService $service;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->gameRepository = Mockery::mock(GameRepository::class);
-        $this->teamRepository = Mockery::mock(TeamRepository::class);
-        $this->seatRepository = Mockery::mock(SeatRepository::class);
+        $this->gameRepository    = Mockery::mock(GameRepository::class);
+        $this->teamRepository    = Mockery::mock(TeamRepository::class);
+        $this->seatRepository    = Mockery::mock(SeatRepository::class);
+        $this->invitationService = Mockery::mock(InvitationService::class);
 
         $this->service = new GameService(
             $this->gameRepository,
             $this->teamRepository,
             $this->seatRepository,
+            $this->invitationService,
         );
     }
 
@@ -229,9 +234,12 @@ class GameServiceTest extends TestCase
             ->with(5)
             ->andReturn($game);
 
+        $user     = new User();
+        $user->id = 1;
+
         $this->expectException(ValidationException::class);
 
-        $this->service->createRematch(5, ['name' => 'Rematch', 'target_points' => 2000], 1);
+        $this->service->createRematch(5, ['name' => 'Rematch', 'target_points' => 2000], $user);
     }
 
     public function test_create_rematch_aborts_when_not_creator(): void
@@ -248,8 +256,11 @@ class GameServiceTest extends TestCase
             ->with(5, 99)
             ->andReturn(false);
 
+        $user     = new User();
+        $user->id = 99;
+
         $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
 
-        $this->service->createRematch(5, ['name' => 'Rematch', 'target_points' => 2000], 99);
+        $this->service->createRematch(5, ['name' => 'Rematch', 'target_points' => 2000], $user);
     }
 }

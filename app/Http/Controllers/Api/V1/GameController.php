@@ -203,7 +203,7 @@ class GameController extends Controller
      */
     public function rematch(StoreGameRematchRequest $request, int $gameId): JsonResponse
     {
-        $summary = $this->gameService->createRematch($gameId, $request->validated(), (int) auth()->id());
+        $summary = $this->gameService->createRematch($gameId, $request->validated(), $request->user());
 
         return response()->json([
             'game' => $summary,
