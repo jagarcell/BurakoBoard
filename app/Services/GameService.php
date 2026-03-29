@@ -7,6 +7,7 @@ use App\Enums\GameUserRole;
 use App\Events\GameDeleted;
 use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Models\Game;
+use App\Models\User;
 use App\Repositories\GameRepository;
 use App\Repositories\SeatRepository;
 use App\Repositories\TeamRepository;
@@ -19,18 +20,20 @@ use Illuminate\Validation\ValidationException;
 class GameService
 {
     /**
-     * Construct the service with game-lifecycle repository dependencies.
+     * Construct the service with game-lifecycle repository and service dependencies.
      *
-     * @param  \App\Repositories\GameRepository  $gameRepository  Handles game CRUD and game_user pivot.
-     * @param  \App\Repositories\TeamRepository  $teamRepository  Handles team lookups needed by createRematch and gameHasTwoTeams.
-     * @param  \App\Repositories\SeatRepository  $seatRepository  Handles seat copy operations in createRematch.
+     * @param  \App\Repositories\GameRepository  $gameRepository     Handles game CRUD and game_user pivot.
+     * @param  \App\Repositories\TeamRepository  $teamRepository     Handles team lookups needed by createRematch and gameHasTwoTeams.
+     * @param  \App\Repositories\SeatRepository  $seatRepository     Handles seat copy operations in createRematch.
+     * @param  \App\Services\InvitationService   $invitationService  Handles invitation dispatch for rematch games.
      * @return void
-     * Logic: inject only the repositories required for game lifecycle concerns owned by this service.
+     * Logic: inject only the repositories and services required for game lifecycle concerns owned by this service.
      */
     public function __construct(
         private readonly GameRepository $gameRepository,
         private readonly TeamRepository $teamRepository,
         private readonly SeatRepository $seatRepository,
+        private readonly InvitationService $invitationService,
     ) {
     }
 
@@ -171,9 +174,9 @@ class GameService
     /**
      * Create a new game as a rematch of an existing finished game.
      *
-     * @param  int  $sourceGameId  Identifier of the finished game being rematched.
-     * @param  array<string, mixed>  $payload  Validated payload containing name and target_points.
-     * @param  int  $userId  Identifier of the authenticated creator.
+     * @param  int                   $sourceGameId  Identifier of the finished game being rematched.
+     * @param  array<string, mixed>  $payload       Validated payload containing name and target_points.
+     * @param  \App\Models\User      $user          The authenticated user creating the rematch.
      * @return array<string, mixed> Game summary payload for the newly created rematch game.
      * Logic:
      *  1. Load the source game and abort with a validation error if it is still in progress.
@@ -182,10 +185,13 @@ class GameService
      *     from the source game (preserving team order), copy seat assignments from the source game,
      *     and set the initial shuffler seat to the player who would be cutter in the next rotation
      *     so the player order carries over correctly.
-     *  4. Return the full summary payload.
+     *  4. After the transaction, send invitations to all pending_invitee and viewer users from the
+     *     source game so they can follow the rematch without manual re-invitation.
+     *  5. Return the full summary payload.
      */
-    public function createRematch(int $sourceGameId, array $payload, int $userId): array
+    public function createRematch(int $sourceGameId, array $payload, User $user): array
     {
+        $userId     = $user->id;
         $sourceGame = $this->gameRepository->findGameOrFail($sourceGameId);
 
         if ($sourceGame->status !== GameStatus::Finished) {
@@ -239,6 +245,8 @@ class GameService
                 'game' => ['The rematch could not be created due to a database error. Please try again.'],
             ]);
         }
+
+        $this->invitationService->sendRematchInvitations($sourceGameId, $newGameId, $user);
 
         return (new GameSummaryResource($this->gameRepository->getGameSummary($newGameId)))->resolve();
     }
