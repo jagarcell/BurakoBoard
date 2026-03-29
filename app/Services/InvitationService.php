@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\GameUserRole;
 use App\Events\GameInvitationSent;
 use App\Mail\GameInvitationMail;
 use App\Models\Game;
@@ -175,5 +176,37 @@ class InvitationService
     public function acceptInvitationIfPending(int $gameId, int $userId): bool
     {
         return $this->invitationRepository->upgradeInvitationToViewer($gameId, $userId);
+    }
+
+    /**
+     * Invite all pending_invitee and viewer users from a source game to follow its rematch.
+     *
+     * @param  int               $sourceGameId  Identifier of the finished source game.
+     * @param  int               $newGameId     Identifier of the newly created rematch game.
+     * @param  \App\Models\User  $inviter       The user who created the rematch (already enrolled as creator of the new game).
+     * @return int Number of new invitation rows created.
+     * Logic:
+     *   1. Fetch all user IDs from the source game that hold a pending_invitee or viewer role.
+     *   2. Exclude the inviter themselves — they are already enrolled as the creator of the rematch.
+     *   3. Delegate to sendInvitations() for the new game so the full invitation flow
+     *      (pivot insert, mail dispatch, broadcast) runs consistently for each eligible user.
+     */
+    public function sendRematchInvitations(int $sourceGameId, int $newGameId, User $inviter): int
+    {
+        $eligibleIds = $this->invitationRepository->getUserIdsByRolesInGame($sourceGameId, [
+            GameUserRole::PendingInvitee->value,
+            GameUserRole::Viewer->value,
+        ]);
+
+        $userIds = array_values(array_filter(
+            $eligibleIds,
+            fn (int $id): bool => $id !== $inviter->id,
+        ));
+
+        if (empty($userIds)) {
+            return 0;
+        }
+
+        return $this->sendInvitations($newGameId, $userIds, $inviter);
     }
 }
