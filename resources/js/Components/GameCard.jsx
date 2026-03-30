@@ -544,6 +544,17 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 throw new Error('Game payload missing from response.');
             }
 
+            // Immediately (outside the deferred transition) mark the source game as
+            // has_rematch: true so the Rematch button disappears the instant the
+            // modal closes, without waiting for the startTransition to commit.
+            if (isRematch) {
+                setGames((currentGames) =>
+                    currentGames.map((g) =>
+                        String(g.id) === String(rematchSourceId) ? { ...g, has_rematch: true } : g,
+                    ),
+                );
+            }
+
             startTransition(() => {
                 setGames((currentGames) => [
                     { ...createdGame, user_role: 'creator' },
