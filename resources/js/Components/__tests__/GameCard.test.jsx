@@ -1950,6 +1950,47 @@ describe('GameCard', () => {
         expect(localStorage.getItem('burako_selected_game_id')).toBe('100');
     });
 
+    it('hides the Rematch button immediately after a rematch is created without a page refresh', async () => {
+        const finishedCreatorGame = [{
+            id: 28,
+            name: 'Old Game',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 2,
+            user_role: 'creator',
+            has_rematch: false,
+        }];
+
+        const createdGame = {
+            id: 101,
+            name: 'Old Game Rematch',
+            target_points: 2000,
+            status: 'in_progress',
+            winning_team_id: null,
+            current_round_number: 0,
+        };
+
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorGame } } });
+        api.post.mockResolvedValueOnce({
+            data: { data: { game: { game: createdGame, teams: [], rounds: [], round_roles: [] } } },
+        });
+
+        localStorage.setItem('burako_selected_game_id', '28');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const rematchBtn = await screen.findByRole('button', { name: /start a rematch/i });
+        await userEvent.click(rematchBtn);
+
+        await userEvent.click(screen.getByRole('button', { name: /start rematch/i }));
+
+        // The Rematch button must be gone immediately — no page refresh required.
+        await waitFor(() =>
+            expect(screen.queryByRole('button', { name: /start a rematch/i })).not.toBeInTheDocument(),
+        );
+    });
+
     // -------------------------------------------------------------------------
     // Invitation popup — real-time arrival banner
     // -------------------------------------------------------------------------
