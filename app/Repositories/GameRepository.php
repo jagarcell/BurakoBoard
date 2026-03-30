@@ -257,7 +257,10 @@ class GameRepository
      *      game with no parent is reached, collecting the root's id.
      *   2. From the root, collect all descendants by following the rematch_from_game_id FK
      *      downward using a recursive CTE so a single query retrieves the entire chain.
-     *   3. Hydrate each row as a lightweight Game model using select() to avoid SELECT *.
+     *   3. Hydrate each row as a lightweight Game model and attach a team_scores array
+     *      (each entry: team_id, team_name, current_score) fetched via a join on game_team
+     *      and teams so the presenter layer can render per-team final scores without an
+     *      additional round-trip.
      */
     public function getRematchChain(int $gameId): Collection
     {
@@ -300,7 +303,22 @@ class GameRepository
             [$rootId]
         );
 
-        return collect($rows)->map(function (object $row): Game {
+        // Batch-load team scores for all collected games in a single query.
+        $gameIds = collect($rows)->pluck('id')->all();
+
+        $teamScoresByGame = DB::table('game_team')
+            ->join('teams', 'teams.id', '=', 'game_team.team_id')
+            ->whereIn('game_team.game_id', $gameIds)
+            ->select([
+                'game_team.game_id',
+                'game_team.team_id',
+                'teams.name as team_name',
+                'game_team.current_score',
+            ])
+            ->get()
+            ->groupBy('game_id');
+
+        return collect($rows)->map(function (object $row) use ($teamScoresByGame): Game {
             $game = new Game();
             $game->id                   = $row->id;
             $game->name                 = $row->name;
@@ -309,6 +327,7 @@ class GameRepository
             $game->winning_team_id      = $row->winning_team_id;
             $game->rematch_from_game_id = $row->rematch_from_game_id;
             $game->current_round_number = $row->current_round_number;
+            $game->team_scores          = ($teamScoresByGame->get($row->id) ?? collect())->values()->all();
 
             return $game;
         });
