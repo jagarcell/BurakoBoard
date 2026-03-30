@@ -899,6 +899,10 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 onClose={() => setIsRematchHistoryOpen(false)}
                 gameId={selectedGame?.id ?? null}
                 currentGameId={selectedGame?.id ?? null}
+                onSelectGame={(id) => {
+                    setSelectedGameId(String(id));
+                    setIsRematchHistoryOpen(false);
+                }}
             />
 
             <Modal maxWidth="lg" onClose={closeEditModal} show={isEditModalOpen}>

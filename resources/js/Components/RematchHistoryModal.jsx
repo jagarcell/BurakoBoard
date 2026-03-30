@@ -84,14 +84,17 @@ function StatusBadge({ status }) {
  * in the chain ordered from the root game to the latest rematch.
  * The currently selected game is highlighted and team final scores are shown
  * as coloured chips using the same colour coding as RoundsCard.
+ * Clicking or tapping any chain item closes the modal and selects that game.
  *
- * @param {boolean}  isOpen         Whether the modal is visible.
- * @param {Function} onClose        Callback to close the modal.
- * @param {number|string|null} gameId       The game whose chain to load.
+ * @param {boolean}            isOpen         Whether the modal is visible.
+ * @param {Function}           onClose        Callback to close the modal.
+ * @param {number|string|null} gameId         The game whose chain to load.
  * @param {number|string|null} currentGameId  ID of the game currently selected in the hub.
+ * @param {Function}           onSelectGame   Called with a game id when the user picks a chain item.
+ *                                            Logic: closes the modal and switches the hub to that game.
  * @returns {JSX.Element}
  */
-export default function RematchHistoryModal({ isOpen, onClose, gameId, currentGameId }) {
+export default function RematchHistoryModal({ isOpen, onClose, gameId, currentGameId, onSelectGame = () => {} }) {
     const [chain, setChain] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -181,13 +184,27 @@ export default function RematchHistoryModal({ isOpen, onClose, gameId, currentGa
                         {chain.map((game, index) => {
                             const isCurrent = String(game.id) === String(currentGameId);
 
+                            const handleSelect = () => {
+                                onSelectGame(game.id);
+                                onClose();
+                            };
+
                             return (
                                 <li
                                     key={game.id}
-                                    className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm transition ${
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={handleSelect}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            handleSelect();
+                                        }
+                                    }}
+                                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                                         isCurrent
                                             ? 'border-indigo-200 bg-indigo-50'
-                                            : 'border-slate-100 bg-white hover:bg-slate-50'
+                                            : 'border-slate-100 bg-white hover:bg-slate-50 active:bg-slate-100'
                                     }`}
                                 >
                                     <span
