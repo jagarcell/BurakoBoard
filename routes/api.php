@@ -21,6 +21,7 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/games/{gameId}', [GameController::class, 'show']);
     Route::get('/games/{gameId}/has-two-teams', [GameController::class, 'hasTwoTeams']);
+    Route::get('/games/{gameId}/rematch-chain', [GameController::class, 'rematchChain']);
     Route::get('/games/{gameId}/round-draft', [RoundDraftController::class, 'show']);
     Route::get('/games/{gameId}/rounds/{roundNumber}/draft', [RoundDraftController::class, 'showByRound']);
 
