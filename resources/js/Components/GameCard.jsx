@@ -9,6 +9,7 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import InvitationPopup from '@/Components/InvitationPopup';
 import Modal from '@/Components/Modal';
+import RematchHistoryModal from '@/Components/RematchHistoryModal';
 import NotificationBell from '@/Components/NotificationBell';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -61,6 +62,8 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
     const [isRematch, setIsRematch] = useState(false);
     const [rematchSourceId, setRematchSourceId] = useState(null);
+
+    const [isRematchHistoryOpen, setIsRematchHistoryOpen] = useState(false);
 
     const [latestInvitation, setLatestInvitation] = useState(null);
     const [showInvitationPopup, setShowInvitationPopup] = useState(false);
@@ -619,46 +622,70 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         <>
             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
                 <div className="relative border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.24),_transparent_38%),linear-gradient(135deg,_#f8fafc_0%,_#ffffff_56%,_#eef2ff_100%)] px-6 py-6">
-                    {selectedGame?.user_role === 'creator' && selectedGame?.status === 'finished' && !selectedGame?.has_rematch && (
-                        <button
-                            aria-label="Start a rematch of this game"
-                            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300 sm:right-6 sm:top-6"
-                            onClick={() => openRematchModal(selectedGame)}
-                            type="button"
-                        >
-                            <svg
-                                aria-hidden="true"
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                viewBox="0 0 24 24"
+                    <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 sm:top-6">
+                        {(selectedGame?.has_rematch || selectedGame?.rematch_from_game_id) && (
+                            <button
+                                aria-label="View rematch history for this game"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                onClick={() => setIsRematchHistoryOpen(true)}
+                                type="button"
                             >
-                                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            Rematch
-                        </button>
-                    )}
-                    {selectedGame?.user_role === 'creator' && selectedGame?.status !== 'finished' && (
-                        <button
-                            aria-label="Invite a viewer to this game"
-                            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-300 sm:right-6 sm:top-6"
-                            onClick={openInviteModal}
-                            type="button"
-                        >
-                            <svg
-                                aria-hidden="true"
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                viewBox="0 0 24 24"
+                                <svg
+                                    aria-hidden="true"
+                                    className="h-3.5 w-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                History
+                            </button>
+                        )}
+
+                        {selectedGame?.user_role === 'creator' && selectedGame?.status === 'finished' && !selectedGame?.has_rematch && (
+                            <button
+                                aria-label="Start a rematch of this game"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                                onClick={() => openRematchModal(selectedGame)}
+                                type="button"
                             >
-                                <path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM3 20a6 6 0 0 1 12 0v1H3v-1z" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            Invite Viewer
-                        </button>
-                    )}
+                                <svg
+                                    aria-hidden="true"
+                                    className="h-3.5 w-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                Rematch
+                            </button>
+                        )}
+
+                        {selectedGame?.user_role === 'creator' && selectedGame?.status !== 'finished' && (
+                            <button
+                                aria-label="Invite a viewer to this game"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                onClick={openInviteModal}
+                                type="button"
+                            >
+                                <svg
+                                    aria-hidden="true"
+                                    className="h-3.5 w-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM3 20a6 6 0 0 1 12 0v1H3v-1z" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                Invite Viewer
+                            </button>
+                        )}
+                    </div>
 
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                         <div className="max-w-2xl space-y-2">
@@ -865,6 +892,13 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 isAccepting={latestInvitation !== null && acceptingGameIds.has(latestInvitation.id)}
                 onAccept={handleAcceptInvite}
                 onClose={() => setShowInvitationPopup(false)}
+            />
+
+            <RematchHistoryModal
+                isOpen={isRematchHistoryOpen}
+                onClose={() => setIsRematchHistoryOpen(false)}
+                gameId={selectedGame?.id ?? null}
+                currentGameId={selectedGame?.id ?? null}
             />
 
             <Modal maxWidth="lg" onClose={closeEditModal} show={isEditModalOpen}>

@@ -2243,5 +2243,74 @@ describe('GameCard', () => {
         expect(screen.queryByRole('button', { name: /invite a viewer/i })).not.toBeInTheDocument();
     });
 
+    // -------------------------------------------------------------------------
+    // Rematch History button
+    // -------------------------------------------------------------------------
+
+    it('shows the Rematch History button when the selected game has has_rematch true', async () => {
+        const finishedCreatorWithRematch = [{
+            id: 60,
+            name: 'Finished With Rematch',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 3,
+            user_role: 'creator',
+            has_rematch: true,
+            rematch_from_game_id: null,
+        }];
+
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedCreatorWithRematch } } });
+        localStorage.setItem('burako_selected_game_id', '60');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('button', { name: /view rematch history/i });
+    });
+
+    it('shows the Rematch History button when the selected game has rematch_from_game_id set', async () => {
+        const rematchGame = [{
+            id: 61,
+            name: 'Rematch Of Previous',
+            target_points: 2000,
+            status: 'in_progress',
+            winning_team_id: null,
+            current_round_number: 0,
+            user_role: 'creator',
+            has_rematch: false,
+            rematch_from_game_id: 60,
+        }];
+
+        api.get.mockResolvedValueOnce({ data: { data: { games: rematchGame } } });
+        localStorage.setItem('burako_selected_game_id', '61');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('button', { name: /view rematch history/i });
+    });
+
+    it('does not show the Rematch History button for a plain game with no rematch links', async () => {
+        const plainGame = [{
+            id: 62,
+            name: 'Plain Game',
+            target_points: 2000,
+            status: 'in_progress',
+            winning_team_id: null,
+            current_round_number: 0,
+            user_role: 'creator',
+            has_rematch: false,
+            rematch_from_game_id: null,
+        }];
+
+        api.get.mockResolvedValueOnce({ data: { data: { games: plainGame } } });
+        localStorage.setItem('burako_selected_game_id', '62');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        expect(screen.queryByRole('button', { name: /view rematch history/i })).not.toBeInTheDocument();
+    });
+
 });
 
