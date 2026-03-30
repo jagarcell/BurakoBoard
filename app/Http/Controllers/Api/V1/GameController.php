@@ -229,6 +229,28 @@ class GameController extends Controller
     }
 
     /**
+     * Return a paginated page of earlier rounds for a game.
+     *
+     * @param  \Illuminate\Http\Request  $request  The current request (reads before_round and limit query params).
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Http\JsonResponse Paginated round list response.
+     * Logic: read before_round (default: PHP_INT_MAX so the first page returns the most recent rounds)
+     *   and limit (default 25, max 100) from the query string, delegate to the service, and return
+     *   the items and has_more flag under a descriptive key.
+     */
+    public function rounds(\Illuminate\Http\Request $request, int $gameId): JsonResponse
+    {
+        $beforeRound = max(1, (int) $request->query('before_round', PHP_INT_MAX));
+        $limit       = min(100, max(1, (int) $request->query('limit', 25)));
+
+        $page = $this->gameService->getRoundsPage($gameId, $beforeRound, $limit);
+
+        return response()->json([
+            'rounds' => $page,
+        ]);
+    }
+
+    /**
      * Return all games in the rematch chain that contains the given game.
      *
      * @param  int  $gameId  Identifier of any game in the chain.
