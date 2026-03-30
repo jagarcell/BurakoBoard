@@ -593,7 +593,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         <>
             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-45px_rgba(15,23,42,0.45)]">
                 <div className="relative border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.24),_transparent_38%),linear-gradient(135deg,_#f8fafc_0%,_#ffffff_56%,_#eef2ff_100%)] px-6 py-6">
-                    {selectedGame?.user_role === 'creator' && selectedGame?.status === 'finished' && (
+                    {selectedGame?.user_role === 'creator' && selectedGame?.status === 'finished' && !selectedGame?.has_rematch && (
                         <button
                             aria-label="Start a rematch of this game"
                             className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300 sm:right-6 sm:top-6"
