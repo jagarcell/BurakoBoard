@@ -146,6 +146,7 @@ class TeamService
      */
     private function broadcastAndReturn(int $gameId): array
     {
+        $this->gameRepository->forgetGameSummaryCache($gameId);
         $data = $this->gameRepository->getGameSummary($gameId);
         $summary = (new GameSummaryResource($data))->resolve();
 

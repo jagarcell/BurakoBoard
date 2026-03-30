@@ -334,46 +334,127 @@ class GameRepository
     }
 
     /**
+     * Invalidate the cached game summary for a game after any write operation.
+     *
+     * @param  int  $gameId  Identifier of the game whose cache entry should be removed.
+     * @return void
+     * Logic: remove the key written by getGameSummary so the next call re-queries the database
+     *   and caches the fresh result. Must be called by every broadcastAndReturn path before
+     *   getGameSummary is invoked.
+     */
+    public function forgetGameSummaryCache(int $gameId): void
+    {
+        Cache::forget("game_summary:{$gameId}");
+    }
+
+    /**
      * Build a raw game summary data object containing the query results needed for presentation.
      *
      * @param  int  $gameId  Identifier of the game.
      * @return \App\Data\GameSummaryData Raw query results wrapped in a value object for the resource layer.
-     * Logic: execute three focused DB queries — game_team JOIN teams, team_player JOIN players LEFT JOIN
-     *   seats, and round_scores JOIN rounds JOIN teams — and wrap results in GameSummaryData. All array
-     * assembly and domain logic is delegated to GameSummaryResource and RoundRoleCalculator.
+     * Logic:
+     *   1. Wrap the entire assembly in a short-lived cache keyed by game_id (TTL 10 s) to eliminate
+     *      the duplicate fetch that occurs when both the HTTP response and the WebSocket broadcast
+     *      need the same data within a single request cycle.
+     *   2. Count total rounds first; then limit the round_scores query to the last N rounds
+     *      (config game.summary_round_limit, default 50) so the query stays O(N) regardless of
+     *      game history length. The total count is forwarded to GameSummaryData so the resource
+     *      layer can publish has_more_rounds without an additional query.
+     *   3. All array assembly and domain logic is delegated to GameSummaryResource and
+     *      RoundRoleCalculator.
      */
     public function getGameSummary(int $gameId): GameSummaryData
     {
-        $game = $this->findGameOrFail($gameId);
+        return Cache::remember("game_summary:{$gameId}", 10, function () use ($gameId): GameSummaryData {
+            $game = $this->findGameOrFail($gameId);
 
-        $teams = DB::table('game_team')
-            ->join('teams', 'teams.id', '=', 'game_team.team_id')
-            ->where('game_team.game_id', $gameId)
-            ->orderBy('teams.id')
-            ->get(['teams.id', 'teams.name', 'game_team.current_score']);
+            $teams = DB::table('game_team')
+                ->join('teams', 'teams.id', '=', 'game_team.team_id')
+                ->where('game_team.game_id', $gameId)
+                ->orderBy('teams.id')
+                ->get(['teams.id', 'teams.name', 'game_team.current_score']);
 
-        $playersByTeam = DB::table('team_player')
-            ->join('players', 'players.id', '=', 'team_player.player_id')
-            ->leftJoin('game_player_seat', function ($join) use ($gameId): void {
-                $join->on('game_player_seat.player_id', '=', 'players.id')
-                    ->where('game_player_seat.game_id', '=', $gameId);
-            })
-            ->whereIn('team_player.team_id', $teams->pluck('id')->all())
-            ->orderByRaw('COALESCE(game_player_seat.seat_number, 999999)')
-            ->orderBy('players.id')
-            ->get([
-                'team_player.team_id',
-                'players.id as player_id',
-                'players.user_id',
-                'players.display_name',
-                'game_player_seat.seat_number',
-            ])
-            ->groupBy('team_id');
+            $playersByTeam = DB::table('team_player')
+                ->join('players', 'players.id', '=', 'team_player.player_id')
+                ->leftJoin('game_player_seat', function ($join) use ($gameId): void {
+                    $join->on('game_player_seat.player_id', '=', 'players.id')
+                        ->where('game_player_seat.game_id', '=', $gameId);
+                })
+                ->whereIn('team_player.team_id', $teams->pluck('id')->all())
+                ->orderByRaw('COALESCE(game_player_seat.seat_number, 999999)')
+                ->orderBy('players.id')
+                ->get([
+                    'team_player.team_id',
+                    'players.id as player_id',
+                    'players.user_id',
+                    'players.display_name',
+                    'game_player_seat.seat_number',
+                ])
+                ->groupBy('team_id');
 
-        $roundRows = DB::table('round_scores')
+            $limit = (int) config('game.summary_round_limit', 50);
+
+            $totalRounds = DB::table('rounds')
+                ->where('game_id', $gameId)
+                ->count();
+
+            $roundIds = DB::table('rounds')
+                ->select('id')
+                ->where('game_id', $gameId)
+                ->orderByDesc('round_number')
+                ->limit($limit)
+                ->pluck('id')
+                ->all();
+
+            $roundRows = DB::table('round_scores')
+                ->join('rounds', 'rounds.id', '=', 'round_scores.round_id')
+                ->join('teams', 'teams.id', '=', 'round_scores.team_id')
+                ->whereIn('round_scores.round_id', $roundIds)
+                ->orderBy('rounds.round_number')
+                ->orderBy('teams.id')
+                ->get([
+                    'rounds.round_number',
+                    'round_scores.team_id',
+                    'teams.name as team_name',
+                    'round_scores.points',
+                ]);
+
+            return new GameSummaryData($game, $teams, $playersByTeam, $roundRows, $totalRounds);
+        });
+    }
+
+    /**
+     * Fetch a page of round-score rows strictly before a given round number.
+     *
+     * @param  int  $gameId       Identifier of the game.
+     * @param  int  $beforeRound  Return only rounds with round_number < this value.
+     * @param  int  $limit        Maximum number of rounds to return.
+     * @return array{items: list<array{round_number: int, scores: list<array{team_id: int, team_name: string, points: int}>}>, has_more: bool}
+     * Logic: select the last $limit rounds whose round_number is strictly less than $beforeRound,
+     *   ordered descending to get the most-recent batch, then reverse to ascending order for
+     *   consistent client rendering. A has_more flag is derived by checking whether the total
+     *   older-round count exceeds the requested limit.
+     */
+    public function getRoundsPage(int $gameId, int $beforeRound, int $limit): array
+    {
+        $totalOlder = DB::table('rounds')
+            ->where('game_id', $gameId)
+            ->where('round_number', '<', $beforeRound)
+            ->count();
+
+        $roundIds = DB::table('rounds')
+            ->select('id')
+            ->where('game_id', $gameId)
+            ->where('round_number', '<', $beforeRound)
+            ->orderByDesc('round_number')
+            ->limit($limit)
+            ->pluck('id')
+            ->all();
+
+        $rows = DB::table('round_scores')
             ->join('rounds', 'rounds.id', '=', 'round_scores.round_id')
             ->join('teams', 'teams.id', '=', 'round_scores.team_id')
-            ->where('rounds.game_id', $gameId)
+            ->whereIn('round_scores.round_id', $roundIds)
             ->orderBy('rounds.round_number')
             ->orderBy('teams.id')
             ->get([
@@ -383,6 +464,22 @@ class GameRepository
                 'round_scores.points',
             ]);
 
-        return new GameSummaryData($game, $teams, $playersByTeam, $roundRows);
+        $items = $rows
+            ->groupBy('round_number')
+            ->map(fn ($scores, $roundNumber): array => [
+                'round_number' => (int) $roundNumber,
+                'scores'       => $scores->map(fn ($s): array => [
+                    'team_id'   => (int) $s->team_id,
+                    'team_name' => $s->team_name,
+                    'points'    => (int) $s->points,
+                ])->values()->all(),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'items'    => $items,
+            'has_more' => $totalOlder > $limit,
+        ];
     }
 }
