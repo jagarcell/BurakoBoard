@@ -21,7 +21,7 @@ const defaultForm = {
 
 const STORAGE_KEY = 'burako_selected_game_id';
 
-export default function GameCard({ onGameSelect = () => {}, preselectedGameId = null }) {
+export default function GameCard({ onGameSelect = () => {}, preselectedGameId = null, selectedGameStatus = null }) {
     const { auth: { user }, hasPendingInvitations } = usePage().props;
     const [games, setGames] = useState([]);
     const [selectedGameId, setSelectedGameId] = useState(
@@ -172,6 +172,21 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     // selectedGameId is the only dependency that drives channel (re)subscription.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedGameId]);
+
+    // When Dashboard's authoritative game state marks the selected game as finished
+    // (e.g. because the current user just recorded the final round), mirror that
+    // status change into the local games array so the rematch button appears
+    // immediately without requiring a page refresh.
+    useEffect(() => {
+        if (! selectedGameStatus) return;
+        const { id, status } = selectedGameStatus;
+
+        setGames((current) =>
+            current.map((g) =>
+                String(g.id) === String(id) ? { ...g, status } : g,
+            ),
+        );
+    }, [selectedGameStatus?.id, selectedGameStatus?.status]);
 
     useEffect(() => {
         setAcceptInviteError('');
