@@ -136,6 +136,10 @@ class RoundServiceTest extends TestCase
             ->once()
             ->with($game, 3);
 
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)

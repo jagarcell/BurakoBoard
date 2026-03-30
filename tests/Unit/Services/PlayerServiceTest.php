@@ -152,6 +152,10 @@ class PlayerServiceTest extends TestCase
             ->once()
             ->with(1, 2, 10);
 
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
@@ -207,6 +211,10 @@ class PlayerServiceTest extends TestCase
             ->once()
             ->with(1, 2, 10);
 
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
@@ -259,6 +267,10 @@ class PlayerServiceTest extends TestCase
             ->once()
             ->with(2, 3);
 
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
@@ -302,6 +314,10 @@ class PlayerServiceTest extends TestCase
         $this->seatRepository->shouldReceive('swapPlayerSeats')
             ->once()
             ->with(1, 2, 3);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
 
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()

@@ -103,6 +103,10 @@ class TeamServiceTest extends TestCase
             ->once()
             ->with(1, 5);
 
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
@@ -192,6 +196,10 @@ class TeamServiceTest extends TestCase
             ->once()
             ->with(1);
 
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
             ->with(1)
@@ -243,6 +251,10 @@ class TeamServiceTest extends TestCase
         $this->teamRepository->shouldReceive('updateTeam')
             ->once()
             ->with($team, ['name' => 'New']);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
 
         $this->gameRepository->shouldReceive('getGameSummary')
             ->once()
