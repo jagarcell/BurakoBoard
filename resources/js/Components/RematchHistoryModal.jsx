@@ -3,6 +3,54 @@ import { useEffect, useState } from 'react';
 import Modal from '@/Components/Modal';
 import SecondaryButton from '@/Components/SecondaryButton';
 
+/**
+ * Derives the Tailwind chip colour for a score using the same logic as RoundsCard:
+ * negative → red, zero → bisque/green, lower-of-two-positives → yellow, otherwise → green.
+ *
+ * @param {number}      pts      This team's current score.
+ * @param {number|null} otherPts The other team's score, or null when unavailable.
+ * @returns {string} Tailwind class string.
+ */
+function scoreChipCls(pts, otherPts) {
+    if (pts < 0) return 'bg-red-100 text-red-800';
+    if (pts === 0) return 'bg-[bisque] text-green-700';
+    const bothPos = otherPts !== null && otherPts > 0;
+    if (bothPos && pts < otherPts) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-green-100 text-green-800';
+}
+
+/**
+ * Renders score chips for each team in a chain game item.
+ * Uses the same colour coding and pill shape as the round-score chips in RoundsCard.
+ *
+ * @param {Array<{team_id: number, team_name: string, current_score: number}>} teamScores
+ * @returns {JSX.Element|null}
+ */
+function TeamScoreChips({ teamScores }) {
+    if (!teamScores || teamScores.length === 0) return null;
+
+    const other = teamScores.length === 2 ? teamScores : null;
+
+    return (
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {teamScores.map((ts) => {
+                const pts = ts.current_score;
+                const otherTs = other ? other.find((t) => t.team_id !== ts.team_id) : null;
+                const cls = scoreChipCls(pts, otherTs ? otherTs.current_score : null);
+
+                return (
+                    <span
+                        key={ts.team_id}
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${cls}`}
+                    >
+                        {ts.team_name}: {pts}
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
 const STATUS_LABELS = {
     in_progress: 'In Progress',
     finished: 'Finished',
@@ -34,7 +82,8 @@ function StatusBadge({ status }) {
  * Renders the rematch history chain inside a Modal.
  * Fetches GET /v1/games/{gameId}/rematch-chain on open and displays each game
  * in the chain ordered from the root game to the latest rematch.
- * The currently selected game is highlighted.
+ * The currently selected game is highlighted and team final scores are shown
+ * as coloured chips using the same colour coding as RoundsCard.
  *
  * @param {boolean}  isOpen         Whether the modal is visible.
  * @param {Function} onClose        Callback to close the modal.
@@ -159,6 +208,7 @@ export default function RematchHistoryModal({ isOpen, onClose, gameId, currentGa
                                         <span className="text-xs text-slate-400">
                                             {game.target_points} pts
                                         </span>
+                                        <TeamScoreChips teamScores={game.team_scores ?? []} />
                                     </span>
 
                                     <StatusBadge status={game.status} />
