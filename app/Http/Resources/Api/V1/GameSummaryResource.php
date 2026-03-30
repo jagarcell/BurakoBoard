@@ -79,9 +79,11 @@ class GameSummaryResource extends JsonResource
                 'current_round_number'          => $data->game->current_round_number,
                 'initial_shuffler_seat_number'  => $data->game->initial_shuffler_seat_number,
             ],
-            'teams'       => $teamPayload,
-            'rounds'      => $rounds,
-            'round_roles' => $roundRoles,
+            'teams'            => $teamPayload,
+            'rounds'           => $rounds,
+            'round_roles'      => $roundRoles,
+            'total_rounds'     => $data->totalRounds,
+            'has_more_rounds'  => count($rounds) < $data->totalRounds,
         ];
     }
 }

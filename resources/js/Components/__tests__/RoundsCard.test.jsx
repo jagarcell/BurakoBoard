@@ -2460,5 +2460,160 @@ describe('RoundsCard', () => {
         });
     });
 
+    // ─── Load Earlier Rounds ──────────────────────────────────────────────────
+
+    describe('load earlier rounds', () => {
+        it('shows "Load earlier rounds" button when initialHasMoreRounds is true', async () => {
+            render(
+                <RoundsCard
+                    initialTeams={[teamA, teamB]}
+                    initialRounds={[round1]}
+                    initialHasMoreRounds={true}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            expect(await screen.findByRole('button', { name: /load earlier rounds/i })).toBeInTheDocument();
+        });
+
+        it('does not show "Load earlier rounds" button when initialHasMoreRounds is false', async () => {
+            render(
+                <RoundsCard
+                    initialTeams={[teamA, teamB]}
+                    initialRounds={[round1]}
+                    initialHasMoreRounds={false}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            // Consume the base-elements GET so no pending state updates remain.
+            await screen.findAllByText('Team Alpha');
+            expect(screen.queryByRole('button', { name: /load earlier rounds/i })).not.toBeInTheDocument();
+        });
+
+        it('calls GET /games/{id}/rounds with before_round and limit params when button is clicked', async () => {
+            const earlierRound = {
+                round_number: 0,
+                scores: [
+                    { team_id: 10, team_name: 'Team Alpha', points: 50 },
+                    { team_id: 11, team_name: 'Team Beta', points: 70 },
+                ],
+            };
+
+            // First GET is base-elements; second is the rounds pagination call.
+            api.get.mockImplementation((url) => {
+                if (url === '/base-elements') return Promise.resolve(elementsResponse);
+                if (url.includes('/rounds')) return Promise.resolve({
+                    data: { data: { rounds: { items: [earlierRound], has_more: false } } },
+                });
+                return Promise.reject(new Error(`Unexpected GET: ${url}`));
+            });
+
+            render(
+                <RoundsCard
+                    initialTeams={[teamA, teamB]}
+                    initialRounds={[round1]}
+                    initialHasMoreRounds={true}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            const btn = await screen.findByRole('button', { name: /load earlier rounds/i });
+            await userEvent.click(btn);
+
+            await waitFor(() => {
+                const roundsCalls = api.get.mock.calls.filter(([url]) => url.includes('/rounds'));
+                expect(roundsCalls).toHaveLength(1);
+                expect(roundsCalls[0][0]).toBe(`/games/${selectedGame.id}/rounds`);
+                expect(roundsCalls[0][1].params.before_round).toBe(1); // earliest loaded round_number
+                expect(roundsCalls[0][1].params.limit).toBe(25);
+            });
+        });
+
+        it('prepends fetched rounds to the history table', async () => {
+            const round0 = {
+                round_number: 0,
+                scores: [
+                    { team_id: 10, team_name: 'Team Alpha', points: 50 },
+                    { team_id: 11, team_name: 'Team Beta', points: 70 },
+                ],
+            };
+
+            api.get.mockImplementation((url) => {
+                if (url === '/base-elements') return Promise.resolve(elementsResponse);
+                return Promise.resolve({
+                    data: { data: { rounds: { items: [round0], has_more: false } } },
+                });
+            });
+
+            render(
+                <RoundsCard
+                    initialTeams={[teamA, teamB]}
+                    initialRounds={[round1]}
+                    initialHasMoreRounds={true}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await userEvent.click(await screen.findByRole('button', { name: /load earlier rounds/i }));
+
+            // Round 0 is prepended; round 1 remains. Both appear.
+            await waitFor(() => {
+                const rows = screen.getAllByRole('row');
+                const rowTexts = rows.map((r) => r.textContent);
+                expect(rowTexts.some((t) => t.includes('0'))).toBe(true);
+                expect(rowTexts.some((t) => t.includes('1'))).toBe(true);
+            });
+        });
+
+        it('hides the "Load earlier rounds" button after has_more becomes false', async () => {
+            api.get.mockImplementation((url) => {
+                if (url === '/base-elements') return Promise.resolve(elementsResponse);
+                return Promise.resolve({
+                    data: { data: { rounds: { items: [], has_more: false } } },
+                });
+            });
+
+            render(
+                <RoundsCard
+                    initialTeams={[teamA, teamB]}
+                    initialRounds={[round1]}
+                    initialHasMoreRounds={true}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await userEvent.click(await screen.findByRole('button', { name: /load earlier rounds/i }));
+
+            await waitFor(() => {
+                expect(screen.queryByRole('button', { name: /load earlier rounds/i })).not.toBeInTheDocument();
+            });
+        });
+
+        it('keeps existing rounds intact on API error', async () => {
+            api.get.mockImplementation((url) => {
+                if (url === '/base-elements') return Promise.resolve(elementsResponse);
+                return Promise.reject(new Error('Network error'));
+            });
+
+            render(
+                <RoundsCard
+                    initialTeams={[teamA, teamB]}
+                    initialRounds={[round1]}
+                    initialHasMoreRounds={true}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await userEvent.click(await screen.findByRole('button', { name: /load earlier rounds/i }));
+
+            // Button should still be present and round 1 still rendered.
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /load earlier rounds/i })).toBeInTheDocument();
+            });
+            expect(screen.getByText('1')).toBeInTheDocument();
+        });
+    });
+
 });
 

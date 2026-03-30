@@ -254,6 +254,23 @@ class GameService
     }
 
     /**
+     * Return a page of earlier rounds for a game, strictly before a given round number.
+     *
+     * @param  int  $gameId       Identifier of the game.
+     * @param  int  $beforeRound  Return only rounds with round_number < this value.
+     * @param  int  $limit        Maximum number of rounds to return (default 25).
+     * @return array{items: list<mixed>, has_more: bool} Paginated round history page.
+     * Logic: validate the game exists, then delegate paged round retrieval to the repository
+     *   so the controller can serve older rounds without loading the full game summary.
+     */
+    public function getRoundsPage(int $gameId, int $beforeRound, int $limit = 25): array
+    {
+        $this->gameRepository->findGameOrFail($gameId);
+
+        return $this->gameRepository->getRoundsPage($gameId, $beforeRound, $limit);
+    }
+
+    /**
      * Return all games in the rematch chain that contains the given game.
      *
      * @param  int  $gameId  Identifier of any game in the chain.
