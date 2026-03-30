@@ -19,6 +19,10 @@ const chainGames = [
         winning_team_id: 1,
         current_round_number: 4,
         rematch_from_game_id: null,
+        team_scores: [
+            { team_id: 1, team_name: 'Alpha', current_score: 2100 },
+            { team_id: 2, team_name: 'Beta', current_score: 1800 },
+        ],
     },
     {
         id: 2,
@@ -28,6 +32,10 @@ const chainGames = [
         winning_team_id: 2,
         current_round_number: 3,
         rematch_from_game_id: 1,
+        team_scores: [
+            { team_id: 1, team_name: 'Alpha', current_score: 1500 },
+            { team_id: 2, team_name: 'Beta', current_score: 2200 },
+        ],
     },
     {
         id: 3,
@@ -37,6 +45,10 @@ const chainGames = [
         winning_team_id: null,
         current_round_number: 1,
         rematch_from_game_id: 2,
+        team_scores: [
+            { team_id: 1, team_name: 'Alpha', current_score: 300 },
+            { team_id: 2, team_name: 'Beta', current_score: 600 },
+        ],
     },
 ];
 
@@ -238,5 +250,70 @@ describe('RematchHistoryModal', () => {
         );
 
         await waitFor(() => expect(api.get).toHaveBeenNthCalledWith(2, '/games/2/rematch-chain'));
+    });
+
+    // -------------------------------------------------------------------------
+    // Team score chips
+    // -------------------------------------------------------------------------
+
+    it('renders score chips for each team in a finished chain game', async () => {
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: chainGames } },
+        });
+
+        render(
+            <RematchHistoryModal
+                isOpen={true}
+                onClose={vi.fn()}
+                gameId={1}
+                currentGameId={3}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText('First Game')).toBeInTheDocument());
+
+        // chainGames[0] has Alpha: 2100, Beta: 1800
+        expect(screen.getByText('Alpha: 2100')).toBeInTheDocument();
+        expect(screen.getByText('Beta: 1800')).toBeInTheDocument();
+    });
+
+    it('applies yellow chip to the lower of two positive team scores', async () => {
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: [chainGames[0]] } },
+        });
+
+        render(
+            <RematchHistoryModal
+                isOpen={true}
+                onClose={vi.fn()}
+                gameId={1}
+                currentGameId={1}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText('Beta: 1800')).toBeInTheDocument());
+
+        // Beta (1800) is the lower of two positive scores → yellow chip
+        expect(screen.getByText('Beta: 1800')).toHaveClass('bg-yellow-100');
+    });
+
+    it('applies green chip to the higher of two positive team scores', async () => {
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: [chainGames[0]] } },
+        });
+
+        render(
+            <RematchHistoryModal
+                isOpen={true}
+                onClose={vi.fn()}
+                gameId={1}
+                currentGameId={1}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText('Alpha: 2100')).toBeInTheDocument());
+
+        // Alpha (2100) is the higher of two positive scores → green chip
+        expect(screen.getByText('Alpha: 2100')).toHaveClass('bg-green-100');
     });
 });
