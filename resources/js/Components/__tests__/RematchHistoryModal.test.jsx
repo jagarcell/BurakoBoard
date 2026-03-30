@@ -316,4 +316,62 @@ describe('RematchHistoryModal', () => {
         // Alpha (2100) is the higher of two positive scores → green chip
         expect(screen.getByText('Alpha: 2100')).toHaveClass('bg-green-100');
     });
+
+    // -------------------------------------------------------------------------
+    // Clickable chain items
+    // -------------------------------------------------------------------------
+
+    it('calls onSelectGame with the game id and calls onClose when a chain item is clicked', async () => {
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: chainGames } },
+        });
+
+        const onSelectGame = vi.fn();
+        const onClose = vi.fn();
+
+        render(
+            <RematchHistoryModal
+                isOpen={true}
+                onClose={onClose}
+                gameId={1}
+                currentGameId={3}
+                onSelectGame={onSelectGame}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText('Rematch One')).toBeInTheDocument());
+
+        await userEvent.click(screen.getByText('Rematch One').closest('li'));
+
+        expect(onSelectGame).toHaveBeenCalledWith(2);
+        expect(onClose).toHaveBeenCalled();
+    });
+
+    it('calls onSelectGame and onClose when Enter is pressed on a chain item', async () => {
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: chainGames } },
+        });
+
+        const onSelectGame = vi.fn();
+        const onClose = vi.fn();
+
+        render(
+            <RematchHistoryModal
+                isOpen={true}
+                onClose={onClose}
+                gameId={1}
+                currentGameId={3}
+                onSelectGame={onSelectGame}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText('First Game')).toBeInTheDocument());
+
+        const firstItem = screen.getByText('First Game').closest('li');
+        firstItem.focus();
+        await userEvent.keyboard('{Enter}');
+
+        expect(onSelectGame).toHaveBeenCalledWith(1);
+        expect(onClose).toHaveBeenCalled();
+    });
 });
