@@ -1826,6 +1826,28 @@ describe('GameCard', () => {
         expect(screen.queryByRole('button', { name: /start a rematch/i })).not.toBeInTheDocument();
     });
 
+    it('does not show Rematch button when finished creator game already has a rematch', async () => {
+        const finishedGameWithRematch = [{
+            id: 27,
+            name: 'Already Rematched Game',
+            target_points: 2000,
+            status: 'finished',
+            winning_team_id: 1,
+            current_round_number: 4,
+            user_role: 'creator',
+            has_rematch: true,
+        }];
+
+        api.get.mockResolvedValueOnce({ data: { data: { games: finishedGameWithRematch } } });
+        localStorage.setItem('burako_selected_game_id', '27');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('combobox');
+
+        expect(screen.queryByRole('button', { name: /start a rematch/i })).not.toBeInTheDocument();
+    });
+
     it('opens the rematch modal with pre-populated name and target points', async () => {
         const finishedCreatorGame = [{
             id: 25,
@@ -2137,6 +2159,47 @@ describe('GameCard', () => {
             ([ch]) => ch.startsWith('game.'),
         );
         expect(gameChannelCalls).toHaveLength(0);
+    });
+
+    // -------------------------------------------------------------------------
+    // selectedGameStatus prop — rematch button appears without page refresh
+    // -------------------------------------------------------------------------
+
+    it('shows the Rematch button immediately when selectedGameStatus transitions a creator game to finished', async () => {
+        const inProgressCreatorGame = [{
+            id: 50,
+            name: 'Live Game',
+            target_points: 2000,
+            status: 'in_progress',
+            winning_team_id: null,
+            current_round_number: 0,
+            user_role: 'creator',
+            has_rematch: false,
+        }];
+
+        api.get.mockResolvedValueOnce({ data: { data: { games: inProgressCreatorGame } } });
+        localStorage.setItem('burako_selected_game_id', '50');
+
+        const { rerender } = render(
+            <GameCard
+                onGameSelect={vi.fn()}
+                selectedGameStatus={{ id: 50, status: 'in_progress' }}
+            />,
+        );
+
+        await screen.findByRole('button', { name: /invite a viewer/i });
+        expect(screen.queryByRole('button', { name: /start a rematch/i })).not.toBeInTheDocument();
+
+        // Simulate Dashboard pushing the 'finished' status (e.g. after recording the final round)
+        rerender(
+            <GameCard
+                onGameSelect={vi.fn()}
+                selectedGameStatus={{ id: 50, status: 'finished' }}
+            />,
+        );
+
+        await screen.findByRole('button', { name: /start a rematch/i });
+        expect(screen.queryByRole('button', { name: /invite a viewer/i })).not.toBeInTheDocument();
     });
 
 });
