@@ -75,6 +75,7 @@ class GameSummaryResource extends JsonResource
                 'target_points'                 => $data->game->target_points,
                 'status'                        => $data->game->status,
                 'winning_team_id'               => $data->game->winning_team_id,
+                'rematch_from_game_id'          => $data->game->rematch_from_game_id,
                 'current_round_number'          => $data->game->current_round_number,
                 'initial_shuffler_seat_number'  => $data->game->initial_shuffler_seat_number,
             ],

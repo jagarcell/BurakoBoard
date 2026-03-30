@@ -227,4 +227,21 @@ class GameController extends Controller
             'game' => new GameListItemResource($game),
         ]);
     }
+
+    /**
+     * Return all games in the rematch chain that contains the given game.
+     *
+     * @param  int  $gameId  Identifier of any game in the chain.
+     * @return \Illuminate\Http\JsonResponse Ordered list of chain items from the root game to the latest rematch.
+     * Logic: resolve the full chain from the service layer and return it under a descriptive
+     *   named key so the frontend can render the rematch history list without additional requests.
+     */
+    public function rematchChain(int $gameId): JsonResponse
+    {
+        $chain = $this->gameService->getRematchChain($gameId);
+
+        return response()->json([
+            'games' => $chain,
+        ]);
+    }
 }

@@ -6,6 +6,7 @@ use App\Enums\GameStatus;
 use App\Enums\GameUserRole;
 use App\Events\GameDeleted;
 use App\Http\Resources\Api\V1\GameSummaryResource;
+use App\Http\Resources\Api\V1\RematchChainItemResource;
 use App\Models\Game;
 use App\Models\User;
 use App\Repositories\GameRepository;
@@ -211,6 +212,7 @@ class GameService
                     'target_points'                => (int) $payload['target_points'],
                     'status'                       => GameStatus::InProgress,
                     'winning_team_id'              => null,
+                    'rematch_from_game_id'         => $sourceGameId,
                     'current_round_number'         => 0,
                     'initial_shuffler_seat_number' => null,
                 ]);
@@ -249,5 +251,22 @@ class GameService
         $this->invitationService->sendRematchInvitations($sourceGameId, $newGameId, $user);
 
         return (new GameSummaryResource($this->gameRepository->getGameSummary($newGameId)))->resolve();
+    }
+
+    /**
+     * Return all games in the rematch chain that contains the given game.
+     *
+     * @param  int  $gameId  Identifier of any game in the chain.
+     * @return array<string, mixed> Ordered list of chain items from the root game to the latest rematch.
+     * Logic: delegate collection of the full chain to the repository, then wrap each game row
+     *   in a RematchChainItemResource so the response shape is consistent and predictable.
+     */
+    public function getRematchChain(int $gameId): array
+    {
+        $this->gameRepository->findGameOrFail($gameId);
+
+        $games = $this->gameRepository->getRematchChain($gameId);
+
+        return RematchChainItemResource::collection($games)->resolve();
     }
 }

@@ -162,4 +162,80 @@ class GameIndexTest extends TestCase
             ->assertOk()
             ->assertJsonCount(0, 'data.games');
     }
+
+    /**
+     * Ensure has_rematch is false when no other game references the game via rematch_from_game_id.
+     *
+     * @return void Verifies that a finished game without a successor has has_rematch = false.
+     * Logic: create a finished game for the user with no other game pointing back to it, and assert
+     *   the response carries has_rematch: false so the frontend shows the rematch button.
+     */
+    public function test_games_index_has_rematch_is_false_when_no_successor_exists(): void
+    {
+        $user = User::factory()->create();
+
+        $game = Game::query()->create([
+            'name'                 => 'Finished Game',
+            'target_points'        => 2000,
+            'status'               => 'finished',
+            'winning_team_id'      => null,
+            'current_round_number' => 5,
+        ]);
+
+        DB::table('game_user')->insert([
+            'game_id'    => $game->id,
+            'user_id'    => $user->id,
+            'role'       => 'creator',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($user)->getJson('/api/v1/games')
+            ->assertOk()
+            ->assertJsonPath('data.games.0.has_rematch', false);
+    }
+
+    /**
+     * Ensure has_rematch is true when another game references the game via rematch_from_game_id.
+     *
+     * @return void Verifies that a finished game whose id is referenced as rematch_from_game_id
+     *   by another game has has_rematch = true, suppressing the rematch button in the frontend.
+     * Logic: create a source game and a successor game with rematch_from_game_id pointing to the
+     *   source, then assert the source game's has_rematch is true while the successor's is false.
+     */
+    public function test_games_index_has_rematch_is_true_when_successor_exists(): void
+    {
+        $user = User::factory()->create();
+
+        $sourceGame = Game::query()->create([
+            'name'                 => 'Original Game',
+            'target_points'        => 2000,
+            'status'               => 'finished',
+            'winning_team_id'      => null,
+            'current_round_number' => 4,
+        ]);
+
+        $rematchGame = Game::query()->create([
+            'name'                 => 'Rematch Game',
+            'target_points'        => 2000,
+            'status'               => 'in_progress',
+            'winning_team_id'      => null,
+            'current_round_number' => 0,
+            'rematch_from_game_id' => $sourceGame->id,
+        ]);
+
+        $now = now();
+        DB::table('game_user')->insert([
+            ['game_id' => $sourceGame->id,  'user_id' => $user->id, 'role' => 'creator', 'created_at' => $now, 'updated_at' => $now],
+            ['game_id' => $rematchGame->id, 'user_id' => $user->id, 'role' => 'creator', 'created_at' => $now, 'updated_at' => $now],
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/v1/games');
+
+        $response->assertOk();
+
+        // Games are ordered newest-first, so rematchGame is index 0, sourceGame is index 1.
+        $response->assertJsonPath('data.games.0.has_rematch', false);
+        $response->assertJsonPath('data.games.1.has_rematch', true);
+    }
 }

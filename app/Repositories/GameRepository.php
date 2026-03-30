@@ -45,7 +45,9 @@ class GameRepository
      * @return \Illuminate\Support\Collection<int, \App\Models\Game> Games the user has access to (excluding pending invitations), ordered from newest to oldest.
      * Logic: join the game_user pivot to filter to only the games the given user is enrolled in,
      *   exclude rows where the user's role is still pending_invitee, and surface the user's role
-     *   for each game as the `user_role` attribute.
+     *   for each game as the `user_role` attribute. A correlated EXISTS subquery populates
+     *   `has_rematch` so the frontend can suppress the rematch button when a successor game already
+     *   exists for a finished game.
      */
     public function getGameList(int $userId): Collection
     {
@@ -59,8 +61,10 @@ class GameRepository
                 'games.target_points',
                 'games.status',
                 'games.winning_team_id',
+                'games.rematch_from_game_id',
                 'games.current_round_number',
                 'game_user.role as user_role',
+                DB::raw('EXISTS(SELECT 1 FROM games AS g2 WHERE g2.rematch_from_game_id = games.id) AS has_rematch'),
             ])
             ->orderByDesc('games.id')
             ->get();
@@ -188,6 +192,7 @@ class GameRepository
                 'games.target_points',
                 'games.status',
                 'games.winning_team_id',
+                'games.rematch_from_game_id',
                 'games.current_round_number',
                 'game_user.role as user_role',
             ])
@@ -240,6 +245,92 @@ class GameRepository
                 ->orderBy('id')
                 ->get()
         );
+    }
+
+    /**
+     * Collect all games that belong to the same rematch chain as the given game.
+     *
+     * @param  int  $gameId  Identifier of any game in the chain.
+     * @return \Illuminate\Support\Collection<int, \App\Models\Game> All games in the chain ordered by id ascending.
+     * Logic:
+     *   1. Walk the rematch_from_game_id pointer upward from the given game until a root
+     *      game with no parent is reached, collecting the root's id.
+     *   2. From the root, collect all descendants by following the rematch_from_game_id FK
+     *      downward using a recursive CTE so a single query retrieves the entire chain.
+     *   3. Hydrate each row as a lightweight Game model and attach a team_scores array
+     *      (each entry: team_id, team_name, current_score) fetched via a join on game_team
+     *      and teams so the presenter layer can render per-team final scores without an
+     *      additional round-trip.
+     */
+    public function getRematchChain(int $gameId): Collection
+    {
+        // Walk up to the root game id using individual lookups (chain is typically short).
+        $rootId = $gameId;
+        $visited = [];
+
+        while (true) {
+            if (in_array($rootId, $visited, true)) {
+                break; // Guard against circular references.
+            }
+
+            $visited[] = $rootId;
+
+            $parentId = DB::table('games')
+                ->where('id', $rootId)
+                ->value('rematch_from_game_id');
+
+            if ($parentId === null) {
+                break;
+            }
+
+            $rootId = (int) $parentId;
+        }
+
+        // Fetch all descendants of the root (inclusive) via recursive CTE.
+        $rows = DB::select(
+            "WITH RECURSIVE chain AS (
+                SELECT id, name, target_points, status, winning_team_id,
+                       rematch_from_game_id, current_round_number
+                FROM games
+                WHERE id = ?
+                UNION ALL
+                SELECT g.id, g.name, g.target_points, g.status, g.winning_team_id,
+                       g.rematch_from_game_id, g.current_round_number
+                FROM games g
+                INNER JOIN chain c ON g.rematch_from_game_id = c.id
+            )
+            SELECT * FROM chain ORDER BY id ASC",
+            [$rootId]
+        );
+
+        // Batch-load team scores for all collected games in a single query.
+        $gameIds = collect($rows)->pluck('id')->all();
+
+        $teamScoresByGame = DB::table('game_team')
+            ->join('teams', 'teams.id', '=', 'game_team.team_id')
+            ->whereIn('game_team.game_id', $gameIds)
+            ->select([
+                'game_team.game_id',
+                'game_team.team_id',
+                'teams.name as team_name',
+                'game_team.current_score',
+            ])
+            ->get()
+            ->groupBy('game_id');
+
+        return collect($rows)->map(function (object $row) use ($teamScoresByGame): Game {
+            $game = new Game();
+            $game->id                   = $row->id;
+            $game->name                 = $row->name;
+            $game->target_points        = $row->target_points;
+            $game->status               = $row->status;
+            $game->winning_team_id      = $row->winning_team_id;
+            $game->rematch_from_game_id = $row->rematch_from_game_id;
+            $game->current_round_number = $row->current_round_number;
+            $game->team_scores          = ($teamScoresByGame->get($row->id) ?? collect())->values()->all();
+
+            return $game;
+        });
     }
 
     /**

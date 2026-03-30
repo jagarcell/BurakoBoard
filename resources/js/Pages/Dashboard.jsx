@@ -150,7 +150,11 @@ export default function Dashboard() {
 
             <div className="bg-slate-100 py-12">
                 <div className="mx-auto max-w-6xl space-y-6 px-4 sm:px-6 lg:px-8">
-                    <GameCard onGameSelect={setSelectedGame} preselectedGameId={preselectedGameId} />
+                    <GameCard
+                        onGameSelect={setSelectedGame}
+                        preselectedGameId={preselectedGameId}
+                        selectedGameStatus={selectedGame ? { id: selectedGame.id, status: selectedGame.status } : null}
+                    />
 
                     <TeamsCard
                         gameSummary={gameSummary}

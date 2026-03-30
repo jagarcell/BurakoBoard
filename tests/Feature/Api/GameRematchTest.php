@@ -205,7 +205,8 @@ class GameRematchTest extends TestCase
             ->assertJsonPath('data.game.game.name', 'Rematch Friday')
             ->assertJsonPath('data.game.game.target_points', 3000)
             ->assertJsonPath('data.game.game.status', 'in_progress')
-            ->assertJsonPath('data.game.game.current_round_number', 0);
+            ->assertJsonPath('data.game.game.current_round_number', 0)
+            ->assertJsonPath('data.game.game.rematch_from_game_id', $game->id);
     }
 
     /**
@@ -379,5 +380,111 @@ class GameRematchTest extends TestCase
             'user_id' => $viewer->id,
             'role'    => 'pending_invitee',
         ]);
+    }
+
+    /**
+     * Ensure the rematch-chain endpoint returns every game in the chain, ordered from root to latest.
+     *
+     * @return void Verifies all three games are present and the ordering is ascending by id.
+     * Logic: create a root game and two successive rematches, then call the chain endpoint for
+     *   the middle game and assert all three ids are returned in creation order.
+     */
+    public function test_rematch_chain_returns_all_games_in_chain(): void
+    {
+        ['game' => $root] = $this->makeFinishedGame();
+
+        // First rematch.
+        $firstRematch = $this->actingAs($this->creator)
+            ->postJson("/api/v1/games/{$root->id}/rematch", [
+                'name'          => 'Rematch 1',
+                'target_points' => 2000,
+            ]);
+        $firstRematch->assertStatus(201);
+        $firstId = $firstRematch->json('data.game.game.id');
+
+        // Mark the first rematch as finished so a second rematch can be created.
+        Game::query()->where('id', $firstId)->update([
+            'status' => 'finished',
+        ]);
+
+        // Second rematch off the first rematch.
+        $secondRematch = $this->actingAs($this->creator)
+            ->postJson("/api/v1/games/{$firstId}/rematch", [
+                'name'          => 'Rematch 2',
+                'target_points' => 2000,
+            ]);
+        $secondRematch->assertStatus(201);
+        $secondId = $secondRematch->json('data.game.game.id');
+
+        // Query the chain from the middle game.
+        $response = $this->getJson("/api/v1/games/{$firstId}/rematch-chain");
+
+        $response->assertStatus(200);
+
+        $ids = collect($response->json('data.games'))->pluck('id')->all();
+
+        $this->assertContains($root->id, $ids);
+        $this->assertContains($firstId, $ids);
+        $this->assertContains($secondId, $ids);
+        $this->assertCount(3, $ids);
+        $this->assertEquals([$root->id, $firstId, $secondId], $ids);
+    }
+
+    /**
+     * Ensure the rematch-chain endpoint returns only the single game when it has no chain.
+     *
+     * @return void Verifies a solo game returns a one-item list with itself.
+     * Logic: create a game that was never part of a rematch and assert the chain contains
+     *   exactly that game with rematch_from_game_id equal to null.
+     */
+    public function test_rematch_chain_for_single_game_returns_only_itself(): void
+    {
+        ['game' => $game] = $this->makeFinishedGame();
+
+        $response = $this->getJson("/api/v1/games/{$game->id}/rematch-chain");
+
+        $response->assertStatus(200);
+
+        $games = $response->json('data.games');
+
+        $this->assertCount(1, $games);
+        $this->assertEquals($game->id, $games[0]['id']);
+        $this->assertNull($games[0]['rematch_from_game_id']);
+    }
+
+    /**
+     * Ensure each game in the rematch chain includes team score data for all participating teams.
+     *
+     * @param  none
+     * @return void Verifies team_scores contains team_id, team_name, and current_score for each team.
+     * Logic: create a finished game with two teams whose pivot scores are known (2100 / 1800),
+     *   call the chain endpoint, and assert both team score entries are present with the correct
+     *   field values so the frontend can render score chips without an additional request.
+     */
+    public function test_rematch_chain_includes_team_scores(): void
+    {
+        ['game' => $game, 'teamA' => $teamA, 'teamB' => $teamB] = $this->makeFinishedGame();
+
+        $response = $this->getJson("/api/v1/games/{$game->id}/rematch-chain");
+
+        $response->assertStatus(200);
+
+        $games = $response->json('data.games');
+
+        $this->assertCount(1, $games);
+
+        $teamScores = $games[0]['team_scores'];
+        $this->assertIsArray($teamScores);
+        $this->assertCount(2, $teamScores);
+
+        $scoreMap = collect($teamScores)->keyBy('team_id');
+
+        $this->assertEquals($teamA->id, $scoreMap[$teamA->id]['team_id']);
+        $this->assertEquals('Alpha', $scoreMap[$teamA->id]['team_name']);
+        $this->assertEquals(2100, $scoreMap[$teamA->id]['current_score']);
+
+        $this->assertEquals($teamB->id, $scoreMap[$teamB->id]['team_id']);
+        $this->assertEquals('Beta', $scoreMap[$teamB->id]['team_name']);
+        $this->assertEquals(1800, $scoreMap[$teamB->id]['current_score']);
     }
 }

@@ -1240,6 +1240,7 @@ class BurakoGameRepository
                 'games.target_points',
                 'games.status',
                 'games.winning_team_id',
+                'games.rematch_from_game_id',
                 'games.current_round_number',
                 'game_user.role as user_role',
             ])

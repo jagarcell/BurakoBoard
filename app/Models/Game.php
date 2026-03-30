@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\GameStatus;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -33,6 +34,7 @@ class Game extends Model
         'target_points',
         'status',
         'winning_team_id',
+        'rematch_from_game_id',
         'current_round_number',
         'initial_shuffler_seat_number',
     ];
@@ -86,5 +88,29 @@ class Game extends Model
         return $this->belongsToMany(User::class, 'game_user')
             ->withPivot('role')
             ->withTimestamps();
+    }
+
+    /**
+     * Get the game from which this game was created as a rematch.
+     *
+     * @param  none
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\App\Models\Game, $this> The source game or null when this is the first game in a chain.
+     * Logic: exposes the self-referencing FK so callers can traverse up the rematch chain to find the root game.
+     */
+    public function rematchFromGame(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'rematch_from_game_id');
+    }
+
+    /**
+     * Get the games that were created as rematches of this game.
+     *
+     * @param  none
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\Game, $this> Games that point back to this game as their rematch source.
+     * Logic: exposes the inverse of rematchFromGame so callers can traverse down the rematch chain to list all successor games.
+     */
+    public function rematches(): HasMany
+    {
+        return $this->hasMany(self::class, 'rematch_from_game_id');
     }
 }
