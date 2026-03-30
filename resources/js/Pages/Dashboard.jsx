@@ -81,6 +81,8 @@ export default function Dashboard() {
                     teams,
                     rounds: summary.rounds ?? [],
                     round_roles: summary.round_roles ?? [],
+                    total_rounds: summary.total_rounds ?? 0,
+                    has_more_rounds: summary.has_more_rounds ?? false,
                 });
                 setIsFetching(false);
                 setScoreUpdate(null);
@@ -100,6 +102,8 @@ export default function Dashboard() {
     const initialTeams = useMemo(() => gameSummary?.teams ?? [], [gameSummary]);
     const initialRounds = useMemo(() => gameSummary?.rounds ?? [], [gameSummary]);
     const initialRoundRoles = useMemo(() => gameSummary?.round_roles ?? [], [gameSummary]);
+    const initialTotalRounds = useMemo(() => gameSummary?.total_rounds ?? 0, [gameSummary]);
+    const initialHasMoreRounds = useMemo(() => gameSummary?.has_more_rounds ?? false, [gameSummary]);
 
     // Subscribe to real-time game-state updates broadcast by other users in this game.
     // Covers team changes, player order changes, and new rounds recorded by co-players.
@@ -109,8 +113,8 @@ export default function Dashboard() {
         const echo = window.Echo;
 
         echo.private(`game.${selectedGame.id}`)
-            .listen('.game.updated', ({ game, teams, rounds, round_roles }) => {
-                setGameSummary({ game, teams, rounds, round_roles });
+            .listen('.game.updated', ({ game, teams, rounds, round_roles, total_rounds, has_more_rounds }) => {
+                setGameSummary({ game, teams, rounds, round_roles, total_rounds: total_rounds ?? 0, has_more_rounds: has_more_rounds ?? false });
                 if (game) {
                     setSelectedGame((prev) => {
                         if (prev && game.status === 'finished' && prev.status !== 'finished') {
@@ -177,6 +181,8 @@ export default function Dashboard() {
                         hasCutter={hasCutter}
                         hasTwoTeams={hasTwoTeams}
                         initialRounds={initialRounds}
+                        initialHasMoreRounds={initialHasMoreRounds}
+                        initialTotalRounds={initialTotalRounds}
                         roundRoles={initialRoundRoles}
                         initialTeams={initialTeams}
                         isFetching={isFetching}

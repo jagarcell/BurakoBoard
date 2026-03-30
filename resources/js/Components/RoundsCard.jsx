@@ -19,9 +19,11 @@ import PlayerCircle from '@/Components/PlayerCircle';
 import PrimaryButton from '@/Components/PrimaryButton';
 import useWinnerSound from '@/hooks/useWinnerSound';
 
-export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], onRoundRecorded, isFetching = false, hasTwoTeams = false, hasCutter = true, roundRoles = [] }) {
+export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], initialHasMoreRounds = false, initialTotalRounds = 0, onRoundRecorded, isFetching = false, hasTwoTeams = false, hasCutter = true, roundRoles = [] }) {
     const [teams, setTeams] = useState(initialTeams);
     const [rounds, setRounds] = useState(initialRounds);
+    const [hasMoreRounds, setHasMoreRounds] = useState(initialHasMoreRounds);
+    const [isLoadingMoreRounds, setIsLoadingMoreRounds] = useState(false);
     const [elements, setElements] = useState([]);
     const [baseInputs, setBaseInputs] = useState({});
     const [cardInputs, setCardInputs] = useState({});
@@ -226,6 +228,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     useEffect(() => {
         setTeams(initialTeams);
         setRounds(initialRounds);
+        setHasMoreRounds(initialHasMoreRounds);
 
         // Detect a round-completion broadcast: another user recorded a round and
         // the parent pushed a longer initialRounds array via `.game.updated`.
@@ -264,7 +267,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         setInputErrors((prev) => (Object.keys(prev).length > 0 ? {} : prev));
         setSaveError((prev) => (prev !== '' ? '' : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- draftSaveTimerRef and skipNextDraftSave are stable refs; elements is intentionally excluded to avoid disrupting the dedicated elements-load reset
-    }, [initialTeams, initialRounds]);
+    }, [initialTeams, initialRounds, initialHasMoreRounds]);
 
     // Reset game status and round-length tracker when the selected game changes
     useEffect(() => {
@@ -527,6 +530,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             const newGameStatus = gameSummary.game?.status ?? gameStatus;
             setTeams(updatedTeams);
             setRounds(gameSummary.rounds ?? rounds);
+            setHasMoreRounds(gameSummary.has_more_rounds ?? false);
             setGameStatus(newGameStatus);
             if (newGameStatus === 'finished') playWinnerSound();
             // Cancel any pending draft save and skip the next one triggered by
@@ -690,6 +694,36 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     };
 
     const nextRound = rounds.length + 1;
+
+    /**
+     * Load the next page of earlier rounds and prepend them to the history.
+     *
+     * @return {Promise<void>}
+     * Logic: derive the earliest round_number currently loaded (or 1 if rounds is empty),
+     *   call GET /games/{id}/rounds?before_round={earliest}&limit=25, prepend the returned
+     *   items to the local rounds state and update hasMoreRounds from the response flag.
+     */
+    const handleLoadEarlierRounds = async () => {
+        if (isLoadingMoreRounds || !selectedGame) return;
+
+        const earliestRound = rounds.length > 0 ? rounds[0].round_number : 1;
+
+        setIsLoadingMoreRounds(true);
+        try {
+            const response = await api.get(`/games/${selectedGame.id}/rounds`, {
+                params: { before_round: earliestRound, limit: 25 },
+            });
+            const page = response.data?.data?.rounds ?? {};
+            const items = page.items ?? [];
+            setRounds((prev) => [...items, ...prev]);
+            setHasMoreRounds(page.has_more ?? false);
+        } catch {
+            // Silent — the existing rounds remain intact; user can retry.
+        } finally {
+            setIsLoadingMoreRounds(false);
+        }
+    };
+
     const playerCountMismatch =
         teams.length === 2 && teams[0].players.length !== teams[1].players.length;
     const showScoringForm = !playerCountMismatch && (hasTwoTeams || teams.length >= 2);
@@ -1115,6 +1149,34 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                         <p className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
                             Round History
                         </p>
+
+                        {hasMoreRounds && (
+                            <div className="mb-3 flex justify-center">
+                                <button
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
+                                    disabled={isLoadingMoreRounds}
+                                    onClick={handleLoadEarlierRounds}
+                                    type="button"
+                                >
+                                    {isLoadingMoreRounds ? (
+                                        <>
+                                            <svg aria-hidden="true" className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" />
+                                            </svg>
+                                            Loading…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg aria-hidden="true" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                                <path d="M5 15l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                            Load earlier rounds
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        )}
 
                         {rounds.length === 0 ? (
                             <p className="text-sm italic text-slate-400">
