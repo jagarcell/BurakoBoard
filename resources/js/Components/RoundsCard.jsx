@@ -1,8 +1,10 @@
 import api from '@/api/client';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import BaseElementsInput from '@/Components/BaseElementsInput';
 import CardSpinner from '@/Components/CardSpinner';
+import RoundHistoryTable from '@/Components/RoundHistoryTable';
+import ViewerRoundPanel from '@/Components/ViewerRoundPanel';
 import VoiceAliasManager from '@/Components/VoiceAliasManager';
 import VoiceMicButton from '@/Components/VoiceMicButton';
 import useVoiceAliases from '@/hooks/useVoiceAliases';
@@ -798,122 +800,20 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                             </p>
                         </div>
                     ) : selectedGame?.user_role === 'viewer' ? (
-                        <div className="border-b border-slate-100 px-6 py-5">
-                            <div className="mb-4 flex items-center justify-between">
-                                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
-                                    Round {nextRound}
-                                </p>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        aria-expanded={activeCircleRound === nextRound}
-                                        aria-label={`${activeCircleRound === nextRound ? 'Hide' : 'Show'} seating circle for round ${nextRound}`}
-                                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
-                                            activeCircleRound === nextRound
-                                                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                                : 'text-slate-400 hover:bg-indigo-100 hover:text-indigo-600'
-                                        }`}
-                                        onClick={(e) => toggleCircle(e, nextRound)}
-                                        type="button"
-                                    >
-                                        <svg
-                                            aria-hidden="true"
-                                            className="h-3.5 w-3.5"
-                                            fill="currentColor"
-                                            viewBox="0 0 24 24"
-                                            xmlns="http://www.w3.org/2000/svg"
-                                        >
-                                            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-                                        </svg>
-                                    </button>
-                                    <span
-                                        aria-label="Receiving live score updates"
-                                        className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600"
-                                    >
-                                        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />
-                                        Live
-                                    </span>
-                                </div>
-                            </div>
-                            {(activeCircleRound === nextRound || closingCircleRound === nextRound) && (
-                                <div className="mb-4 flex justify-center overflow-visible">
-                                    <PlayerCircle
-                                        buttonRect={circleButtonRect}
-                                        isOpen={activeCircleRound === nextRound}
-                                        players={teams.flatMap((t) => t.players)}
-                                        roundNumber={nextRound}
-                                        roundRoles={currentRoundRolesForPanel}
-                                    />
-                                </div>
-                            )}
-                            {activeCircleRound !== nextRound && closingCircleRound !== nextRound && (
-                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                                {teams.map((team) => {
-                                    const roundScore = computeTeamScore(team.id);
-                                    const partialScore = getAccruedScore(team.id) + roundScore;
-                                    const other = teams.find((t) => t.id !== team.id);
-                                    const otherPartial = other
-                                        ? getAccruedScore(other.id) + computeTeamScore(other.id)
-                                        : null;
-                                    const bothPos =
-                                        partialScore > 0 &&
-                                        otherPartial !== null &&
-                                        otherPartial > 0;
-                                    const partialChipCls =
-                                        partialScore < 0
-                                            ? 'bg-red-100 text-red-800'
-                                            : partialScore === 0
-                                                ? 'bg-[bisque] text-green-700'
-                                                : bothPos && partialScore < otherPartial
-                                                    ? 'bg-yellow-100 text-yellow-800'
-                                                    : 'bg-green-100 text-green-800';
-                                    const roundChipCls =
-                                        roundScore < 0
-                                            ? 'bg-red-100 text-red-800'
-                                            : roundScore === 0
-                                                ? 'bg-slate-100 text-slate-600'
-                                                : 'bg-indigo-100 text-indigo-800';
-
-                                    return (
-                                        <div key={team.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                                <p className="text-sm font-semibold text-slate-700">
-                                                    {team.name}
-                                                </p>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-medium text-slate-400">Round:</span>
-                                                    <span
-                                                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${roundChipCls}`}
-                                                        title="This round's score"
-                                                    >
-                                                        {roundScore}
-                                                    </span>
-                                                    <span className="text-xs font-medium text-slate-400">Total:</span>
-                                                    <span
-                                                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${partialChipCls}`}
-                                                        title="Accrued score + this round"
-                                                    >
-                                                        {partialScore}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            {elements.length === 0 ? (
-                                                <p className="text-xs text-slate-400">Loading elements…</p>
-                                            ) : (
-                                                <BaseElementsInput
-                                                    cardsInHand={cardInputs[team.id]?.cardsInHand ?? 0}
-                                                    cardsOnTable={cardInputs[team.id]?.cardsOnTable ?? 0}
-                                                    elements={elements}
-                                                    readOnly
-                                                    teamId={team.id}
-                                                    values={baseInputs[team.id] ?? {}}
-                                                />
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            )}
-                        </div>
+                        <ViewerRoundPanel
+                            teams={teams}
+                            elements={elements}
+                            baseInputs={baseInputs}
+                            cardInputs={cardInputs}
+                            nextRound={nextRound}
+                            currentRoundRolesForPanel={currentRoundRolesForPanel}
+                            activeCircleRound={activeCircleRound}
+                            closingCircleRound={closingCircleRound}
+                            circleButtonRect={circleButtonRect}
+                            computeTeamScore={computeTeamScore}
+                            getAccruedScore={getAccruedScore}
+                            onToggleCircle={toggleCircle}
+                        />
                     ) : (
                         <div className="relative border-b border-slate-100 px-6 py-5">
                             {/* In-progress overlay — shown while the round POST is in flight */}
@@ -1145,265 +1045,27 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                         </div>
                     )}
 
-                    <div className="px-6 py-5">
-                        <p className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
-                            Round History
-                        </p>
-
-                        {hasMoreRounds && (
-                            <div className="mb-3 flex justify-center">
-                                <button
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
-                                    disabled={isLoadingMoreRounds}
-                                    onClick={handleLoadEarlierRounds}
-                                    type="button"
-                                >
-                                    {isLoadingMoreRounds ? (
-                                        <>
-                                            <svg aria-hidden="true" className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" />
-                                            </svg>
-                                            Loading…
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg aria-hidden="true" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                                <path d="M5 15l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                            Load earlier rounds
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        )}
-
-                        {rounds.length === 0 ? (
-                            <p className="text-sm italic text-slate-400">
-                                No rounds recorded yet.
-                            </p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-slate-100">
-                                            <th className="pb-2 text-left text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                                                Round
-                                            </th>
-                                            {teams.map((t) => (
-                                                <th
-                                                    key={t.id}
-                                                    className="pb-2 text-right text-xs font-semibold uppercase tracking-[0.25em] text-slate-400"
-                                                >
-                                                    {t.name}
-                                                </th>
-                                            ))}
-                                            <th className="pb-2 pl-3 w-16" />
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {rounds.map((round) => (
-                                            <Fragment key={round.round_number}>
-                                                <tr>
-                                                    <td className="py-2 font-medium text-slate-700">
-                                                        {round.round_number}
-                                                    </td>
-                                                    {teams.map((t) => {
-                                                        const s = round.scores.find((sc) => sc.team_id === t.id);
-                                                        const otherS = round.scores.find((sc) => sc.team_id !== t.id);
-                                                        const pts = s ? s.points : null;
-                                                        const otherPts = otherS ? otherS.points : null;
-                                                        const bothPos = pts !== null && pts > 0 && otherPts !== null && otherPts > 0;
-                                                        const chipCls = pts === null
-                                                            ? ''
-                                                            : pts < 0
-                                                                ? 'bg-red-100 text-red-800'
-                                                                : pts === 0
-                                                                    ? 'bg-[bisque] text-green-700'
-                                                                    : bothPos && pts < otherPts
-                                                                        ? 'bg-yellow-100 text-yellow-800'
-                                                                        : 'bg-green-100 text-green-800';
-
-                                                        return (
-                                                            <td
-                                                                key={t.id}
-                                                                className="py-2 text-right"
-                                                            >
-                                                                {pts !== null ? (
-                                                                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}>
-                                                                        {pts}
-                                                                    </span>
-                                                                ) : '—'}
-                                                            </td>
-                                                        );
-                                                    })}
-                                                    <td className="py-2 pl-3 text-right">
-                                                        <div className="inline-flex items-center gap-1">
-                                                            {/* Players-circle toggle button */}
-                                                            <button
-                                                                aria-expanded={activeCircleRound === round.round_number}
-                                                                aria-label={`${activeCircleRound === round.round_number ? 'Hide' : 'Show'} seating circle for round ${round.round_number}`}
-                                                                className={`inline-flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
-                                                                    activeCircleRound === round.round_number
-                                                                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                                                        : 'text-slate-400 hover:bg-indigo-100 hover:text-indigo-600'
-                                                                }`}
-                                                                onClick={(e) => toggleCircle(e, round.round_number)}
-                                                                type="button"
-                                                            >
-                                                                <svg
-                                                                    aria-hidden="true"
-                                                                    className="h-3.5 w-3.5"
-                                                                    fill="currentColor"
-                                                                    viewBox="0 0 24 24"
-                                                                    xmlns="http://www.w3.org/2000/svg"
-                                                                >
-                                                                    <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-                                                                </svg>
-                                                            </button>
-
-                                                            {/* Scoring-detail expand/collapse button */}
-                                                            <button
-                                                                aria-expanded={expandedRound === round.round_number}
-                                                                aria-label={`${expandedRound === round.round_number ? 'Collapse' : 'Expand'} round ${round.round_number} detail`}
-                                                                className="inline-flex items-center justify-center rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setExpandedRound((prev) =>
-                                                                        prev === round.round_number
-                                                                            ? null
-                                                                            : round.round_number,
-                                                                    );
-                                                                }}
-                                                                type="button"
-                                                            >
-                                                                <svg
-                                                                    aria-hidden="true"
-                                                                    className={`h-4 w-4 transition-transform duration-200 ${
-                                                                        expandedRound === round.round_number
-                                                                            ? 'rotate-180'
-                                                                            : ''
-                                                                    }`}
-                                                                    fill="currentColor"
-                                                                    viewBox="0 0 20 20"
-                                                                >
-                                                                    <path
-                                                                        clipRule="evenodd"
-                                                                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                                                                        fillRule="evenodd"
-                                                                    />
-                                                                </svg>
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-
-                                                {expandedRound === round.round_number && (
-                                                    <tr>
-                                                        <td
-                                                            className="pb-3 pt-0"
-                                                            colSpan={teams.length + 2}
-                                                        >
-                                                            <div className="rounded-xl border border-indigo-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_60%),linear-gradient(135deg,_#eef2ff_0%,_#f8fafc_100%)] px-4 py-4">
-                                                                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-indigo-400">
-                                                                    Round {round.round_number} — Scoring Detail
-                                                                </p>
-
-                                                                {loadingDraftRound === round.round_number ? (
-                                                                    <p className="text-xs text-slate-400">Loading detail…</p>
-                                                                ) : (
-                                                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                                                        {teams.map((t) => {
-                                                                            const draft = roundDraftCache[round.round_number];
-                                                                            const draftBase = draft?.base_inputs?.[t.id] ?? draft?.base_inputs?.[String(t.id)] ?? {};
-                                                                            const draftCards = draft?.card_inputs?.[t.id] ?? draft?.card_inputs?.[String(t.id)] ?? {};
-
-                                                                            return (
-                                                                                <div
-                                                                                    key={t.id}
-                                                                                    className="rounded-xl border border-indigo-100 bg-white px-4 py-3 shadow-sm"
-                                                                                >
-                                                                                    <div className="mb-3 flex items-center justify-between gap-2">
-                                                                                        <p className="text-xs font-semibold text-indigo-500">
-                                                                                            {t.name}
-                                                                                        </p>
-                                                                                        {(() => {
-                                                                                            const rs = round.scores.find((sc) => sc.team_id === t.id);
-                                                                                            const otherRs = round.scores.find((sc) => sc.team_id !== t.id);
-                                                                                            const pts = rs ? rs.points : null;
-                                                                                            const otherPts = otherRs ? otherRs.points : null;
-                                                                                            const bothPos = pts !== null && pts > 0 && otherPts !== null && otherPts > 0;
-                                                                                            const chipCls = pts === null
-                                                                                                ? ''
-                                                                                                : pts < 0
-                                                                                                    ? 'bg-red-100 text-red-800'
-                                                                                                    : pts === 0
-                                                                                                        ? 'bg-[bisque] text-green-700'
-                                                                                                        : bothPos && pts < otherPts
-                                                                                                            ? 'bg-yellow-100 text-yellow-800'
-                                                                                                            : 'bg-green-100 text-green-800';
-                                                                                            return pts !== null ? (
-                                                                                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${chipCls}`}>
-                                                                                                    {pts}
-                                                                                                </span>
-                                                                                            ) : null;
-                                                                                        })()}
-                                                                                    </div>
-
-                                                                                    {draft === null || elements.length === 0 ? (
-                                                                                        <p className="text-xs italic text-slate-400">
-                                                                                            No scoring detail captured for this round.
-                                                                                        </p>
-                                                                                    ) : (
-                                                                                        <BaseElementsInput
-                                                                                            cardsInHand={draftCards.cardsInHand ?? 0}
-                                                                                            cardsOnTable={draftCards.cardsOnTable ?? 0}
-                                                                                            elements={elements}
-                                                                                            readOnly
-                                                                                            teamId={`hist-${round.round_number}-${t.id}`}
-                                                                                            values={draftBase}
-                                                                                        />
-                                                                                    )}
-                                                                                </div>
-                                                                            );
-                                                                        })}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                )}
-
-                                                {/* Player-circle panel — rendered while open or animating closed */}
-                                                {(activeCircleRound === round.round_number || closingCircleRound === round.round_number) && (
-                                                    <tr>
-                                                        <td
-                                                            className="pb-4 pt-0"
-                                                            colSpan={teams.length + 2}
-                                                        >
-                                                            <div className="flex justify-center overflow-visible">
-                                                                <PlayerCircle
-                                                                    buttonRect={circleButtonRect}
-                                                                    isOpen={activeCircleRound === round.round_number}
-                                                                    players={teams.flatMap((t) => t.players)}
-                                                                    roundNumber={round.round_number}
-                                                                    roundRoles={
-                                                                        roundRoles.find(
-                                                                            (r) => Number(r.round_number) === round.round_number,
-                                                                        ) ?? null
-                                                                    }
-                                                                />
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </Fragment>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
+                    <RoundHistoryTable
+                        rounds={rounds}
+                        teams={teams}
+                        roundRoles={roundRoles}
+                        elements={elements}
+                        roundDraftCache={roundDraftCache}
+                        loadingDraftRound={loadingDraftRound}
+                        expandedRound={expandedRound}
+                        activeCircleRound={activeCircleRound}
+                        closingCircleRound={closingCircleRound}
+                        circleButtonRect={circleButtonRect}
+                        hasMoreRounds={hasMoreRounds}
+                        isLoadingMoreRounds={isLoadingMoreRounds}
+                        onExpandRound={(roundNumber) =>
+                            setExpandedRound((prev) =>
+                                prev === roundNumber ? null : roundNumber,
+                            )
+                        }
+                        onToggleCircle={toggleCircle}
+                        onLoadEarlier={handleLoadEarlierRounds}
+                    />
                 </>
             )}
         </section>
