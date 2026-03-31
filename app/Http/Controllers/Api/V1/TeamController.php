@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\BatchUpdateTeamRequest;
 use App\Http\Requests\Api\V1\StoreTeamRequest;
 use App\Http\Resources\Api\V1\TeamListItemResource;
 use App\Services\TeamService;
@@ -87,5 +88,24 @@ class TeamController extends Controller
         return response()->json([
             'game' => $summary,
         ], 201);
+    }
+
+    /**
+     * Apply a batch of team edits (rename, player removals, player additions, seat swaps) atomically.
+     *
+     * @param  \App\Http\Requests\Api\V1\BatchUpdateTeamRequest  $request  Validated batch payload.
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $teamId  Identifier of the team to update.
+     * @return \Illuminate\Http\JsonResponse Updated game summary after all changes are applied.
+     * Logic: delegate all four change vectors to the service, which applies them inside a single
+     * DB transaction so the operation is atomic, then return the refreshed game summary.
+     */
+    public function batchUpdate(BatchUpdateTeamRequest $request, int $gameId, int $teamId): JsonResponse
+    {
+        $summary = $this->service->batchUpdateTeam($gameId, $teamId, $request->validated());
+
+        return response()->json([
+            'game' => $summary,
+        ]);
     }
 }
