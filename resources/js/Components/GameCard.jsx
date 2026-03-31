@@ -4,16 +4,13 @@ import { createPortal } from 'react-dom';
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import Checkbox from '@/Components/Checkbox';
-import DangerButton from '@/Components/DangerButton';
-import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
+import CreateGameModal from '@/Components/CreateGameModal';
+import EditGameModal from '@/Components/EditGameModal';
 import InvitationPopup from '@/Components/InvitationPopup';
-import Modal from '@/Components/Modal';
+import InviteUsersModal from '@/Components/InviteUsersModal';
 import RematchHistoryModal from '@/Components/RematchHistoryModal';
 import NotificationBell from '@/Components/NotificationBell';
 import PrimaryButton from '@/Components/PrimaryButton';
-import SecondaryButton from '@/Components/SecondaryButton';
-import TextInput from '@/Components/TextInput';
 
 const defaultForm = {
     name: '',
@@ -41,14 +38,6 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     const dropdownAnchorRef = useRef(null);
 
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-    const [inviteUsers, setInviteUsers] = useState([]);
-    const [inviteMeta, setInviteMeta] = useState({ current_page: 1, last_page: 1 });
-    const [isInviteLoading, setIsInviteLoading] = useState(false);
-    const [inviteLoadError, setInviteLoadError] = useState('');
-    const [selectedInviteUserIds, setSelectedInviteUserIds] = useState(new Set());
-    const [isSendingInvites, setIsSendingInvites] = useState(false);
-    const [inviteSendError, setInviteSendError] = useState('');
-    const [inviteSendSuccess, setInviteSendSuccess] = useState('');
 
     const [acceptingGameIds, setAcceptingGameIds] = useState(() => new Set());
     const [hasPending, setHasPending] = useState(hasPendingInvitations);
@@ -247,49 +236,15 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         resetForm();
     };
 
-    const fetchInviteUsers = async (gameId, page) => {
-        setIsInviteLoading(true);
-        setInviteLoadError('');
-
-        try {
-            const response = await api.get(`/games/${gameId}/invitable-users`, {
-                params: { page },
-            });
-            const payload = response.data?.data?.users ?? {};
-
-            startTransition(() => {
-                setInviteUsers(payload.data ?? []);
-                setInviteMeta({
-                    current_page: payload.meta?.current_page ?? 1,
-                    last_page: payload.meta?.last_page ?? 1,
-                });
-            });
-        } catch {
-            setInviteLoadError('Unable to load users right now.');
-        } finally {
-            setIsInviteLoading(false);
-        }
-    };
-
     const openInviteModal = () => {
         if (! selectedGame) {
             return;
         }
 
-        setSelectedInviteUserIds(new Set());
-        setInviteUsers([]);
-        setInviteMeta({ current_page: 1, last_page: 1 });
-        setInviteSendError('');
-        setInviteSendSuccess('');
         setIsInviteModalOpen(true);
-        fetchInviteUsers(selectedGame.id, 1);
     };
 
     const closeInviteModal = () => {
-        if (isSendingInvites) {
-            return;
-        }
-
         setIsInviteModalOpen(false);
     };
 
@@ -367,61 +322,6 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 return next;
             });
         }
-    };
-
-    const handleInvitePageChange = (newPage) => {
-        if (! selectedGame) {
-            return;
-        }
-
-        fetchInviteUsers(selectedGame.id, newPage);
-    };
-
-    const handleSendInvitations = async () => {
-        if (! selectedGame || selectedInviteUserIds.size === 0 || isSendingInvites) {
-            return;
-        }
-
-        setIsSendingInvites(true);
-        setInviteSendError('');
-        setInviteSendSuccess('');
-
-        try {
-            const response = await api.post(
-                `/games/${selectedGame.id}/invitations`,
-                { user_ids: Array.from(selectedInviteUserIds) },
-            );
-            const count = response.data?.data?.invited_count ?? 0;
-
-            startTransition(() => {
-                setInviteSendSuccess(
-                    count === 0
-                        ? 'All selected users are already invited or members of this game.'
-                        : `${count} invitation${count === 1 ? '' : 's'} sent successfully.`,
-                );
-                setSelectedInviteUserIds(new Set());
-                // Refresh the user list to remove the newly-invited users.
-                fetchInviteUsers(selectedGame.id, 1);
-            });
-        } catch {
-            setInviteSendError('Unable to send invitations right now. Please try again.');
-        } finally {
-            setIsSendingInvites(false);
-        }
-    };
-
-    const toggleInviteUser = (userId) => {
-        setSelectedInviteUserIds((current) => {
-            const next = new Set(current);
-
-            if (next.has(userId)) {
-                next.delete(userId);
-            } else {
-                next.add(userId);
-            }
-
-            return next;
-        });
     };
 
     const handleEditGame = async (event) => {
@@ -905,282 +805,35 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 }}
             />
 
-            <Modal maxWidth="lg" onClose={closeEditModal} show={isEditModalOpen}>
-                <form className="space-y-6 p-6" onSubmit={handleEditGame}>
-                    <div className="space-y-2">
-                        <h4 className="text-lg font-semibold text-slate-900">
-                            Edit game
-                        </h4>
-                        <p className="text-sm text-slate-600">
-                            Update the game name and the score required to declare a winner.
-                        </p>
-                    </div>
+            <EditGameModal
+                isOpen={isEditModalOpen}
+                onClose={closeEditModal}
+                game={selectedGame}
+                form={form}
+                errors={errors}
+                isSaving={isSaving}
+                isDeleting={isDeleting}
+                onChange={(field, val) => setForm((f) => ({ ...f, [field]: val }))}
+                onSubmit={handleEditGame}
+                onDelete={handleDeleteGame}
+            />
 
-                    <div className="space-y-2">
-                        <InputLabel htmlFor="edit-game-name" value="Game name" />
-                        <TextInput
-                            className="block w-full rounded-xl"
-                            id="edit-game-name"
-                            isFocused
-                            onChange={(event) =>
-                                setForm((currentForm) => ({
-                                    ...currentForm,
-                                    name: event.target.value,
-                                }))
-                            }
-                            placeholder="Friday Burako"
-                            value={form.name}
-                        />
-                        <InputError message={errors.name} />
-                    </div>
+            <CreateGameModal
+                isOpen={isCreateModalOpen}
+                onClose={closeCreateModal}
+                isRematch={isRematch}
+                form={form}
+                errors={errors}
+                isSaving={isSaving}
+                onChange={(field, val) => setForm((f) => ({ ...f, [field]: val }))}
+                onSubmit={handleCreateGame}
+            />
 
-                    <div className="space-y-2">
-                        <InputLabel
-                            htmlFor="edit-game-target-points"
-                            value="Winning score"
-                        />
-                        <TextInput
-                            className="block w-full rounded-xl"
-                            id="edit-game-target-points"
-                            min="1"
-                            onChange={(event) =>
-                                setForm((currentForm) => ({
-                                    ...currentForm,
-                                    targetPoints: event.target.value,
-                                }))
-                            }
-                            step="1"
-                            type="number"
-                            value={form.targetPoints}
-                        />
-                        <InputError message={errors.target_points} />
-                    </div>
-
-                    <InputError message={errors.general} />
-
-                    <div className="flex items-center gap-3">
-                        {selectedGame?.user_role === 'creator' && (selectedGame?.current_round_number ?? 1) === 0 && (
-                            <DangerButton
-                                disabled={isSaving || isDeleting}
-                                onClick={handleDeleteGame}
-                                type="button"
-                            >
-                                {isDeleting ? 'Deleting…' : 'Delete'}
-                            </DangerButton>
-                        )}
-
-                        <div className="ml-auto flex gap-3">
-                            <SecondaryButton
-                                disabled={isSaving || isDeleting}
-                                onClick={closeEditModal}
-                                type="button"
-                            >
-                                Cancel
-                            </SecondaryButton>
-
-                            <PrimaryButton disabled={isSaving || isDeleting} type="submit">
-                                Save
-                            </PrimaryButton>
-                        </div>
-                    </div>
-                </form>
-            </Modal>
-
-            <Modal maxWidth="lg" onClose={closeCreateModal} show={isCreateModalOpen}>
-                <form className="space-y-6 p-6" onSubmit={handleCreateGame}>
-                    <div className="space-y-2">
-                        <h4 className="text-lg font-semibold text-slate-900">
-                            {isRematch ? 'Start a rematch' : 'Create a new game'}
-                        </h4>
-                        <p className="text-sm text-slate-600">
-                            {isRematch
-                                ? 'Adjust the game name and winning score if needed. The same teams and player order will carry over.'
-                                : 'Enter the game name and the score required to declare a winner.'}
-                        </p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <InputLabel htmlFor="new-game-name" value="Game name" />
-                        <TextInput
-                            className="block w-full rounded-xl"
-                            id="new-game-name"
-                            isFocused
-                            onChange={(event) =>
-                                setForm((currentForm) => ({
-                                    ...currentForm,
-                                    name: event.target.value,
-                                }))
-                            }
-                            placeholder="Friday Burako"
-                            value={form.name}
-                        />
-                        <InputError message={errors.name} />
-                    </div>
-
-                    <div className="space-y-2">
-                        <InputLabel
-                            htmlFor="new-game-target-points"
-                            value="Winning score"
-                        />
-                        <TextInput
-                            className="block w-full rounded-xl"
-                            id="new-game-target-points"
-                            min="1"
-                            onChange={(event) =>
-                                setForm((currentForm) => ({
-                                    ...currentForm,
-                                    targetPoints: event.target.value,
-                                }))
-                            }
-                            step="1"
-                            type="number"
-                            value={form.targetPoints}
-                        />
-                        <InputError message={errors.target_points} />
-                    </div>
-
-                    <InputError message={errors.general} />
-
-                    <div className="flex justify-end gap-3">
-                        <SecondaryButton
-                            disabled={isSaving}
-                            onClick={closeCreateModal}
-                            type="button"
-                        >
-                            Cancel
-                        </SecondaryButton>
-
-                        <PrimaryButton disabled={isSaving} type="submit">
-                            {isSaving ? 'Saving…' : isRematch ? 'Start Rematch' : 'Accept'}
-                        </PrimaryButton>
-                    </div>
-                </form>
-            </Modal>
-
-            <Modal maxWidth="lg" onClose={closeInviteModal} show={isInviteModalOpen}>
-                <div className="space-y-4 p-6">
-                    <div className="space-y-1">
-                        <h4 className="text-lg font-semibold text-slate-900">
-                            Invite a Viewer
-                        </h4>
-                        <p className="text-sm text-slate-600">
-                            Select the users you want to invite as viewers to this game.
-                        </p>
-                    </div>
-
-                    {isInviteLoading ? (
-                        <div className="flex items-center justify-center py-8">
-                            <svg
-                                aria-label="Loading users"
-                                className="h-6 w-6 animate-spin text-indigo-500"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                            >
-                                <circle
-                                    className="opacity-25"
-                                    cx="12"
-                                    cy="12"
-                                    r="10"
-                                    stroke="currentColor"
-                                    strokeWidth="4"
-                                />
-                                <path
-                                    className="opacity-75"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                                    fill="currentColor"
-                                />
-                            </svg>
-                        </div>
-                    ) : inviteLoadError !== '' ? (
-                        <p className="py-4 text-center text-sm font-medium text-red-600">
-                            {inviteLoadError}
-                        </p>
-                    ) : inviteUsers.length === 0 ? (
-                        <p className="py-4 text-center text-sm text-slate-500">
-                            No users available to invite.
-                        </p>
-                    ) : (
-                        <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200" role="list">
-                            {inviteUsers.map((user) => (
-                                <li key={user.id}>
-                                    <label className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-slate-50">
-                                        <Checkbox
-                                            checked={selectedInviteUserIds.has(user.id)}
-                                            id={`invite-user-${user.id}`}
-                                            onChange={() => toggleInviteUser(user.id)}
-                                        />
-                                        <span className="text-sm text-slate-800">
-                                            {user.name}
-                                        </span>
-                                    </label>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-
-                    {! isInviteLoading && inviteUsers.length > 0 && inviteMeta.last_page > 1 && (
-                        <div className="flex items-center justify-between pt-1">
-                            <button
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                                disabled={inviteMeta.current_page <= 1}
-                                onClick={() => handleInvitePageChange(inviteMeta.current_page - 1)}
-                                type="button"
-                            >
-                                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                    <path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                                Prev
-                            </button>
-
-                            <span className="text-xs text-slate-500">
-                                Page {inviteMeta.current_page} of {inviteMeta.last_page}
-                            </span>
-
-                            <button
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                                disabled={inviteMeta.current_page >= inviteMeta.last_page}
-                                onClick={() => handleInvitePageChange(inviteMeta.current_page + 1)}
-                                type="button"
-                            >
-                                Next
-                                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                    <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="flex justify-end gap-3 pt-1">
-                        <SecondaryButton
-                            disabled={isSendingInvites}
-                            onClick={closeInviteModal}
-                            type="button"
-                        >
-                            Close
-                        </SecondaryButton>
-
-                        <PrimaryButton
-                            disabled={selectedInviteUserIds.size === 0 || isSendingInvites}
-                            onClick={handleSendInvitations}
-                            type="button"
-                        >
-                            {isSendingInvites ? 'Sending…' : 'Send'}
-                        </PrimaryButton>
-                    </div>
-
-                    {inviteSendError !== '' && (
-                        <p className="text-sm font-medium text-red-600">
-                            {inviteSendError}
-                        </p>
-                    )}
-
-                    {inviteSendSuccess !== '' && (
-                        <p className="text-sm font-medium text-emerald-600">
-                            {inviteSendSuccess}
-                        </p>
-                    )}
-                </div>
-            </Modal>
+            <InviteUsersModal
+                isOpen={isInviteModalOpen}
+                onClose={closeInviteModal}
+                gameId={selectedGame?.id ?? null}
+            />
         </>
     );
 }
