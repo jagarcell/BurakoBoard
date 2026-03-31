@@ -416,8 +416,13 @@ describe('TeamsCard', () => {
 
         await waitFor(() =>
             expect(api.put).toHaveBeenCalledWith(
-                '/games/5/teams/10',
-                { name: 'Team Alpha Updated' },
+                '/games/5/teams/10/batch',
+                {
+                    name: 'Team Alpha Updated',
+                    remove_player_ids: [],
+                    add_players: [],
+                    seat_swaps: [],
+                },
             ),
         );
 
@@ -1476,7 +1481,7 @@ describe('TeamsCard', () => {
             expect(screen.queryByText('Current players')).not.toBeInTheDocument();
         });
 
-        it('calls DELETE for each removed player when the edit form is submitted', async () => {
+        it('includes removed player IDs in the batch payload when the edit form is submitted', async () => {
             const team = makeTeam(10, 'Team Alpha', [
                 { id: 1, user_id: null, display_name: 'Carlos' },
                 { id: 2, user_id: null, display_name: 'Diana' },
@@ -1485,9 +1490,6 @@ describe('TeamsCard', () => {
 
             const updatedTeam = makeTeam(10, 'Team Alpha', []);
             api.put.mockResolvedValueOnce(makeGameSummary([updatedTeam]));
-            api.delete
-                .mockResolvedValueOnce(makeGameSummary([updatedTeam]))
-                .mockResolvedValueOnce(makeGameSummary([updatedTeam]));
 
             render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
 
@@ -1500,31 +1502,23 @@ describe('TeamsCard', () => {
             await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
 
             await waitFor(() =>
-                expect(api.delete).toHaveBeenCalledWith(
-                    '/games/5/teams/10/players/1',
+                expect(api.put).toHaveBeenCalledWith(
+                    '/games/5/teams/10/batch',
+                    expect.objectContaining({ remove_player_ids: [1, 2] }),
                 ),
             );
 
-            await waitFor(() =>
-                expect(api.delete).toHaveBeenCalledWith(
-                    '/games/5/teams/10/players/2',
-                ),
-            );
-
-            expect(api.delete).toHaveBeenCalledTimes(2);
+            expect(api.delete).not.toHaveBeenCalled();
         });
 
-        it('calls DELETE for removed players before adding new ones on submit', async () => {
+        it('sends a single batch request containing both removed and added players', async () => {
             const team = makeTeam(10, 'Team Alpha', [
                 { id: 1, user_id: null, display_name: 'Carlos' },
             ]);
             setupGetMocks();
 
-            const interimTeam = makeTeam(10, 'Team Alpha', []);
-            const finalTeam   = makeTeam(10, 'Team Alpha', [{ id: 3, user_id: null, display_name: 'Elena' }]);
-            api.put.mockResolvedValueOnce(makeGameSummary([interimTeam]));
-            api.delete.mockResolvedValueOnce(makeGameSummary([interimTeam]));
-            api.post.mockResolvedValueOnce(makeGameSummary([finalTeam]));
+            const finalTeam = makeTeam(10, 'Team Alpha', [{ id: 3, user_id: null, display_name: 'Elena' }]);
+            api.put.mockResolvedValueOnce(makeGameSummary([finalTeam]));
 
             render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
 
@@ -1537,11 +1531,18 @@ describe('TeamsCard', () => {
 
             await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
 
-            await waitFor(() => expect(api.delete).toHaveBeenCalledTimes(1));
-            await waitFor(() => expect(api.post).toHaveBeenCalledWith(
-                '/games/5/teams/10/players',
-                { name: 'Elena' },
-            ));
+            await waitFor(() =>
+                expect(api.put).toHaveBeenCalledWith(
+                    '/games/5/teams/10/batch',
+                    expect.objectContaining({
+                        remove_player_ids: [1],
+                        add_players: [{ name: 'Elena' }],
+                    }),
+                ),
+            );
+
+            expect(api.delete).not.toHaveBeenCalled();
+            expect(api.post).not.toHaveBeenCalled();
         });
 
         it('does not call DELETE when no existing players are removed on submit', async () => {
@@ -1907,7 +1908,7 @@ describe('TeamsCard', () => {
             expect(aliceRow).toHaveAttribute('draggable', 'true');
         });
 
-        it('defers the swap-seats API call until Update team is submitted, not on drag', async () => {
+        it('defers the swap-seats call until Update team is submitted, not on drag', async () => {
             setupGetMocks();
 
             const swappedTeam = makeTeam(10, 'Team Alpha', [
@@ -1915,10 +1916,7 @@ describe('TeamsCard', () => {
                 { id: 1, user_id: null, display_name: 'Alice', seat_number: 3 },
             ]);
 
-            // First PUT resolves the team-name update; second PUT resolves the swap-seats call.
-            api.put
-                .mockResolvedValueOnce(makeGameSummary([makeSeatedTeam()]))
-                .mockResolvedValueOnce(makeGameSummary([swappedTeam]));
+            api.put.mockResolvedValueOnce(makeGameSummary([swappedTeam]));
 
             render(<TeamsCard initialTeams={[makeSeatedTeam()]} selectedGame={selectedGame} />);
 
@@ -1936,13 +1934,15 @@ describe('TeamsCard', () => {
             // No API call yet — the drag only updates modal state.
             expect(api.put).not.toHaveBeenCalled();
 
-            // Now submit — the swap-seats call should be made.
+            // Now submit — the swap should be included in the batch payload.
             await userEvent.click(screen.getByRole('button', { name: 'Update team' }));
 
             await waitFor(() =>
                 expect(api.put).toHaveBeenCalledWith(
-                    '/games/5/players/swap-seats',
-                    { player_id_a: 1, player_id_b: 2 },
+                    '/games/5/teams/10/batch',
+                    expect.objectContaining({
+                        seat_swaps: [{ player_id_a: 1, player_id_b: 2 }],
+                    }),
                 ),
             );
         });

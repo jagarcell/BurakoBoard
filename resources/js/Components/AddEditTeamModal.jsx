@@ -302,35 +302,26 @@ export default function AddEditTeamModal({
 
         try {
             if (editingTeam) {
-                let lastResponse = await api.put(
-                    `/games/${selectedGame.id}/teams/${editingTeam.id}`,
-                    { name },
+                const batchPayload = {
+                    name,
+                    remove_player_ids: removedExistingPlayerIds,
+                    add_players: teamForm.players.map((p) =>
+                        p.userId
+                            ? { user_id: Number(p.userId), name: p.name }
+                            : { name: p.name },
+                    ),
+                    seat_swaps: pendingSeatSwaps.map(({ playerIdA, playerIdB }) => ({
+                        player_id_a: playerIdA,
+                        player_id_b: playerIdB,
+                    })),
+                };
+
+                const response = await api.put(
+                    `/games/${selectedGame.id}/teams/${editingTeam.id}/batch`,
+                    batchPayload,
                 );
 
-                for (const playerId of removedExistingPlayerIds) {
-                    lastResponse = await api.delete(
-                        `/games/${selectedGame.id}/teams/${editingTeam.id}/players/${playerId}`,
-                    );
-                }
-
-                for (const player of teamForm.players) {
-                    const payload = player.userId
-                        ? { user_id: Number(player.userId), name: player.name }
-                        : { name: player.name };
-                    lastResponse = await api.post(
-                        `/games/${selectedGame.id}/teams/${editingTeam.id}/players`,
-                        payload,
-                    );
-                }
-
-                for (const { playerIdA, playerIdB } of pendingSeatSwaps) {
-                    lastResponse = await api.put(
-                        `/games/${selectedGame.id}/players/swap-seats`,
-                        { player_id_a: playerIdA, player_id_b: playerIdB },
-                    );
-                }
-
-                const newTeams = lastResponse.data?.data?.game?.teams ?? [];
+                const newTeams = response.data?.data?.game?.teams ?? [];
                 startTransition(() => {
                     onTeamsChange?.(newTeams);
                 });

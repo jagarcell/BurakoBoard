@@ -8,6 +8,7 @@ use App\Events\GameUpdated;
 use App\Models\Game;
 use App\Models\Team;
 use App\Repositories\GameRepository;
+use App\Repositories\PlayerRepository;
 use App\Repositories\SeatRepository;
 use App\Repositories\TeamRepository;
 use App\Services\TeamService;
@@ -21,20 +22,23 @@ class TeamServiceTest extends TestCase
     private GameRepository&MockInterface $gameRepository;
     private TeamRepository&MockInterface $teamRepository;
     private SeatRepository&MockInterface $seatRepository;
+    private PlayerRepository&MockInterface $playerRepository;
     private TeamService $service;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->gameRepository = Mockery::mock(GameRepository::class);
-        $this->teamRepository = Mockery::mock(TeamRepository::class);
-        $this->seatRepository = Mockery::mock(SeatRepository::class);
+        $this->gameRepository   = Mockery::mock(GameRepository::class);
+        $this->teamRepository   = Mockery::mock(TeamRepository::class);
+        $this->seatRepository   = Mockery::mock(SeatRepository::class);
+        $this->playerRepository = Mockery::mock(PlayerRepository::class);
 
         $this->service = new TeamService(
             $this->gameRepository,
             $this->teamRepository,
             $this->seatRepository,
+            $this->playerRepository,
         );
     }
 
