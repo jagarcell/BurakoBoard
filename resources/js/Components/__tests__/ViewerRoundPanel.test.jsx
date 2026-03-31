@@ -1,9 +1,16 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import ViewerRoundPanel from '@/Components/ViewerRoundPanel';
 
 vi.mock('@/Components/BaseElementsInput', () => ({
-    default: ({ readOnly }) => <div data-testid="base-elements-input" data-readonly={readOnly} />,
+    default: ({ readOnly, showBaseElements, teamId }) => (
+        <div
+            data-testid={`base-elements-input-${teamId}`}
+            data-readonly={readOnly}
+            data-show-base-elements={showBaseElements !== false ? 'true' : 'false'}
+        />
+    ),
 }));
 
 vi.mock('@/Components/PlayerCircle', () => ({
@@ -44,9 +51,18 @@ describe('ViewerRoundPanel', () => {
         expect(screen.getByText(/round 3/i)).toBeInTheDocument();
     });
 
-    it('shows the "Live" badge', () => {
+    it('shows the "Live" badge when isCreatorLive is true', () => {
+        render(<ViewerRoundPanel {...baseProps} isCreatorLive />);
+        const badge = screen.getByLabelText('Receiving live score updates');
+        expect(badge).toBeInTheDocument();
+        expect(badge).toHaveClass('opacity-100');
+    });
+
+    it('hides the "Live" badge when isCreatorLive is false', () => {
         render(<ViewerRoundPanel {...baseProps} />);
-        expect(screen.getByText('Live')).toBeInTheDocument();
+        const badge = screen.getByLabelText('Receiving live score updates');
+        expect(badge).toBeInTheDocument();
+        expect(badge).toHaveClass('opacity-0');
     });
 
     it('renders both team names', () => {
@@ -57,9 +73,10 @@ describe('ViewerRoundPanel', () => {
 
     it('renders a BaseElementsInput in readOnly mode for each team', () => {
         render(<ViewerRoundPanel {...baseProps} />);
-        const inputs = screen.getAllByTestId('base-elements-input');
-        expect(inputs).toHaveLength(2);
-        inputs.forEach((el) => expect(el).toHaveAttribute('data-readonly', 'true'));
+        const inputAlpha = screen.getByTestId('base-elements-input-10');
+        const inputBeta = screen.getByTestId('base-elements-input-11');
+        expect(inputAlpha).toHaveAttribute('data-readonly', 'true');
+        expect(inputBeta).toHaveAttribute('data-readonly', 'true');
     });
 
     it('renders the circle toggle button with correct aria-expanded=false when circle is not open', () => {
@@ -118,5 +135,69 @@ describe('ViewerRoundPanel', () => {
         );
         // 520 = accrued 400 + round 120 for each team
         expect(screen.getAllByText('520')).toHaveLength(2);
+    });
+
+    describe('team collapse', () => {
+        it('renders a collapse button for each team when circle is closed', () => {
+            render(<ViewerRoundPanel {...baseProps} />);
+            expect(
+                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+            ).toBeInTheDocument();
+            expect(
+                screen.getByRole('button', { name: 'Collapse Team Beta score inputs' }),
+            ).toBeInTheDocument();
+        });
+
+        it('passes showBaseElements=true to BaseElementsInput by default', () => {
+            render(<ViewerRoundPanel {...baseProps} />);
+            expect(screen.getByTestId('base-elements-input-10')).toHaveAttribute('data-show-base-elements', 'true');
+            expect(screen.getByTestId('base-elements-input-11')).toHaveAttribute('data-show-base-elements', 'true');
+        });
+
+        it('passes showBaseElements=false after collapsing a team', async () => {
+            const user = userEvent.setup();
+            render(<ViewerRoundPanel {...baseProps} />);
+
+            await user.click(screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }));
+
+            expect(screen.getByTestId('base-elements-input-10')).toHaveAttribute('data-show-base-elements', 'false');
+            // The other team remains expanded
+            expect(screen.getByTestId('base-elements-input-11')).toHaveAttribute('data-show-base-elements', 'true');
+        });
+
+        it('expands the team again after a second click', async () => {
+            const user = userEvent.setup();
+            render(<ViewerRoundPanel {...baseProps} />);
+
+            await user.click(screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }));
+            await user.click(screen.getByRole('button', { name: 'Expand Team Alpha score inputs' }));
+
+            expect(screen.getByTestId('base-elements-input-10')).toHaveAttribute('data-show-base-elements', 'true');
+        });
+
+        it('collapse button has aria-expanded=true when team is expanded', () => {
+            render(<ViewerRoundPanel {...baseProps} />);
+            expect(
+                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+            ).toHaveAttribute('aria-expanded', 'true');
+        });
+
+        it('collapse button has aria-expanded=false when team is collapsed', async () => {
+            const user = userEvent.setup();
+            render(<ViewerRoundPanel {...baseProps} />);
+
+            await user.click(screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }));
+
+            expect(
+                screen.getByRole('button', { name: 'Expand Team Alpha score inputs' }),
+            ).toHaveAttribute('aria-expanded', 'false');
+        });
+
+        it('does not render collapse buttons when the circle is open', () => {
+            render(<ViewerRoundPanel {...baseProps} activeCircleRound={3} />);
+            expect(
+                screen.queryByRole('button', { name: /score inputs/i }),
+            ).not.toBeInTheDocument();
+        });
     });
 });
