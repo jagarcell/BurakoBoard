@@ -51,6 +51,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     useEffect(() => { activeCircleRoundRef.current = activeCircleRound; }, [activeCircleRound]);
 
     const [collapsedTeams, setCollapsedTeams] = useState(new Set());
+    const [isCreatorLive, setIsCreatorLive] = useState(false);
 
     // Always-current ref so the matchMedia handler below can read collapsedTeams
     // without needing to re-register the listener on every state change.
@@ -355,26 +356,81 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // Subscribe to real-time draft updates broadcast by other users in this game.
     // Viewers receive a live read-only preview; editors are excluded via toOthers()
     // on the server side so their own keystrokes are not echoed back.
+    //
+    // Creator-active handshake (whispers — no backend changes required):
+    // • Creator: send whisper('creatorActive') immediately so pre-existing viewers
+    //   learn the creator is online, and respond with whisper('creatorActive')
+    //   whenever a viewer joins later.
+    // • Viewer: listen for 'creatorActive'/'creatorInactive' whispers and update
+    //   isCreatorLive accordingly; send whisper('viewerJoined') to prompt the creator.
+    // • Creator cleanup: whisper 'creatorInactive' before echo.leave() so viewers
+    //   know the creator has switched away.
     useEffect(() => {
         if (!selectedGame?.id || typeof window === 'undefined' || !window.Echo) return;
 
         // Capture the Echo instance at subscription time so the cleanup closure
         // holds a stable reference even if window.Echo is reassigned later.
         const echo = window.Echo;
+        const isCreator = selectedGame?.user_role !== 'viewer';
+        const channel = echo.private(`game.${selectedGame.id}`);
 
-        echo.private(`game.${selectedGame.id}`)
-            .listen('.round.draft.updated', ({ base_inputs, card_inputs }) => {
-                // Skip the next debounced auto-save so receiving an update never
-                // triggers a redundant PUT back to the server.
-                skipNextDraftSave.current = true;
-                if (base_inputs) setBaseInputs(base_inputs);
-                if (card_inputs) setCardInputs(card_inputs);
+        channel.listen('.round.draft.updated', ({ base_inputs, card_inputs }) => {
+            // Skip the next debounced auto-save so receiving an update never
+            // triggers a redundant PUT back to the server.
+            skipNextDraftSave.current = true;
+            if (base_inputs) setBaseInputs(base_inputs);
+            if (card_inputs) setCardInputs(card_inputs);
+        });
+
+        if (isCreator) {
+            // Defer the initial whisper until the WebSocket subscription is
+            // confirmed — calling whisper() before the Pusher/Reverb channel
+            // is subscribed throws "Cannot read properties of undefined
+            // (reading 'trigger')" because the internal channel object doesn't
+            // exist yet.
+            channel.subscribed(() => {
+                channel.whisper('creatorActive', {});
             });
+            // When a viewer joins, respond so they learn the creator is online.
+            channel.listenForWhisper('viewerJoined', () => {
+                channel.whisper('creatorActive', {});
+            });
+        } else {
+            // Viewer: track whether the creator currently has this game open.
+            channel.listenForWhisper('creatorActive', () => setIsCreatorLive(true));
+            channel.listenForWhisper('creatorInactive', () => setIsCreatorLive(false));
+            // Announce arrival so the creator (if online) sends back creatorActive.
+            // Deferred for the same reason as the creator whisper above.
+            channel.subscribed(() => {
+                channel.whisper('viewerJoined', {});
+            });
+        }
 
         return () => {
+            if (isCreator) {
+                // Notify viewers before leaving so the badge hides immediately.
+                // Wrapped in try/catch: if the component unmounts during the
+                // subscription handshake the internal Pusher channel may not
+                // exist yet, and whisper() would throw.
+                //
+                // The channel is still subscribed at this point because
+                // GameCard's useEffect([selectedGameId]) cleanup — which runs in
+                // the render cycle BEFORE selectedGame propagates to Dashboard
+                // and RoundsCard — defers its own echo.leave() by 300 ms.  This
+                // means the Pusher subscription is alive when this cleanup runs,
+                // so the whisper reaches viewers synchronously without needing an
+                // additional delay here.
+                try {
+                    channel.whisper('creatorInactive', {});
+                } catch (_) {
+                    // Subscription never completed; nothing to notify.
+                }
+            } else {
+                setIsCreatorLive(false);
+            }
             echo.leave(`game.${selectedGame.id}`);
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGame?.user_role is stable for the lifetime of a selected game; setIsCreatorLive is a stable setter
     }, [selectedGame?.id]);
 
     const handleElementChange = (teamId, elementId, value) => {
@@ -813,6 +869,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                             computeTeamScore={computeTeamScore}
                             getAccruedScore={getAccruedScore}
                             onToggleCircle={toggleCircle}
+                            isCreatorLive={isCreatorLive}
                         />
                     ) : (
                         <div className="relative border-b border-slate-100 px-6 py-5">

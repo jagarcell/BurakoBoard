@@ -2258,18 +2258,41 @@ describe('RoundsCard', () => {
 
     describe('real-time draft updates via Echo', () => {
         let echoListenCallback;
+        let whisperCallbacks;
         let mockLeave;
+        let mockWhisper;
+        let mockListenForWhisper;
         let mockListen;
+        let mockChannel;
         let mockPrivate;
 
         beforeEach(() => {
             echoListenCallback = null;
+            whisperCallbacks = {};
             mockLeave = vi.fn();
+            mockWhisper = vi.fn();
+            mockListenForWhisper = vi.fn().mockImplementation((event, cb) => {
+                whisperCallbacks[event] = cb;
+                return mockChannel;
+            });
             mockListen = vi.fn().mockImplementation((_event, cb) => {
                 echoListenCallback = cb;
-                return { listen: mockListen };
+                return mockChannel;
             });
-            mockPrivate = vi.fn().mockReturnValue({ listen: mockListen });
+            // Immediately invoke the subscribed callback to simulate a
+            // synchronously-ready channel (mirrors production behaviour where
+            // the subscription fires before any whisper is sent).
+            const mockSubscribed = vi.fn().mockImplementation((cb) => {
+                cb();
+                return mockChannel;
+            });
+            mockChannel = {
+                listen: mockListen,
+                whisper: mockWhisper,
+                listenForWhisper: mockListenForWhisper,
+                subscribed: mockSubscribed,
+            };
+            mockPrivate = vi.fn().mockReturnValue(mockChannel);
             window.Echo = { private: mockPrivate, leave: mockLeave };
         });
 
@@ -2293,7 +2316,7 @@ describe('RoundsCard', () => {
             expect(mockListen).toHaveBeenCalledWith('.round.draft.updated', expect.any(Function));
         });
 
-        it('leaves the game channel on unmount', async () => {
+        it('leaves the game channel on unmount (creator: synchronous, channel kept alive by GameCard)', async () => {
             const { unmount } = render(
                 <RoundsCard
                     hasTwoTeams
@@ -2306,7 +2329,29 @@ describe('RoundsCard', () => {
             await screen.findAllByLabelText('Burako');
             unmount();
 
+            // RoundsCard leaves synchronously.  The channel is kept alive past the
+            // GameCard render cycle by GameCard's deferred echo.leave (300 ms), so
+            // the 'creatorInactive' whisper fires before the channel is torn down.
             expect(mockLeave).toHaveBeenCalledWith(`game.${selectedGame.id}`);
+        });
+
+        it('leaves the game channel immediately on unmount for viewers', async () => {
+            const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+            const { unmount } = render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            await screen.findByLabelText('Receiving live score updates');
+            unmount();
+
+            // Viewers do not whisper; they leave synchronously.
+            expect(mockLeave).toHaveBeenCalledWith(`game.${viewerGame.id}`);
         });
 
         it('updates base inputs when a round.draft.updated event is received', async () => {
@@ -2457,6 +2502,126 @@ describe('RoundsCard', () => {
                 expect(onTableInputs[0]).toHaveValue(0);
                 expect(onTableInputs[1]).toHaveValue(0);
             });
+        });
+
+        // ─── Creator-active whisper handshake ─────────────────────────────────
+
+        it('creator sends creatorActive whisper on channel subscribe', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            expect(mockWhisper).toHaveBeenCalledWith('creatorActive', {});
+        });
+
+        it('creator responds with creatorActive whisper when a viewerJoined whisper arrives', async () => {
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+            mockWhisper.mockClear();
+
+            // Simulate a viewer joining the channel.
+            await act(async () => { whisperCallbacks.viewerJoined?.(); });
+
+            expect(mockWhisper).toHaveBeenCalledWith('creatorActive', {});
+        });
+
+        it('creator sends creatorInactive whisper on unmount', async () => {
+            const { unmount } = render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+            mockWhisper.mockClear();
+            unmount();
+
+            expect(mockWhisper).toHaveBeenCalledWith('creatorInactive', {});
+        });
+
+        it('viewer Live badge becomes visible when creatorActive whisper is received', async () => {
+            const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            // Badge is initially hidden (creator not yet confirmed online).
+            await screen.findByLabelText('Receiving live score updates');
+            expect(screen.getByLabelText('Receiving live score updates')).toHaveClass('opacity-0');
+
+            // Creator signals presence via whisper.
+            await act(async () => { whisperCallbacks.creatorActive?.(); });
+
+            await waitFor(() =>
+                expect(screen.getByLabelText('Receiving live score updates')).toHaveClass('opacity-100'),
+            );
+        });
+
+        it('viewer Live badge hides when creatorInactive whisper is received', async () => {
+            const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            // Creator comes online.
+            await act(async () => { whisperCallbacks.creatorActive?.(); });
+            await waitFor(() =>
+                expect(screen.getByLabelText('Receiving live score updates')).toHaveClass('opacity-100'),
+            );
+
+            // Creator switches to a different game.
+            await act(async () => { whisperCallbacks.creatorInactive?.(); });
+
+            await waitFor(() =>
+                expect(screen.getByLabelText('Receiving live score updates')).toHaveClass('opacity-0'),
+            );
+        });
+
+        it('viewer sends viewerJoined whisper on channel subscribe', async () => {
+            const viewerGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'viewer' };
+
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={viewerGame}
+                />,
+            );
+
+            await screen.findByLabelText('Receiving live score updates');
+
+            expect(mockWhisper).toHaveBeenCalledWith('viewerJoined', {});
         });
     });
 
