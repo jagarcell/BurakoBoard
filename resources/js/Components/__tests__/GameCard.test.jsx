@@ -2174,6 +2174,47 @@ describe('GameCard', () => {
         expect(screen.queryByRole('option', { name: 'Their Game (2000 pts)' })).not.toBeInTheDocument();
     });
 
+    it('does not leave the game channel immediately when the selection changes — leave is deferred 300 ms', async () => {
+        const channelStub = {
+            listen: vi.fn().mockReturnThis(),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        const mockLeave = vi.fn();
+        window.Echo = {
+            private: vi.fn(() => channelStub),
+            leave: mockLeave,
+        };
+
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+
+        // Select the first game (game A).
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'My Game (2000 pts)' }));
+        await waitFor(() => expect(trigger).toHaveTextContent(/My Game/));
+
+        mockLeave.mockClear();
+
+        // Switch to viewer game — triggers the cleanup for game A.
+        await userEvent.click(trigger);
+        await userEvent.click(screen.getByRole('option', { name: 'Their Game (2000 pts)' }));
+        await waitFor(() => expect(trigger).toHaveTextContent(/Their Game/));
+
+        // echo.leave must NOT have been called synchronously in the same React
+        // effect cycle as the selectedGameId change — the channel must stay
+        // subscribed for RoundsCard's next render cycle to be able to whisper.
+        expect(mockLeave).not.toHaveBeenCalled();
+
+        // After the 300 ms defer, leave IS called.
+        await waitFor(() => expect(mockLeave).toHaveBeenCalled(), { timeout: 500 });
+    });
+
     it('does not set up a game channel subscription when no game is selected', async () => {
         const channelStub = {
             listen: vi.fn().mockReturnThis(),

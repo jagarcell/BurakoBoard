@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import BaseElementsInput from '@/Components/BaseElementsInput';
 import PlayerCircle from '@/Components/PlayerCircle';
 
@@ -17,13 +18,16 @@ import PlayerCircle from '@/Components/PlayerCircle';
  * @param {function}     props.computeTeamScore            - (teamId) => number — live round score.
  * @param {function}     props.getAccruedScore             - (teamId) => number — accrued score so far.
  * @param {function}     props.onToggleCircle              - (e, roundNumber) => void — circle toggle handler.
+ * @param {boolean}      props.isCreatorLive               - True when the game creator currently has this game selected; controls Live badge visibility.
  * @return {JSX.Element}
  *
  * Logic: Receives all state as props from RoundsCard and renders the live read-only
  * preview tiles for each team. The player-circle overlay is shown when the circle
  * toggle is active; otherwise the two team tiles with their BaseElementsInput (in readOnly
  * mode) are rendered. Score badges are derived from computeTeamScore and getAccruedScore
- * using the same color-coding logic as the scorer view.
+ * using the same color-coding logic as the scorer view. Each team tile has a collapse
+ * toggle (visible on mobile only, matching the scorer's behaviour) that hides the
+ * BaseElementsInput without affecting the other team.
  */
 export default function ViewerRoundPanel({
     teams,
@@ -38,7 +42,19 @@ export default function ViewerRoundPanel({
     computeTeamScore,
     getAccruedScore,
     onToggleCircle,
+    isCreatorLive = false,
 }) {
+    const [collapsedTeams, setCollapsedTeams] = useState(new Set());
+
+    const toggleTeamCollapse = (teamId) => {
+        setCollapsedTeams((prev) => {
+            const next = new Set(prev);
+            if (next.has(teamId)) next.delete(teamId);
+            else next.add(teamId);
+            return next;
+        });
+    };
+
     return (
         <div className="border-b border-slate-100 px-6 py-5">
             <div className="mb-4 flex items-center justify-between">
@@ -69,7 +85,7 @@ export default function ViewerRoundPanel({
                     </button>
                     <span
                         aria-label="Receiving live score updates"
-                        className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600"
+                        className={`inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600 transition-opacity duration-300 ${isCreatorLive ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                     >
                         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />
                         Live
@@ -138,6 +154,26 @@ export default function ViewerRoundPanel({
                                         >
                                             {partialScore}
                                         </span>
+                                        <button
+                                            aria-expanded={!collapsedTeams.has(team.id)}
+                                            aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name} score inputs`}
+                                            className="sm:hidden inline-flex items-center justify-center rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                                            onClick={() => toggleTeamCollapse(team.id)}
+                                            type="button"
+                                        >
+                                            <svg
+                                                aria-hidden="true"
+                                                className={`h-4 w-4 transition-transform duration-200 ${collapsedTeams.has(team.id) ? '-rotate-90' : 'rotate-0'}`}
+                                                fill="currentColor"
+                                                viewBox="0 0 20 20"
+                                            >
+                                                <path
+                                                    clipRule="evenodd"
+                                                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                                                    fillRule="evenodd"
+                                                />
+                                            </svg>
+                                        </button>
                                     </div>
                                 </div>
                                 {elements.length === 0 ? (
@@ -148,6 +184,7 @@ export default function ViewerRoundPanel({
                                         cardsOnTable={cardInputs[team.id]?.cardsOnTable ?? 0}
                                         elements={elements}
                                         readOnly
+                                        showBaseElements={!collapsedTeams.has(team.id)}
                                         teamId={team.id}
                                         values={baseInputs[team.id] ?? {}}
                                     />

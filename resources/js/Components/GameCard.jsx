@@ -159,7 +159,16 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
             });
 
         return () => {
-            echo.leave(`game.${gameId}`);
+            // Defer the leave by 300 ms so the Pusher channel remains subscribed
+            // long enough for RoundsCard's cleanup (which runs in the next render
+            // cycle, after Dashboard propagates the new selectedGame) to whisper
+            // 'creatorInactive' before the channel is torn down.  Calling
+            // echo.leave() synchronously here destroys the channel in the same
+            // render pass as GameCard's selectedGameId change — before
+            // selectedGame even propagates to Dashboard/RoundsCard.
+            setTimeout(() => {
+                echo.leave(`game.${gameId}`);
+            }, 300);
         };
     // selectedGameId is the only dependency that drives channel (re)subscription.
     // eslint-disable-next-line react-hooks/exhaustive-deps
