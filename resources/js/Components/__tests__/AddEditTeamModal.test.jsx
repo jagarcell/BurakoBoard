@@ -136,7 +136,7 @@ describe('AddEditTeamModal', () => {
         await waitFor(() => expect(baseProps.onClose).toHaveBeenCalled());
     });
 
-    it('sends PUT to edit a team by name', async () => {
+    it('sends PUT to the batch endpoint when editing a team', async () => {
         api.put.mockResolvedValue(makeEditResponse([{ id: 10, name: 'Beta Team' }]));
         const editingTeam = { id: 10, name: 'Alpha Team', players: [] };
         render(<AddEditTeamModal {...baseProps} editingTeam={editingTeam} />);
@@ -145,8 +145,13 @@ describe('AddEditTeamModal', () => {
             fireEvent.submit(document.querySelector('form'));
         });
         expect(api.put).toHaveBeenCalledWith(
-            `/games/${selectedGame.id}/teams/${editingTeam.id}`,
-            { name: 'Beta Team' },
+            `/games/${selectedGame.id}/teams/${editingTeam.id}/batch`,
+            {
+                name: 'Beta Team',
+                remove_player_ids: [],
+                add_players: [],
+                seat_swaps: [],
+            },
         );
     });
 
@@ -243,5 +248,54 @@ describe('AddEditTeamModal', () => {
             fireEvent.submit(document.querySelector('form'));
         });
         await waitFor(() => expect(baseProps.onTeamCreated).toHaveBeenCalled());
+    });
+
+    it('includes remove_player_ids in the batch payload when a player is marked for removal', async () => {
+        const existingPlayer = { id: 5, display_name: 'Eve', seat_number: 1 };
+        const editingTeam = { id: 10, name: 'Alpha Team', players: [existingPlayer] };
+        api.put.mockResolvedValue(makeEditResponse([{ id: 10, name: 'Alpha Team' }]));
+        render(<AddEditTeamModal {...baseProps} editingTeam={editingTeam} />);
+
+        fireEvent.click(screen.getByRole('button', { name: /remove eve/i }));
+
+        await act(async () => {
+            fireEvent.submit(document.querySelector('form'));
+        });
+
+        expect(api.put).toHaveBeenCalledWith(
+            `/games/${selectedGame.id}/teams/${editingTeam.id}/batch`,
+            expect.objectContaining({ remove_player_ids: [5] }),
+        );
+    });
+
+    it('includes add_players in the batch payload when a new player is added', async () => {
+        const editingTeam = { id: 10, name: 'Alpha Team', players: [] };
+        api.put.mockResolvedValue(makeEditResponse([{ id: 10, name: 'Alpha Team' }]));
+        render(<AddEditTeamModal {...baseProps} editingTeam={editingTeam} />);
+
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Frank' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Frank'));
+
+        await act(async () => {
+            fireEvent.submit(document.querySelector('form'));
+        });
+
+        expect(api.put).toHaveBeenCalledWith(
+            `/games/${selectedGame.id}/teams/${editingTeam.id}/batch`,
+            expect.objectContaining({ add_players: [{ name: 'Frank' }] }),
+        );
+    });
+
+    it('calls onTeamsChange with teams from the batch response', async () => {
+        const editingTeam = { id: 10, name: 'Alpha Team', players: [] };
+        const updatedTeams = [{ id: 10, name: 'Renamed Team' }];
+        api.put.mockResolvedValue(makeEditResponse(updatedTeams));
+        render(<AddEditTeamModal {...baseProps} editingTeam={editingTeam} />);
+        fireEvent.change(screen.getByLabelText(/team name/i), { target: { value: 'Renamed Team' } });
+        await act(async () => {
+            fireEvent.submit(document.querySelector('form'));
+        });
+        await waitFor(() => expect(baseProps.onTeamsChange).toHaveBeenCalledWith(updatedTeams));
     });
 });
