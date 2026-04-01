@@ -128,8 +128,7 @@ export default function Dashboard() {
         return () => {
             echo.leave(`game.${selectedGame.id}`);
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedGame?.id]);
+    }, [selectedGame?.id, fireConfetti]);
 
     const hasTwoTeams = useMemo(
         () => (gameSummary?.teams ?? []).length >= 2,
