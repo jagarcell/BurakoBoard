@@ -35,6 +35,7 @@ During every coding session:
 - Each doc block must include `@param` tags for all function parameters, an `@return` tag, and a `Logic:` line that explains what the function does.
 - Create tests for every newly created function.
 - Create tests for all newly created frontend components and keep those tests up to date whenever component code changes.
+- **Unit-test service and algorithm logic in isolation**: when creating or modifying a service-layer method, add a corresponding test in `tests/Unit/Services/` that mocks all repository dependencies with Mockery — never touch a real database in these tests. When creating or modifying a pure-logic class (calculators, formula helpers, formatters) that has no database dependency, test it in `tests/Unit/` as a pure function. Repository methods that implement non-trivial algorithms (e.g. seat-assignment formulas, rotation sequences) must have dedicated tests in `tests/Unit/Repositories/` using `RefreshDatabase` and raw DB fixtures rather than going through the HTTP stack. Unit tests must cover the happy path plus all meaningful edge cases (boundary conditions, wrap-around, out-of-order input, empty collections).
 
 ## Frontend
 
