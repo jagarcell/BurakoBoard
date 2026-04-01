@@ -608,14 +608,27 @@ export default function AddEditTeamModal({
                                                 ) : null}
                                                 <span className="truncate">{player.name}</span>
                                             </div>
-                                            <button
-                                                aria-label={`Remove ${player.name}`}
-                                                className="ml-2 text-slate-400 hover:text-red-500"
-                                                onClick={() => removePlayer(index)}
-                                                type="button"
-                                            >
-                                                ×
-                                            </button>
+                                            <div className="flex flex-shrink-0 items-center gap-1">
+                                                <svg
+                                                    aria-hidden="true"
+                                                    className="w-4 h-4 text-slate-400"
+                                                    fill="currentColor"
+                                                    viewBox="0 0 16 16"
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                >
+                                                    <rect x="2" y="2.5" width="12" height="1.5" rx="0.75" />
+                                                    <rect x="2" y="7.25" width="12" height="1.5" rx="0.75" />
+                                                    <rect x="2" y="12" width="12" height="1.5" rx="0.75" />
+                                                </svg>
+                                                <button
+                                                    aria-label={`Remove ${player.name}`}
+                                                    className="ml-1 text-slate-400 hover:text-red-500"
+                                                    onClick={() => removePlayer(index)}
+                                                    type="button"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
                                         </li>
                                     );
                                 })}
