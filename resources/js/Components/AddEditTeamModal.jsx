@@ -56,10 +56,14 @@ export default function AddEditTeamModal({
     const [touchingPlayerId, setTouchingPlayerId] = useState(null);
     const [touchGhostPos, setTouchGhostPos] = useState(null);
     const [touchGhostWidth, setTouchGhostWidth] = useState(null);
+    const [draggedNewIndex, setDraggedNewIndex] = useState(null);
+    const [dragOverNewIndex, setDragOverNewIndex] = useState(null);
+    const [touchingNewIndex, setTouchingNewIndex] = useState(null);
 
     const duplicatePlayerErrorTimer = useRef(null);
-    const touchDragRef = useRef({ playerId: null, active: false });
+    const touchDragRef = useRef({ playerId: null, newIndex: null, active: false });
     const seatSwapCallbackRef = useRef(null);
+    const newPlayerReorderCallbackRef = useRef(null);
 
     // Re-initialise all form state whenever the modal transitions to open.
     useEffect(() => {
@@ -80,7 +84,10 @@ export default function AddEditTeamModal({
         setTouchingPlayerId(null);
         setTouchGhostPos(null);
         setTouchGhostWidth(null);
-        touchDragRef.current = { playerId: null, active: false };
+        setDraggedNewIndex(null);
+        setDragOverNewIndex(null);
+        setTouchingNewIndex(null);
+        touchDragRef.current = { playerId: null, newIndex: null, active: false };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally reset only when isOpen transitions to true; editingTeamProp is read once per open
     }, [isOpen]);
 
@@ -96,13 +103,21 @@ export default function AddEditTeamModal({
         if (!isOpen) return undefined;
 
         const onTouchStart = (e) => {
-            const li = e.target?.closest('[data-player-id]');
-            if (!li) return;
-            const pid = Number(li.dataset.playerId);
-            touchDragRef.current = { playerId: pid, active: true };
-            setTouchingPlayerId(pid);
-            setTouchGhostPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-            setTouchGhostWidth(li.getBoundingClientRect().width);
+            const liPlayer = e.target?.closest('[data-player-id]');
+            const liNew = e.target?.closest('[data-new-player-index]');
+            if (liPlayer) {
+                const pid = Number(liPlayer.dataset.playerId);
+                touchDragRef.current = { playerId: pid, newIndex: null, active: true };
+                setTouchingPlayerId(pid);
+                setTouchGhostPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+                setTouchGhostWidth(liPlayer.getBoundingClientRect().width);
+            } else if (liNew) {
+                const idx = Number(liNew.dataset.newPlayerIndex);
+                touchDragRef.current = { playerId: null, newIndex: idx, active: true };
+                setTouchingNewIndex(idx);
+                setTouchGhostPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+                setTouchGhostWidth(liNew.getBoundingClientRect().width);
+            }
         };
 
         const onTouchMove = (e) => {
@@ -110,11 +125,19 @@ export default function AddEditTeamModal({
             e.preventDefault();
             const touch = e.touches[0];
             const target = document.elementFromPoint(touch.clientX, touch.clientY);
-            const li = target?.closest('[data-player-id]');
-            const overId = li ? Number(li.dataset.playerId) : null;
-            setDragOverPlayerId(
-                overId !== null && overId !== touchDragRef.current.playerId ? overId : null,
-            );
+            if (touchDragRef.current.playerId !== null) {
+                const li = target?.closest('[data-player-id]');
+                const overId = li ? Number(li.dataset.playerId) : null;
+                setDragOverPlayerId(
+                    overId !== null && overId !== touchDragRef.current.playerId ? overId : null,
+                );
+            } else if (touchDragRef.current.newIndex !== null) {
+                const li = target?.closest('[data-new-player-index]');
+                const overIdx = li !== null ? Number(li.dataset.newPlayerIndex) : null;
+                setDragOverNewIndex(
+                    overIdx !== null && overIdx !== touchDragRef.current.newIndex ? overIdx : null,
+                );
+            }
             setTouchGhostPos({ x: touch.clientX, y: touch.clientY });
         };
 
@@ -122,22 +145,34 @@ export default function AddEditTeamModal({
             if (!touchDragRef.current.active) return;
             const touch = e.changedTouches[0];
             const target = document.elementFromPoint(touch.clientX, touch.clientY);
-            const li = target?.closest('[data-player-id]');
-            const targetId = li ? Number(li.dataset.playerId) : null;
-            if (targetId !== null && targetId !== touchDragRef.current.playerId) {
-                seatSwapCallbackRef.current?.(touchDragRef.current.playerId, targetId);
+            if (touchDragRef.current.playerId !== null) {
+                const li = target?.closest('[data-player-id]');
+                const targetId = li ? Number(li.dataset.playerId) : null;
+                if (targetId !== null && targetId !== touchDragRef.current.playerId) {
+                    seatSwapCallbackRef.current?.(touchDragRef.current.playerId, targetId);
+                }
+                setDragOverPlayerId(null);
+                setTouchingPlayerId(null);
+            } else if (touchDragRef.current.newIndex !== null) {
+                const li = target?.closest('[data-new-player-index]');
+                const targetIdx = li !== null ? Number(li.dataset.newPlayerIndex) : null;
+                if (targetIdx !== null && targetIdx !== touchDragRef.current.newIndex) {
+                    newPlayerReorderCallbackRef.current?.(touchDragRef.current.newIndex, targetIdx);
+                }
+                setDragOverNewIndex(null);
+                setTouchingNewIndex(null);
             }
-            touchDragRef.current = { playerId: null, active: false };
-            setDragOverPlayerId(null);
-            setTouchingPlayerId(null);
+            touchDragRef.current = { playerId: null, newIndex: null, active: false };
             setTouchGhostPos(null);
             setTouchGhostWidth(null);
         };
 
         const onTouchCancel = () => {
-            touchDragRef.current = { playerId: null, active: false };
+            touchDragRef.current = { playerId: null, newIndex: null, active: false };
             setDragOverPlayerId(null);
             setTouchingPlayerId(null);
+            setDragOverNewIndex(null);
+            setTouchingNewIndex(null);
             setTouchGhostPos(null);
             setTouchGhostWidth(null);
         };
@@ -268,6 +303,28 @@ export default function AddEditTeamModal({
     seatSwapCallbackRef.current = handleSeatSwap;
 
     /**
+     * Reorders two pending (not-yet-saved) players in the creation list.
+     *
+     * @param {number} fromIndex - 0-based index of the player being dragged.
+     * @param {number} toIndex   - 0-based index of the drop target.
+     * @return {void}
+     *
+     * Logic: Splices the dragged player out of its current position and inserts it
+     * before the drop-target index, updating teamForm.players in a single setState
+     * call so projected seat numbers recalculate immediately.
+     */
+    const handleNewPlayerReorder = useCallback((fromIndex, toIndex) => {
+        setTeamForm((current) => {
+            const updated = [...current.players];
+            const [moved] = updated.splice(fromIndex, 1);
+            updated.splice(toIndex, 0, moved);
+            return { ...current, players: updated };
+        });
+    }, []);
+
+    newPlayerReorderCallbackRef.current = handleNewPlayerReorder;
+
+    /**
      * Persists the create or edit operation via the API.
      *
      * @param {React.FormEvent} event
@@ -378,6 +435,7 @@ export default function AddEditTeamModal({
     };
 
     const ghostPlayer = editingTeam?.existingPlayers?.find((p) => p.id === touchingPlayerId);
+    const ghostNewPlayer = touchingNewIndex !== null ? teamForm.players[touchingNewIndex] : null;
 
     return (
         <>
@@ -487,6 +545,9 @@ export default function AddEditTeamModal({
 
                         {teamForm.players.length > 0 ? (
                             <ul className="space-y-1 pt-1">
+                                {teamForm.players.length >= 2 ? (
+                                    <p className="text-xs text-slate-400 -mt-1 mb-1">Drag &amp; Drop Players to reorder</p>
+                                ) : null}
                                 {teamForm.players.map((player, index) => {
                                     const modalSlot = editingTeam
                                         ? (existingTeams ?? []).findIndex((t) => t.id === editingTeam.id)
@@ -504,7 +565,37 @@ export default function AddEditTeamModal({
                                     return (
                                         <li
                                             key={index}
-                                            className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                                            data-new-player-index={index}
+                                            draggable
+                                            onDragStart={() => setDraggedNewIndex(index)}
+                                            onDragEnd={() => {
+                                                setDraggedNewIndex(null);
+                                                setDragOverNewIndex(null);
+                                            }}
+                                            onDragOver={(e) => {
+                                                if (draggedNewIndex !== null && draggedNewIndex !== index) {
+                                                    e.preventDefault();
+                                                    setDragOverNewIndex(index);
+                                                }
+                                            }}
+                                            onDragLeave={() => setDragOverNewIndex(null)}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                if (draggedNewIndex !== null && draggedNewIndex !== index) {
+                                                    handleNewPlayerReorder(draggedNewIndex, index);
+                                                    setDraggedNewIndex(null);
+                                                    setDragOverNewIndex(null);
+                                                }
+                                            }}
+                                            className={[
+                                                'flex items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-700 transition select-none cursor-grab active:cursor-grabbing',
+                                                draggedNewIndex === index
+                                                    ? 'opacity-40 bg-slate-100 ring-2 ring-inset ring-slate-300'
+                                                    : dragOverNewIndex === index
+                                                        ? 'bg-indigo-50 ring-2 ring-inset ring-indigo-400'
+                                                        : 'bg-slate-50',
+                                                touchingNewIndex === index ? 'opacity-40 bg-slate-100 ring-2 ring-inset ring-slate-300' : '',
+                                            ].join(' ')}
                                         >
                                             <div className="flex min-w-0 items-center gap-2">
                                                 {projectedSeat != null ? (
@@ -561,6 +652,21 @@ export default function AddEditTeamModal({
                             </span>
                         )}
                         <span>{ghostPlayer.display_name}</span>
+                    </div>
+                </div>
+            )}
+
+            {touchingNewIndex !== null && touchGhostPos && ghostNewPlayer && (
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none fixed left-0 top-0 z-[200]"
+                    style={{ transform: `translate(calc(${touchGhostPos.x}px - 50%), calc(${touchGhostPos.y}px - 100% - 8px)) scale(1.1)` }}
+                >
+                    <div
+                        className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-700 shadow-2xl ring-2 ring-inset ring-indigo-400 opacity-90"
+                        style={touchGhostWidth ? { width: touchGhostWidth } : undefined}
+                    >
+                        <span>{ghostNewPlayer.name}</span>
                     </div>
                 </div>
             )}
