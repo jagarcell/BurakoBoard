@@ -6,12 +6,14 @@ use App\Data\GameSummaryData;
 use App\Enums\GameStatus;
 use App\Events\GameUpdated;
 use App\Models\Game;
+use App\Models\Player;
 use App\Models\Team;
 use App\Repositories\GameRepository;
 use App\Repositories\PlayerRepository;
 use App\Repositories\SeatRepository;
 use App\Repositories\TeamRepository;
 use App\Services\TeamService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Mockery;
 use Mockery\MockInterface;
@@ -266,6 +268,112 @@ class TeamServiceTest extends TestCase
             ->andReturn($summaryData);
 
         $result = $this->service->updateTeam(1, 2, ['name' => 'New']);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
+    }
+
+    public function test_batch_update_team_throws_when_game_is_finished(): void
+    {
+        $game         = new Game();
+        $game->status = GameStatus::Finished;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->expectException(ValidationException::class);
+
+        $this->service->batchUpdateTeam(1, 2, [
+            'name'              => 'Alpha',
+            'remove_player_ids' => [],
+            'add_players'       => [],
+            'seat_swaps'        => [],
+        ]);
+    }
+
+    public function test_batch_update_team_applies_all_changes_in_transaction_and_broadcasts(): void
+    {
+        $game         = new Game();
+        $game->status = GameStatus::InProgress;
+
+        $team     = new Team(['id' => 2, 'name' => 'Old']);
+        $team->id = 2;
+
+        $newPlayer     = new Player(['id' => 99, 'name' => 'Charlie']);
+        $newPlayer->id = 99;
+
+        $summaryData = $this->makeGameSummaryData(1);
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->teamRepository->shouldReceive('findTeamInGameOrFail')
+            ->once()
+            ->with(1, 2)
+            ->andReturn($team);
+
+        DB::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn ($cb) => $cb());
+
+        // a. Rename
+        $this->teamRepository->shouldReceive('updateTeam')
+            ->once()
+            ->with($team, ['name' => 'New Name']);
+
+        // b. Remove player 55
+        $this->seatRepository->shouldReceive('removePlayerSeatForTeam')
+            ->once()
+            ->with(2, 55);
+
+        $this->playerRepository->shouldReceive('detachPlayerFromTeam')
+            ->once()
+            ->with(2, 55);
+
+        // c. Add player 'Charlie' (name-only, no user_id)
+        $this->playerRepository->shouldReceive('teamHasPlayerWithName')
+            ->once()
+            ->with(2, 'Charlie')
+            ->andReturn(false);
+
+        $this->playerRepository->shouldReceive('createNamedPlayer')
+            ->once()
+            ->with('Charlie')
+            ->andReturn($newPlayer);
+
+        $this->playerRepository->shouldReceive('attachPlayerToTeam')
+            ->once()
+            ->with(2, 99);
+
+        $this->seatRepository->shouldReceive('assignPlayerSeat')
+            ->once()
+            ->with(1, 2, 99);
+
+        // d. Seat swap
+        $this->seatRepository->shouldReceive('swapPlayerSeats')
+            ->once()
+            ->with(1, 10, 20);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
+        $this->gameRepository->shouldReceive('getGameSummary')
+            ->once()
+            ->with(1)
+            ->andReturn($summaryData);
+
+        $result = $this->service->batchUpdateTeam(1, 2, [
+            'name'              => 'New Name',
+            'remove_player_ids' => [55],
+            'add_players'       => [['name' => 'Charlie']],
+            'seat_swaps'        => [['player_id_a' => 10, 'player_id_b' => 20]],
+        ]);
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('game', $result);

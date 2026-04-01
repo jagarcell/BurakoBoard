@@ -12,6 +12,7 @@ use App\Repositories\SeatRepository;
 use App\Repositories\TeamRepository;
 use App\Services\GameService;
 use App\Services\InvitationService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Mockery;
 use Mockery\MockInterface;
@@ -262,5 +263,76 @@ class GameServiceTest extends TestCase
         $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
 
         $this->service->createRematch(5, ['name' => 'Rematch', 'target_points' => 2000], $user);
+    }
+
+    public function test_create_rematch_creates_new_game_with_teams_seats_and_invitations(): void
+    {
+        $sourceGame = new Game(['status' => GameStatus::Finished]);
+
+        $newGame     = new Game(['name' => 'Rematch', 'target_points' => 2000]);
+        $newGame->id = 20;
+
+        $user     = new User();
+        $user->id = 5;
+
+        $summaryData = $this->makeGameSummaryData(20);
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(5)
+            ->andReturn($sourceGame);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(5, 5)
+            ->andReturn(true);
+
+        DB::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn ($cb) => $cb());
+
+        $this->gameRepository->shouldReceive('createGame')
+            ->once()
+            ->andReturn($newGame);
+
+        $this->gameRepository->shouldReceive('attachUserToGame')
+            ->once()
+            ->with(20, 5, GameUserRole::Creator->value);
+
+        $this->teamRepository->shouldReceive('getOrderedTeamIdsForGame')
+            ->once()
+            ->with(5)
+            ->andReturn(collect([1, 2]));
+
+        $this->teamRepository->shouldReceive('attachTeamToGame')
+            ->twice();
+
+        $this->seatRepository->shouldReceive('copySeatsFromGame')
+            ->once()
+            ->with(5, 20);
+
+        $this->seatRepository->shouldReceive('computeNextCutterSeatNumber')
+            ->once()
+            ->with($sourceGame)
+            ->andReturn(3);
+
+        $this->gameRepository->shouldReceive('updateGameInitialShufflerSeat')
+            ->once()
+            ->with($newGame, 3);
+
+        $this->invitationService->shouldReceive('sendRematchInvitations')
+            ->once()
+            ->with(5, 20, $user);
+
+        $this->gameRepository->shouldReceive('getGameSummary')
+            ->once()
+            ->with(20)
+            ->andReturn($summaryData);
+
+        $result = $this->service->createRematch(5, ['name' => 'Rematch', 'target_points' => 2000], $user);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
     }
 }
