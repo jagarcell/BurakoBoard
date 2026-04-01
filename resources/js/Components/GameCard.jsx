@@ -170,8 +170,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 echo.leave(`game.${gameId}`);
             }, 300);
         };
-    // selectedGameId is the only dependency that drives channel (re)subscription.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGameId is the only dependency that drives channel (re)subscription; other referenced values (echo, setGames) are stable
     }, [selectedGameId]);
 
     // When Dashboard's authoritative game state marks the selected game as finished

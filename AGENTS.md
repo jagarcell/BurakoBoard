@@ -143,6 +143,7 @@ During every coding session:
   is logically one user action.
 - **Do not suppress linter dependency warnings** (e.g. `exhaustive-deps`) without an explicit
   inline comment justifying why the omission is safe.
+- **Every `eslint-disable` comment must include a trailing `// safe: <reason>` explanation** describing why suppressing that rule is correct in context. Always disable only the specific rule required (e.g. `// eslint-disable-next-line no-explicit-any`) — never use a bare `eslint-disable` without a rule name. File-level disables are forbidden; use per-line or per-block directives only.
 - **Derive all computed flags and derived state from a single authoritative data source** (e.g. an
   API response or a shared store) rather than from local ad-hoc calculations that can drift out of
   sync.

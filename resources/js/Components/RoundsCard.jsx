@@ -94,7 +94,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
         mq.addEventListener('change', handleChange);
         return () => mq.removeEventListener('change', handleChange);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- collapsedTeamsRef and savedCollapsedTeamsRef are stable refs; setCollapsedTeams is a stable state setter; listener registered once on mount to track viewport transitions
     }, []);
 
     const teamRefs = useRef(new Map());
@@ -185,7 +185,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             });
 
         return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGame?.id is intentionally omitted: the [selectedGame?.id] effect above always resets expandedRound to null before a game switch, preventing stale-game fetches
     }, [expandedRound]);
 
     // Tracks whether the draft for the current game has been fetched so the
@@ -321,7 +321,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             });
 
         return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setBaseInputs and setCardInputs are stable state setters; draftLoadedRef is a stable ref
     }, [selectedGame?.id, elements.length]);
 
     // Debounced auto-save: persist inputs to round-draft whenever they change,
@@ -350,7 +350,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         return () => {
             if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGameRef, skipNextDraftSave, and draftSaveTimerRef are stable refs kept current by their own effects; intentionally excluded to prevent the debounce timer from resetting on every ref update
     }, [baseInputs, cardInputs]);
 
     // Subscribe to real-time draft updates broadcast by other users in this game.
