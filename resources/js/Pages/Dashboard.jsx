@@ -37,8 +37,7 @@ export default function Dashboard() {
         }
 
         setGameSummary((prev) => (prev ? { ...prev, teams: newTeams } : prev));
-    // setGameSummary is a stable setter; no external deps needed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setGameSummary is a stable setter; no external deps needed
     }, []);
 
     const handleRoundRecorded = useCallback((updatedTeams, gameStatus, nextSummary = null) => {

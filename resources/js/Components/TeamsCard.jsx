@@ -81,7 +81,8 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
             const w = diffLabelRef.current.getBoundingClientRect().width;
             setArrowHalfWidth(Math.round(w / 2) + 16);
         }
-    }, [teams.length === 2]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- diffLabelRef is a stable ref; no reactive deps beyond the teams.length === 2 boolean trigger
+    }, [teams.length === 2]);
 
     const resetModal = () => {
         setEditingTeam(null);
