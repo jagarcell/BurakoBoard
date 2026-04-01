@@ -151,4 +151,61 @@ class RoundRoleCalculatorTest extends TestCase
         ];
         $this->assertNotContains(99, $seatedIds);
     }
+
+    /**
+     * Verify that the cutter seat_number advances by exactly one each round over a full four-round
+     * sequence, confirming the offset formula iterates through all seats in order.
+     *
+     * @return void Asserts seat_number 1→2→3→4 across rounds 1 to 4.
+     * Logic: with currentRoundNumber=3 the calculator produces max(1, 3+1)=4 entries; offset 0–3
+     *   maps to seatedPlayers[0–3], so seat_numbers are 1, 2, 3, 4 respectively.
+     */
+    public function test_cutter_seat_number_advances_by_one_each_round_over_four_rounds(): void
+    {
+        $teamPayload = $this->makeTeamPayload([
+            $this->makePlayer(1, 1),
+            $this->makePlayer(2, 2),
+            $this->makePlayer(3, 3),
+            $this->makePlayer(4, 4),
+        ]);
+
+        // currentRoundNumber=3 → max(1, 3+1)=4 rounds generated
+        $result = $this->calculator->compute($teamPayload, 3, 1);
+
+        $this->assertCount(4, $result);
+
+        // Round 1: offset=0, cutter at seatedPlayers[0] → seat 1
+        $this->assertSame(1, $result[0]['cutter']['seat_number']);
+        // Round 2: offset=1, cutter at seatedPlayers[1] → seat 2
+        $this->assertSame(2, $result[1]['cutter']['seat_number']);
+        // Round 3: offset=2, cutter at seatedPlayers[2] → seat 3
+        $this->assertSame(3, $result[2]['cutter']['seat_number']);
+        // Round 4: offset=3, cutter at seatedPlayers[3] → seat 4
+        $this->assertSame(4, $result[3]['cutter']['seat_number']);
+    }
+
+    /**
+     * Verify that the rotation wraps back to the starting seat after a complete cycle of four rounds.
+     *
+     * @return void Asserts the fifth round's cutter returns to seat 1 (the anchor seat).
+     * Logic: with currentRoundNumber=4 the calculator produces 5 entries; offset=4 →
+     *   (initialIndex + 4) % 4 = 0, so the cutter is back at the anchor (seat 1, player 1).
+     */
+    public function test_rotation_wraps_back_to_anchor_after_full_cycle(): void
+    {
+        $teamPayload = $this->makeTeamPayload([
+            $this->makePlayer(1, 1),
+            $this->makePlayer(2, 2),
+            $this->makePlayer(3, 3),
+            $this->makePlayer(4, 4),
+        ]);
+
+        // currentRoundNumber=4 → 5 rounds; round 5 (offset=4) wraps: (0+4)%4=0
+        $result = $this->calculator->compute($teamPayload, 4, 1);
+
+        $this->assertCount(5, $result);
+        $this->assertSame(5, $result[4]['round_number']);
+        $this->assertSame(1, $result[4]['cutter']['seat_number']);
+        $this->assertSame(1, $result[4]['cutter']['player_id']);
+    }
 }
