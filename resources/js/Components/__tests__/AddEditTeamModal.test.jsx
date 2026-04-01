@@ -298,4 +298,83 @@ describe('AddEditTeamModal', () => {
         });
         await waitFor(() => expect(baseProps.onTeamsChange).toHaveBeenCalledWith(updatedTeams));
     });
+
+    it('does not show drag hint when fewer than 2 pending players exist', async () => {
+        render(<AddEditTeamModal {...baseProps} />);
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Alice' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Alice'));
+        expect(screen.queryByText(/drag & drop players to reorder/i)).not.toBeInTheDocument();
+    });
+
+    it('shows drag hint when 2 or more pending players are added', async () => {
+        render(<AddEditTeamModal {...baseProps} />);
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Alice' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Alice'));
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Bob' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Bob'));
+        expect(screen.getByText(/drag & drop players to reorder/i)).toBeInTheDocument();
+    });
+
+    it('reorders pending players via HTML5 drag and drop', async () => {
+        render(<AddEditTeamModal {...baseProps} creatingSlot={0} />);
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Alice' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Alice'));
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Bob' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Bob'));
+
+        const items = screen.getAllByRole('listitem').filter((li) => li.dataset.newPlayerIndex !== undefined);
+        // Drag Alice (index 0) onto Bob (index 1)
+        fireEvent.dragStart(items[0]);
+        fireEvent.dragOver(items[1]);
+        fireEvent.drop(items[1]);
+        fireEvent.dragEnd(items[0]);
+
+        // After drop, Bob should now be first (projected seat 1) and Alice second (projected seat 3)
+        const seats = screen.getAllByText(/seat \d/i);
+        expect(seats[0].textContent).toBe('Seat 1');
+        expect(seats[1].textContent).toBe('Seat 3');
+        // Verify Bob precedes Alice in DOM order
+        const names = screen.getAllByRole('listitem')
+            .filter((li) => li.dataset.newPlayerIndex !== undefined)
+            .map((li) => li.querySelector('span.truncate')?.textContent);
+        expect(names[0]).toBe('Bob');
+        expect(names[1]).toBe('Alice');
+    });
+
+    it('does not reorder when dragging onto itself', async () => {
+        render(<AddEditTeamModal {...baseProps} />);
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Alice' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Alice'));
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Bob' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Bob'));
+
+        const items = screen.getAllByRole('listitem').filter((li) => li.dataset.newPlayerIndex !== undefined);
+        fireEvent.dragStart(items[0]);
+        fireEvent.dragOver(items[0]);
+        fireEvent.drop(items[0]);
+        fireEvent.dragEnd(items[0]);
+
+        const names = screen.getAllByRole('listitem')
+            .filter((li) => li.dataset.newPlayerIndex !== undefined)
+            .map((li) => li.querySelector('span.truncate')?.textContent);
+        expect(names[0]).toBe('Alice');
+        expect(names[1]).toBe('Bob');
+    });
+
+    it('pending player items are draggable', async () => {
+        render(<AddEditTeamModal {...baseProps} />);
+        fireEvent.change(screen.getByLabelText(/player name/i), { target: { value: 'Alice' } });
+        fireEvent.click(screen.getByRole('button', { name: /add player/i }));
+        await waitFor(() => screen.getByText('Alice'));
+
+        const item = screen.getAllByRole('listitem').find((li) => li.dataset.newPlayerIndex !== undefined);
+        expect(item).toHaveAttribute('draggable', 'true');
+    });
 });
