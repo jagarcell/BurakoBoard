@@ -88,7 +88,19 @@ export default function CardSpinner({ message = 'Recording…', className = '' }
                             stdDeviation="1.5"
                         />
                     </filter>
+
+                    {/* Casino felt radial gradient — matches the logo table colour */}
+                    <radialGradient cx="50%" cy="40%" id="cs-bg" r="55%">
+                        <stop offset="0%" stopColor="#2e72c9" />
+                        <stop offset="60%" stopColor="#1a4f9c" />
+                        <stop offset="100%" stopColor="#0d3264" />
+                    </radialGradient>
                 </defs>
+
+                {/* Table background — dark rail ring + mid-rail + blue felt */}
+                <circle cx="100" cy="100" fill="#081b38" r="96" />
+                <circle cx="100" cy="100" fill="#12306a" r="93" />
+                <circle cx="100" cy="100" fill="url(#cs-bg)" r="90" />
 
                 {/*
                   * Orbiting card group — rotated by animate-card-orbit around

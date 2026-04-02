@@ -90,6 +90,22 @@ describe('CardSpinner', () => {
         expect(container.querySelector('#cs-shadow')).toBeInTheDocument();
     });
 
+    it('renders the cs-bg radial gradient in defs', () => {
+        const { container } = render(<CardSpinner />);
+        expect(container.querySelector('radialGradient#cs-bg')).toBeInTheDocument();
+    });
+
+    it('renders casino blue circular background felt', () => {
+        const { container } = render(<CardSpinner />);
+        expect(container.querySelector('circle[fill="url(#cs-bg)"]')).toBeInTheDocument();
+    });
+
+    it('renders three concentric background circles', () => {
+        const { container } = render(<CardSpinner />);
+        const circles = container.querySelectorAll('svg > circle');
+        expect(circles).toHaveLength(3);
+    });
+
     it('each card group references the shadow filter', () => {
         const { container } = render(<CardSpinner />);
         const orbitGroup = container.querySelector('svg > g');
