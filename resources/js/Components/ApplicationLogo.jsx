@@ -9,7 +9,20 @@ export default function ApplicationLogo(props) {
                 <filter id="card-shadow" x="-15%" y="-15%" width="130%" height="130%">
                     <feDropShadow dx="1.5" dy="1.5" stdDeviation="2" floodColor="#000" floodOpacity="0.22" />
                 </filter>
+                <filter id="table-shadow" x="-5%" y="-15%" width="110%" height="140%">
+                    <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.45" />
+                </filter>
+                <radialGradient id="table-felt" cx="50%" cy="40%" r="55%">
+                    <stop offset="0%" stopColor="#2e72c9" />
+                    <stop offset="60%" stopColor="#1a4f9c" />
+                    <stop offset="100%" stopColor="#0d3264" />
+                </radialGradient>
             </defs>
+
+            {/* Casino table — horizontal oval, dark rail + blue felt */}
+            <ellipse cx="114" cy="148" rx="112" ry="52" fill="#081b38" filter="url(#table-shadow)" />
+            <ellipse cx="114" cy="145" rx="109" ry="49" fill="#12306a" />
+            <ellipse cx="114" cy="144" rx="106" ry="46" fill="url(#table-felt)" />
 
             {/* A♠ — far left, rotated -30° */}
             <g transform="translate(42,114) rotate(-30)" filter="url(#card-shadow)">

@@ -22,6 +22,24 @@ describe('ApplicationLogo', () => {
         expect(groups).toHaveLength(5);
     });
 
+    it('renders the casino table oval background', () => {
+        const { container } = render(<ApplicationLogo />);
+        const ellipses = container.querySelectorAll('svg > ellipse');
+        expect(ellipses.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('renders the table felt ellipse with casino blue gradient', () => {
+        const { container } = render(<ApplicationLogo />);
+        const feltEllipse = container.querySelector('ellipse[fill="url(#table-felt)"]');
+        expect(feltEllipse).toBeInTheDocument();
+    });
+
+    it('renders the table-felt radial gradient in defs', () => {
+        const { container } = render(<ApplicationLogo />);
+        const gradient = container.querySelector('radialGradient#table-felt');
+        expect(gradient).toBeInTheDocument();
+    });
+
     it('renders all four suit symbols', () => {
         const { container } = render(<ApplicationLogo />);
         const svgText = container.innerHTML;
