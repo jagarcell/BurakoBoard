@@ -1,7 +1,10 @@
+import { useState, lazy, Suspense } from 'react';
 import Checkbox from '@/Components/Checkbox';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import NumericStepper from '@/Components/NumericStepper';
+
+const CardPointsScanner = lazy(() => import('@/Components/CardPointsScanner'));
 
 /**
  * Renders a list of base scoring elements for one team with the appropriate input control per element:
@@ -29,6 +32,7 @@ import NumericStepper from '@/Components/NumericStepper';
  * rose/red text, giving the user a visual cue that a deduction will be applied.
  */
 export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false, showBaseElements = true }) {
+    const [scannerTarget, setScannerTarget] = useState(null);
     // When a score_override boolean element is checked both cardsInHand and
     // cardsOnTable are subtracted from the base score (penalty mode).
     const scoreOverrideActive = elements.some((el) => el.score_override && !!values[el.id]);
@@ -157,6 +161,16 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             value="Points in Hand"
                         />
                         <span className="shrink-0 text-xs font-medium text-rose-500">−pts</span>
+                        {!readOnly && (
+                            <button
+                                aria-label="Scan cards in hand"
+                                className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                                onClick={() => setScannerTarget('hand')}
+                                type="button"
+                            >
+                                📷
+                            </button>
+                        )}
                     </div>
                     {!readOnly && cardErrors.cardsInHand && (
                         <InputError message={cardErrors.cardsInHand} />
@@ -181,6 +195,16 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                         <span className={`shrink-0 text-xs font-medium ${cardsOnTableNegative ? 'text-rose-500' : 'text-emerald-600'}`}>
                             {cardsOnTableNegative ? '−pts' : '+pts'}
                         </span>
+                        {!readOnly && (
+                            <button
+                                aria-label="Scan cards on table"
+                                className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                                onClick={() => setScannerTarget('table')}
+                                type="button"
+                            >
+                                📷
+                            </button>
+                        )}
                     </div>
                     {!readOnly && cardErrors.cardsOnTable && (
                         <InputError message={cardErrors.cardsOnTable} />
@@ -208,6 +232,22 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                     })()}
                     <span aria-hidden="true" className="sm:hidden inline-flex flex-shrink-0 w-6 h-6" />
                 </div>
+            )}
+
+            {scannerTarget && (
+                <Suspense fallback={null}>
+                    <CardPointsScanner
+                        label={scannerTarget === 'hand' ? 'Points in Hand' : 'Points on Table'}
+                        onApply={(total) => {
+                            onCardsChange?.(
+                                scannerTarget === 'hand' ? 'cardsInHand' : 'cardsOnTable',
+                                total,
+                            );
+                            setScannerTarget(null);
+                        }}
+                        onCancel={() => setScannerTarget(null)}
+                    />
+                </Suspense>
             )}
         </div>
     );
