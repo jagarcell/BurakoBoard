@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\BaseElementController;
+use App\Http\Controllers\Api\V1\CardWeightController;
 use App\Http\Controllers\Api\V1\GameController;
 use App\Http\Controllers\Api\V1\RoundController;
 use App\Http\Controllers\Api\V1\RoundDraftController;
@@ -18,6 +19,7 @@ Route::prefix('v1')->group(function () {
     ]);
 
     Route::get('/base-elements', [BaseElementController::class, 'index']);
+    Route::get('/card-weights', [CardWeightController::class, 'index']);
 
     Route::get('/games/{gameId}', [GameController::class, 'show']);
     Route::get('/games/{gameId}/rounds', [GameController::class, 'rounds']);
