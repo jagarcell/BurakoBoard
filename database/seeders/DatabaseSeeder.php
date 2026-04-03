@@ -32,6 +32,7 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             BaseElementSeeder::class,
+            CardWeightSeeder::class,
         ]);
     }
 }
