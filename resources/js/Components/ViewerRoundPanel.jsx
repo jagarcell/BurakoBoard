@@ -25,9 +25,9 @@ import PlayerCircle from '@/Components/PlayerCircle';
  * preview tiles for each team. The player-circle overlay is shown when the circle
  * toggle is active; otherwise the two team tiles with their BaseElementsInput (in readOnly
  * mode) are rendered. Score badges are derived from computeTeamScore and getAccruedScore
- * using the same color-coding logic as the scorer view. Each team tile has a collapse
- * toggle (visible on mobile only, matching the scorer's behaviour) that hides the
- * BaseElementsInput without affecting the other team.
+ * using the same color-coding logic as the scorer view. On mobile a two-up team
+ * selector row at the top lets the user switch which team's inputs are shown;
+ * on sm+ both panels are visible side-by-side.
  */
 export default function ViewerRoundPanel({
     teams,
@@ -44,16 +44,8 @@ export default function ViewerRoundPanel({
     onToggleCircle,
     isCreatorLive = false,
 }) {
-    const [collapsedTeams, setCollapsedTeams] = useState(new Set());
-
-    const toggleTeamCollapse = (teamId) => {
-        setCollapsedTeams((prev) => {
-            const next = new Set(prev);
-            if (next.has(teamId)) next.delete(teamId);
-            else next.add(teamId);
-            return next;
-        });
-    };
+    // Active team tab for mobile (stacked) layout — only one team's panel is shown at a time.
+    const [activeTeamTab, setActiveTeamTab] = useState(teams[0]?.id ?? null);
 
     return (
         <div className="border-b border-slate-100 px-6 py-5">
@@ -106,93 +98,135 @@ export default function ViewerRoundPanel({
             )}
 
             {activeCircleRound !== nextRound && closingCircleRound !== nextRound && (
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                    {teams.map((team) => {
-                        const roundScore = computeTeamScore(team.id);
-                        const partialScore = getAccruedScore(team.id) + roundScore;
-                        const other = teams.find((t) => t.id !== team.id);
-                        const otherPartial = other
-                            ? getAccruedScore(other.id) + computeTeamScore(other.id)
-                            : null;
-                        const bothPos =
-                            partialScore > 0 &&
-                            otherPartial !== null &&
-                            otherPartial > 0;
-                        const partialChipCls =
-                            partialScore < 0
-                                ? 'bg-red-100 text-red-800'
-                                : partialScore === 0
-                                    ? 'bg-[bisque] text-green-700'
-                                    : bothPos && partialScore < otherPartial
-                                        ? 'bg-yellow-100 text-yellow-800'
-                                        : 'bg-green-100 text-green-800';
-                        const roundChipCls =
-                            roundScore < 0
-                                ? 'bg-red-100 text-red-800'
-                                : roundScore === 0
-                                    ? 'bg-slate-100 text-slate-600'
-                                    : 'bg-indigo-100 text-indigo-800';
-
-                        return (
-                            <div key={team.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-sm font-semibold text-slate-700">
+                <>
+                    {/* Mobile team tab selector — visible only on stacked (< sm) layout */}
+                    <div className="mb-4 grid grid-cols-2 gap-3 sm:hidden">
+                        {teams.map((team) => {
+                            const roundScore = computeTeamScore(team.id);
+                            const partialScore = getAccruedScore(team.id) + roundScore;
+                            const other = teams.find((t) => t.id !== team.id);
+                            const otherPartial = other
+                                ? getAccruedScore(other.id) + computeTeamScore(other.id)
+                                : null;
+                            const bothPos = partialScore > 0 && otherPartial !== null && otherPartial > 0;
+                            const partialChipCls =
+                                partialScore < 0
+                                    ? 'bg-red-100 text-red-800'
+                                    : partialScore === 0
+                                        ? 'bg-[bisque] text-green-700'
+                                        : bothPos && partialScore < otherPartial
+                                            ? 'bg-yellow-100 text-yellow-800'
+                                            : 'bg-green-100 text-green-800';
+                            const roundChipCls =
+                                roundScore < 0
+                                    ? 'bg-red-100 text-red-800'
+                                    : roundScore === 0
+                                        ? 'bg-slate-100 text-slate-600'
+                                        : 'bg-indigo-100 text-indigo-800';
+                            const isActive = activeTeamTab === team.id;
+                            return (
+                                <button
+                                    key={team.id}
+                                    aria-pressed={isActive}
+                                    aria-label={`Show ${team.name} score inputs`}
+                                    className={`rounded-2xl border p-3 text-left transition-all ${
+                                        isActive
+                                            ? 'border-indigo-400 bg-indigo-50 ring-2 ring-indigo-300'
+                                            : 'border-slate-100 bg-slate-50/60 hover:border-slate-300'
+                                    }`}
+                                    onClick={() => setActiveTeamTab(team.id)}
+                                    type="button"
+                                >
+                                    <p className="mb-1.5 text-sm font-semibold text-slate-700 truncate">
                                         {team.name}
                                     </p>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-medium text-slate-400">Round:</span>
-                                        <span
-                                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${roundChipCls}`}
-                                            title="This round's score"
-                                        >
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="text-xs font-medium text-slate-400">Rnd:</span>
+                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${roundChipCls}`}>
                                             {roundScore}
                                         </span>
-                                        <span className="text-xs font-medium text-slate-400">Total:</span>
-                                        <span
-                                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${partialChipCls}`}
-                                            title="Accrued score + this round"
-                                        >
+                                        <span className="text-xs font-medium text-slate-400">Tot:</span>
+                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${partialChipCls}`}>
                                             {partialScore}
                                         </span>
-                                        <button
-                                            aria-expanded={!collapsedTeams.has(team.id)}
-                                            aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name} score inputs`}
-                                            className="sm:hidden inline-flex items-center justify-center rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
-                                            onClick={() => toggleTeamCollapse(team.id)}
-                                            type="button"
-                                        >
-                                            <svg
-                                                aria-hidden="true"
-                                                className={`h-4 w-4 transition-transform duration-200 ${collapsedTeams.has(team.id) ? '-rotate-90' : 'rotate-0'}`}
-                                                fill="currentColor"
-                                                viewBox="0 0 20 20"
-                                            >
-                                                <path
-                                                    clipRule="evenodd"
-                                                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                                                    fillRule="evenodd"
-                                                />
-                                            </svg>
-                                        </button>
                                     </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                        {teams.map((team) => {
+                            const roundScore = computeTeamScore(team.id);
+                            const partialScore = getAccruedScore(team.id) + roundScore;
+                            const other = teams.find((t) => t.id !== team.id);
+                            const otherPartial = other
+                                ? getAccruedScore(other.id) + computeTeamScore(other.id)
+                                : null;
+                            const bothPos =
+                                partialScore > 0 &&
+                                otherPartial !== null &&
+                                otherPartial > 0;
+                            const partialChipCls =
+                                partialScore < 0
+                                    ? 'bg-red-100 text-red-800'
+                                    : partialScore === 0
+                                        ? 'bg-[bisque] text-green-700'
+                                        : bothPos && partialScore < otherPartial
+                                            ? 'bg-yellow-100 text-yellow-800'
+                                            : 'bg-green-100 text-green-800';
+                            const roundChipCls =
+                                roundScore < 0
+                                    ? 'bg-red-100 text-red-800'
+                                    : roundScore === 0
+                                        ? 'bg-slate-100 text-slate-600'
+                                        : 'bg-indigo-100 text-indigo-800';
+
+                            return (
+                                <div key={team.id} className={`rounded-2xl border border-slate-100 bg-slate-50/60 p-4 ${activeTeamTab !== team.id ? 'hidden sm:block' : ''}`}>
+                                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                        <p className="text-sm font-semibold text-slate-700">
+                                            {team.name}
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-medium text-slate-400">Round:</span>
+                                                <span
+                                                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${roundChipCls}`}
+                                                    title="This round's score"
+                                                >
+                                                    {roundScore}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-medium text-slate-400">Total:</span>
+                                                <span
+                                                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${partialChipCls}`}
+                                                    title="Accrued score + this round"
+                                                >
+                                                    {partialScore}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {elements.length === 0 ? (
+                                        <p className="text-xs text-slate-400">Loading elements…</p>
+                                    ) : (
+                                        <BaseElementsInput
+                                            cardsInHand={cardInputs[team.id]?.cardsInHand ?? 0}
+                                            cardsOnTable={cardInputs[team.id]?.cardsOnTable ?? 0}
+                                            elements={elements}
+                                            readOnly
+                                            showBaseElements
+                                            teamId={team.id}
+                                            values={baseInputs[team.id] ?? {}}
+                                        />
+                                    )}
                                 </div>
-                                {elements.length === 0 ? (
-                                    <p className="text-xs text-slate-400">Loading elements…</p>
-                                ) : (
-                                    <BaseElementsInput
-                                        cardsInHand={cardInputs[team.id]?.cardsInHand ?? 0}
-                                        cardsOnTable={cardInputs[team.id]?.cardsOnTable ?? 0}
-                                        elements={elements}
-                                        readOnly
-                                        showBaseElements={!collapsedTeams.has(team.id)}
-                                        teamId={team.id}
-                                        values={baseInputs[team.id] ?? {}}
-                                    />
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
+                            );
+                        })}
+                    </div>
+                </>
             )}
         </div>
     );

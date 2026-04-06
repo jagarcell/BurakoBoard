@@ -88,8 +88,9 @@ describe('RoundsCard', () => {
     it('shows team name headings when two teams exist', async () => {
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
-        await screen.findByText('Team Alpha');
-        expect(screen.getByText('Team Beta')).toBeInTheDocument();
+        // Team names appear in both the mobile tab selector and the card header
+        await screen.findAllByText('Team Alpha');
+        expect(screen.getAllByText('Team Beta').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders a checkbox for each boolean base element per team', async () => {
@@ -1122,13 +1123,13 @@ describe('RoundsCard', () => {
         });
     });
 
-    describe('team card collapse control (mobile)', () => {
+    describe('mobile team tab selector', () => {
         const mockDraftAndElements = (url) =>
             url.includes('round-draft')
                 ? Promise.resolve({ data: { data: { round_draft: null } } })
                 : Promise.resolve(elementsResponse);
 
-        it('renders a collapse button for each team card', async () => {
+        it('renders a tab button for each team', async () => {
             api.get.mockImplementation(mockDraftAndElements);
 
             render(
@@ -1142,37 +1143,14 @@ describe('RoundsCard', () => {
             await screen.findAllByLabelText('Burako');
 
             expect(
-                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+                screen.getByRole('button', { name: 'Show Team Alpha score inputs' }),
             ).toBeInTheDocument();
             expect(
-                screen.getByRole('button', { name: 'Collapse Team Beta score inputs' }),
+                screen.getByRole('button', { name: 'Show Team Beta score inputs' }),
             ).toBeInTheDocument();
         });
 
-        it('clicking the collapse button hides that team\'s score inputs', async () => {
-            api.get.mockImplementation(mockDraftAndElements);
-
-            render(
-                <RoundsCard
-                    initialRounds={[]}
-                    initialTeams={[teamA, teamB]}
-                    selectedGame={selectedGame}
-                />,
-            );
-
-            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
-            expect(burakoCheckboxes).toHaveLength(2);
-
-            await userEvent.click(
-                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
-            );
-
-            // Team Alpha's inputs should be hidden; Team Beta's should remain visible
-            const remaining = screen.getAllByLabelText('Burako');
-            expect(remaining).toHaveLength(1);
-        });
-
-        it('clicking the button again expands the team\'s score inputs', async () => {
+        it('first team tab is active by default (aria-pressed=true)', async () => {
             api.get.mockImplementation(mockDraftAndElements);
 
             render(
@@ -1185,21 +1163,15 @@ describe('RoundsCard', () => {
 
             await screen.findAllByLabelText('Burako');
 
-            const collapseBtn = screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' });
-            await userEvent.click(collapseBtn);
-
-            // Now collapsed — button label should flip to "Expand"
-            const expandBtn = screen.getByRole('button', { name: 'Expand Team Alpha score inputs' });
-            expect(expandBtn).toBeInTheDocument();
-
-            await userEvent.click(expandBtn);
-
-            // Inputs should be visible again
-            const burakoCheckboxes = screen.getAllByLabelText('Burako');
-            expect(burakoCheckboxes).toHaveLength(2);
+            expect(
+                screen.getByRole('button', { name: 'Show Team Alpha score inputs' }),
+            ).toHaveAttribute('aria-pressed', 'true');
+            expect(
+                screen.getByRole('button', { name: 'Show Team Beta score inputs' }),
+            ).toHaveAttribute('aria-pressed', 'false');
         });
 
-        it('collapsing one team does not hide the other team\'s inputs', async () => {
+        it('clicking Team Beta tab marks it as active', async () => {
             api.get.mockImplementation(mockDraftAndElements);
 
             render(
@@ -1213,21 +1185,43 @@ describe('RoundsCard', () => {
             await screen.findAllByLabelText('Burako');
 
             await userEvent.click(
-                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+                screen.getByRole('button', { name: 'Show Team Beta score inputs' }),
             );
 
-            // Team Beta's inputs must still be accessible
-            expect(screen.getByRole('button', { name: 'Collapse Team Beta score inputs' })).toBeInTheDocument();
-            const canInputs = screen.getAllByLabelText('Clean Canastra');
-            expect(canInputs).toHaveLength(1);
+            expect(
+                screen.getByRole('button', { name: 'Show Team Beta score inputs' }),
+            ).toHaveAttribute('aria-pressed', 'true');
+            expect(
+                screen.getByRole('button', { name: 'Show Team Alpha score inputs' }),
+            ).toHaveAttribute('aria-pressed', 'false');
         });
 
-        it('collapse button has aria-expanded=false when collapsed and true when expanded', async () => {
+        it('tab buttons display team names', async () => {
             api.get.mockImplementation(mockDraftAndElements);
 
             render(
                 <RoundsCard
                     initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            // team names appear both in tab buttons and in team card headers
+            await screen.findAllByText('Team Alpha');
+            await screen.findAllByText('Team Beta');
+
+            // Each name appears at least twice: once in the tab, once in the card header
+            expect(screen.getAllByText('Team Alpha').length).toBeGreaterThanOrEqual(2);
+            expect(screen.getAllByText('Team Beta').length).toBeGreaterThanOrEqual(2);
+        });
+
+        it('tab buttons show round and total score chips', async () => {
+            api.get.mockImplementation(mockDraftAndElements);
+
+            render(
+                <RoundsCard
+                    initialRounds={[round1]}
                     initialTeams={[teamA, teamB]}
                     selectedGame={selectedGame}
                 />,
@@ -1235,168 +1229,10 @@ describe('RoundsCard', () => {
 
             await screen.findAllByLabelText('Burako');
 
-            const collapseBtn = screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' });
-            expect(collapseBtn).toHaveAttribute('aria-expanded', 'true');
-
-            await userEvent.click(collapseBtn);
-
-            const expandBtn = screen.getByRole('button', { name: 'Expand Team Alpha score inputs' });
-            expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
-        });
-
-        it('collapsing a team scrolls the other team into view', async () => {
-            api.get.mockImplementation(mockDraftAndElements);
-
-            const scrollIntoViewMock = vi.fn();
-            window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
-
-            render(
-                <RoundsCard
-                    initialRounds={[]}
-                    initialTeams={[teamA, teamB]}
-                    selectedGame={selectedGame}
-                />,
-            );
-
-            await screen.findAllByLabelText('Burako');
-
-            await userEvent.click(
-                screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
-            );
-
-            // scrollIntoView should have been called on the other team (Team Beta)
-            await waitFor(() => {
-                expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
-            });
-
-            delete window.HTMLElement.prototype.scrollIntoView;
-        });
-    });
-
-    describe('viewport layout transition (stacked ↔ non-stacked)', () => {
-        const mockDraftAndElements = (url) =>
-            url.includes('round-draft')
-                ? Promise.resolve({ data: { data: { round_draft: null } } })
-                : Promise.resolve(elementsResponse);
-
-        let mqListeners;
-        let mockMq;
-
-        const setupMatchMedia = (initialMatches) => {
-            mqListeners = [];
-            mockMq = {
-                matches: initialMatches,
-                addEventListener: (_event, listener) => mqListeners.push(listener),
-                removeEventListener: (_event, listener) => {
-                    mqListeners = mqListeners.filter((l) => l !== listener);
-                },
-            };
-            Object.defineProperty(window, 'matchMedia', {
-                writable: true,
-                configurable: true,
-                value: () => mockMq,
-            });
-        };
-
-        const triggerBreakpoint = (matches) => {
-            mockMq.matches = matches;
-            mqListeners.forEach((l) => l({ matches }));
-        };
-
-        afterEach(() => {
-            Object.defineProperty(window, 'matchMedia', {
-                writable: true,
-                configurable: true,
-                value: undefined,
-            });
-        });
-
-        it('when starting at non-stacked width, both team cards are expanded', async () => {
-            setupMatchMedia(true);
-            api.get.mockImplementation(mockDraftAndElements);
-
-            render(
-                <RoundsCard
-                    initialRounds={[]}
-                    initialTeams={[teamA, teamB]}
-                    selectedGame={selectedGame}
-                />,
-            );
-
-            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
-            expect(burakoCheckboxes).toHaveLength(2);
-        });
-
-        it('transitioning to non-stacked expands both team cards regardless of prior collapse state', async () => {
-            setupMatchMedia(false);
-            api.get.mockImplementation(mockDraftAndElements);
-
-            render(
-                <RoundsCard
-                    initialRounds={[]}
-                    initialTeams={[teamA, teamB]}
-                    selectedGame={selectedGame}
-                />,
-            );
-
-            await screen.findAllByLabelText('Burako');
-
-            // Collapse Team Alpha while in stacked layout
-            await userEvent.click(screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }));
-            expect(screen.getAllByLabelText('Burako')).toHaveLength(1);
-
-            // Transition to non-stacked (sm+): both cards should expand
-            act(() => triggerBreakpoint(true));
-            await waitFor(() => expect(screen.getAllByLabelText('Burako')).toHaveLength(2));
-        });
-
-        it('transitioning back to stacked restores the previous collapse state', async () => {
-            setupMatchMedia(false);
-            api.get.mockImplementation(mockDraftAndElements);
-
-            render(
-                <RoundsCard
-                    initialRounds={[]}
-                    initialTeams={[teamA, teamB]}
-                    selectedGame={selectedGame}
-                />,
-            );
-
-            await screen.findAllByLabelText('Burako');
-
-            // Collapse Team Alpha while stacked
-            await userEvent.click(screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }));
-            expect(screen.getAllByLabelText('Burako')).toHaveLength(1);
-
-            // Go non-stacked: both expand
-            act(() => triggerBreakpoint(true));
-            await waitFor(() => expect(screen.getAllByLabelText('Burako')).toHaveLength(2));
-
-            // Return to stacked: Team Alpha should be collapsed again
-            act(() => triggerBreakpoint(false));
-            await waitFor(() => expect(screen.getAllByLabelText('Burako')).toHaveLength(1));
-        });
-
-        it('transitioning back to stacked keeps all cards expanded when none were collapsed before', async () => {
-            setupMatchMedia(false);
-            api.get.mockImplementation(mockDraftAndElements);
-
-            render(
-                <RoundsCard
-                    initialRounds={[]}
-                    initialTeams={[teamA, teamB]}
-                    selectedGame={selectedGame}
-                />,
-            );
-
-            await screen.findAllByLabelText('Burako');
-
-            // Go non-stacked without collapsing anything, then return to stacked
-            act(() => triggerBreakpoint(true));
-            act(() => triggerBreakpoint(false));
-
-            // Both should still be expanded
-            await waitFor(() => expect(screen.getAllByLabelText('Burako')).toHaveLength(2));
+            // round1 gave Team Alpha 100 and Team Beta 400; no current inputs → ongoing 0
+            // Tab chips use "Rnd:" and "Tot:" labels
+            expect(screen.getAllByText('Rnd:').length).toBeGreaterThanOrEqual(2);
+            expect(screen.getAllByText('Tot:').length).toBeGreaterThanOrEqual(2);
         });
     });
 
@@ -1417,8 +1253,9 @@ describe('RoundsCard', () => {
                 />,
             );
 
-            await screen.findByText('Team Alpha');
-            // Both accrued+ongoing totals should be 0
+            // Team names appear in both tab selector and card header
+            await screen.findAllByText('Team Alpha');
+            // Both accrued+ongoing totals should be 0 — title attribute only on card-header chips
             const zeros = screen.getAllByTitle('Accrued score + this round');
             expect(zeros).toHaveLength(2);
             zeros.forEach((el) => expect(el).toHaveTextContent('0'));
@@ -1796,7 +1633,7 @@ describe('RoundsCard', () => {
                 );
             });
 
-            it('a team that was already collapsed before opening the circle remains collapsed after closing', async () => {
+            it('the active team tab is preserved after opening and closing the circle', async () => {
                 api.get.mockImplementation((url) =>
                     url.includes('round-draft')
                         ? Promise.resolve({ data: { data: { round_draft: null } } })
@@ -1818,11 +1655,13 @@ describe('RoundsCard', () => {
 
                 await screen.findAllByLabelText('Burako');
 
-                // Collapse Team Alpha before opening the circle.
+                // Switch to Team Beta tab before opening the circle.
                 await user.click(
-                    screen.getByRole('button', { name: 'Collapse Team Alpha score inputs' }),
+                    screen.getByRole('button', { name: 'Show Team Beta score inputs' }),
                 );
-                expect(screen.getAllByLabelText('Burako')).toHaveLength(1);
+                expect(
+                    screen.getByRole('button', { name: 'Show Team Beta score inputs' }),
+                ).toHaveAttribute('aria-pressed', 'true');
 
                 // Open then close the circle.
                 await user.click(
@@ -1832,9 +1671,11 @@ describe('RoundsCard', () => {
                     screen.getByRole('button', { name: 'Hide seating circle for round 2' }),
                 );
 
-                // Team Alpha should still be collapsed; Team Beta should be visible.
+                // Team Beta tab should still be active after the circle closes.
                 await waitFor(() =>
-                    expect(screen.getAllByLabelText('Burako')).toHaveLength(1),
+                    expect(
+                        screen.getByRole('button', { name: 'Show Team Beta score inputs' }),
+                    ).toHaveAttribute('aria-pressed', 'true'),
                 );
             });
 
