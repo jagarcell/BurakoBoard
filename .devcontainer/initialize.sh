@@ -10,3 +10,9 @@ cp .devcontainer/Caddyfile.codespaces Caddyfile
 # Provide a minimal .env so all containers can start before post-create.sh
 # patches the values specific to this Codespace.
 cp -n .env.example .env
+
+# Inject host user/group IDs required by compose.yaml build args.
+# Docker Compose reads these from .env at build time; without them the
+# sail-8.5/app image build fails and the codespace enters recovery mode.
+grep -qE "^WWWUSER=" .env || echo "WWWUSER=$(id -u)" >> .env
+grep -qE "^WWWGROUP=" .env || echo "WWWGROUP=$(id -g)" >> .env
