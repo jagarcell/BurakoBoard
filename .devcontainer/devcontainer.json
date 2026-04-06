@@ -1,0 +1,24 @@
+{
+    "name": "BurakoBoard",
+    "dockerComposeFile": ["../compose.yaml"],
+    "service": "laravel.test",
+    "workspaceFolder": "/var/www/html",
+    "forwardPorts": [80, 8080, 8025],
+    "portsAttributes": {
+        "80": {
+            "label": "App",
+            "onAutoForward": "openBrowser",
+            "visibility": "public"
+        },
+        "8080": {
+            "label": "Reverb WebSocket",
+            "onAutoForward": "silent"
+        },
+        "8025": {
+            "label": "Mailpit",
+            "onAutoForward": "silent"
+        }
+    },
+    "initializeCommand": "bash .devcontainer/initialize.sh",
+    "postCreateCommand": "bash .devcontainer/post-create.sh"
+}
