@@ -50,79 +50,27 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const activeCircleRoundRef = useRef(activeCircleRound);
     useEffect(() => { activeCircleRoundRef.current = activeCircleRound; }, [activeCircleRound]);
 
-    const [collapsedTeams, setCollapsedTeams] = useState(new Set());
+    // Active team tab for mobile (stacked) layout — only one team's form is shown at a time.
+    // On sm+ both forms are always visible side-by-side and this state is ignored.
+    const [activeTeamTab, setActiveTeamTab] = useState(initialTeams[0]?.id ?? null);
+
+    // When the teams list first populates (e.g. loaded async) ensure a tab is selected.
+    useEffect(() => {
+        setActiveTeamTab((prev) => {
+            if (prev !== null) return prev;
+            return teams[0]?.id ?? null;
+        });
+    }, [teams]);
+
     const [isCreatorLive, setIsCreatorLive] = useState(false);
 
-    // Always-current ref so the matchMedia handler below can read collapsedTeams
-    // without needing to re-register the listener on every state change.
-    const collapsedTeamsRef = useRef(collapsedTeams);
-    useEffect(() => { collapsedTeamsRef.current = collapsedTeams; }, [collapsedTeams]);
-
-    // Holds the stacked-layout collapse state so it can be restored when the
-    // viewport transitions back from a non-stacked (sm+) width.
-    const savedCollapsedTeamsRef = useRef(new Set());
-
-    // Snapshot of collapsedTeams taken when the scoring-form circle is opened.
-    // Allows per-team visibility to be restored exactly when the circle closes.
-    const circleOpenCollapseSnapshotRef = useRef(null);
+    // Snapshot of activeTeamTab taken when the scoring-form circle is opened so
+    // the tab selection can be restored exactly when the circle closes.
+    const circleOpenTabSnapshotRef = useRef(null);
 
     // Saves the expandedRound value when a history-row circle is opened so the
     // scoring detail can be restored after the circle's close animation ends.
     const savedExpandedRoundRef = useRef(null);
-
-    // Expand all team score cards when the viewport is non-stacked (sm+) so
-    // both inputs are always visible side-by-side.  When the viewport returns
-    // to a stacked layout the per-team collapse state is restored.
-    useEffect(() => {
-        if (typeof window === 'undefined' || !window.matchMedia) return;
-
-        const mq = window.matchMedia('(min-width: 640px)');
-
-        if (mq.matches) {
-            savedCollapsedTeamsRef.current = new Set(collapsedTeamsRef.current);
-            setCollapsedTeams(new Set());
-        }
-
-        const handleChange = (e) => {
-            if (e.matches) {
-                savedCollapsedTeamsRef.current = new Set(collapsedTeamsRef.current);
-                setCollapsedTeams(new Set());
-            } else {
-                setCollapsedTeams(new Set(savedCollapsedTeamsRef.current));
-            }
-        };
-
-        mq.addEventListener('change', handleChange);
-        return () => mq.removeEventListener('change', handleChange);
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- collapsedTeamsRef and savedCollapsedTeamsRef are stable refs; setCollapsedTeams is a stable state setter; listener registered once on mount to track viewport transitions
-    }, []);
-
-    const teamRefs = useRef(new Map());
-
-    const toggleTeamCollapse = (teamId) => {
-        setCollapsedTeams((prev) => {
-            const next = new Set(prev);
-            const isExpanding = next.has(teamId);
-            if (isExpanding) next.delete(teamId);
-            else next.add(teamId);
-
-            if (isExpanding) {
-                requestAnimationFrame(() => {
-                    teamRefs.current.get(teamId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
-            } else {
-                // When collapsing a team, scroll the other team fully into view.
-                const otherTeam = teams.find((t) => t.id !== teamId);
-                if (otherTeam) {
-                    requestAnimationFrame(() => {
-                        teamRefs.current.get(otherTeam.id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    });
-                }
-            }
-
-            return next;
-        });
-    };
     // Cache of per-round draft data keyed by round_number.
     const [roundDraftCache, setRoundDraftCache] = useState({});
     const [loadingDraftRound, setLoadingDraftRound] = useState(null);
@@ -132,10 +80,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         const collapse = () => {
             setExpandedRound(null);
             savedExpandedRoundRef.current = null;
-            // Restore team collapse state if the circle was open over the scoring form.
-            if (circleOpenCollapseSnapshotRef.current !== null) {
-                setCollapsedTeams(circleOpenCollapseSnapshotRef.current);
-                circleOpenCollapseSnapshotRef.current = null;
+            // Restore the active team tab if the circle was open over the scoring form.
+            if (circleOpenTabSnapshotRef.current !== null) {
+                setActiveTeamTab(circleOpenTabSnapshotRef.current);
+                circleOpenTabSnapshotRef.current = null;
             }
             setActiveCircleRound(null);
             setClosingCircleRound(null);
@@ -151,7 +99,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         savedExpandedRoundRef.current = null;
         setActiveCircleRound(null);
         setClosingCircleRound(null);
-        circleOpenCollapseSnapshotRef.current = null;
+        circleOpenTabSnapshotRef.current = null;
         if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
         setRoundDraftCache((prev) => (Object.keys(prev).length > 0 ? {} : prev));
     }, [selectedGame?.id]);
@@ -701,12 +649,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
      * @param {Event}  e           - Click event — stopped so the document collapse handler is skipped.
      * @param {number} roundNumber - The round number whose circle should be toggled.
      * @return {void}
-     * Logic: If the round is currently open, restores the saved team-collapse snapshot
+     * Logic: If the round is currently open, restores the saved active-tab snapshot
      *        (if any), marks the circle as "closing" (keeps it in DOM for the CSS exit
      *        transition), then clears it after 520 ms.
      *        If a different round is being opened any in-progress closing is cancelled.
-     *        If the opened round equals the next (scoring) round, the current collapse
-     *        state is saved and all team cards are collapsed so the form is fully hidden.
+     *        If the opened round equals the next (scoring) round, the current active tab
+     *        is saved so it can be restored after the circle closes.
      */
     const toggleCircle = (e, roundNumber) => {
         e.stopPropagation();
@@ -717,12 +665,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             setClosingCircleRound(roundNumber);
             if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
             const pendingExpanded = savedExpandedRoundRef.current;
-            const pendingCollapse = circleOpenCollapseSnapshotRef.current;
+            const pendingTab = circleOpenTabSnapshotRef.current;
             savedExpandedRoundRef.current = null;
-            circleOpenCollapseSnapshotRef.current = null;
+            circleOpenTabSnapshotRef.current = null;
             circleTimerRef.current = setTimeout(() => {
-                // Restore per-team visibility and scoring detail after animation ends.
-                if (pendingCollapse !== null) setCollapsedTeams(pendingCollapse);
+                // Restore active team tab and scoring detail after animation ends.
+                if (pendingTab !== null) setActiveTeamTab(pendingTab);
                 setClosingCircleRound(null);
                 if (pendingExpanded !== null) setExpandedRound(pendingExpanded);
             }, 520);
@@ -743,10 +691,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 });
             }
             setActiveCircleRound(roundNumber);
-            // Opening for the scoring form: save collapse state, then hide both team inputs.
+            // Opening for the scoring form: save active tab snapshot (no visual change needed;
+            // the circle already hides the form via activeCircleRound guard).
             if (roundNumber === nextRound) {
-                circleOpenCollapseSnapshotRef.current = new Set(collapsedTeamsRef.current);
-                setCollapsedTeams(new Set(teams.map((t) => t.id)));
+                circleOpenTabSnapshotRef.current = activeTeamTab;
             }
         }
     };
@@ -965,15 +913,67 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                             {/* Score form — hidden while circle is open or animating closed */}
                             {activeCircleRound !== nextRound && closingCircleRound !== nextRound && (
                             <form onSubmit={handleSubmit}>
+                                {/* Mobile team tab selector — visible only on stacked (< sm) layout */}
+                                <div className="mb-4 grid grid-cols-2 gap-3 sm:hidden">
+                                    {teams.map((team) => {
+                                        const roundScore = computeTeamScore(team.id);
+                                        const partialScore = getAccruedScore(team.id) + roundScore;
+                                        const other = teams.find((t) => t.id !== team.id);
+                                        const otherPartial = other ? getAccruedScore(other.id) + computeTeamScore(other.id) : null;
+                                        const bothPos = partialScore > 0 && otherPartial !== null && otherPartial > 0;
+                                        const partialChipCls = partialScore < 0
+                                            ? 'bg-red-100 text-red-800'
+                                            : partialScore === 0
+                                                ? 'bg-[bisque] text-green-700'
+                                                : bothPos && partialScore < otherPartial
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : 'bg-green-100 text-green-800';
+                                        const roundChipCls = roundScore < 0
+                                            ? 'bg-red-100 text-red-800'
+                                            : roundScore === 0
+                                                ? 'bg-slate-100 text-slate-600'
+                                                : 'bg-indigo-100 text-indigo-800';
+                                        const isActive = activeTeamTab === team.id;
+                                        return (
+                                            <button
+                                                key={team.id}
+                                                aria-pressed={isActive}
+                                                aria-label={`Show ${team.name} score inputs`}
+                                                className={`rounded-2xl border p-3 text-left transition-all ${
+                                                    isActive
+                                                        ? 'border-indigo-400 bg-indigo-50 ring-2 ring-indigo-300'
+                                                        : 'border-slate-100 bg-slate-50/60 hover:border-slate-300'
+                                                }`}
+                                                onClick={() => setActiveTeamTab(team.id)}
+                                                type="button"
+                                            >
+                                                <p className="mb-1.5 text-sm font-semibold text-slate-700 truncate">
+                                                    {team.name}
+                                                </p>
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-xs font-medium text-slate-400">Rnd:</span>
+                                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${roundChipCls}`}>
+                                                            {roundScore}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-xs font-medium text-slate-400">Tot:</span>
+                                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${partialChipCls}`}>
+                                                            {partialScore}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
                                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                                     {teams.map((team) => (
                                         <div
                                             key={team.id}
-                                            ref={(el) => {
-                                                if (el) teamRefs.current.set(team.id, el);
-                                                else teamRefs.current.delete(team.id);
-                                            }}
-                                            className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
+                                            className={`rounded-2xl border border-slate-100 bg-slate-50/60 p-4 ${activeTeamTab !== team.id ? 'hidden sm:block' : ''}`}
                                         >
                                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                                 <p className="text-sm font-semibold text-slate-700">
@@ -1017,30 +1017,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                             </>
                                                         );
                                                     })()}
-                                                    <button
-                                                        aria-expanded={!collapsedTeams.has(team.id)}
-                                                        aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name} score inputs`}
-                                                        className="sm:hidden inline-flex items-center justify-center rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
-                                                        onClick={() => toggleTeamCollapse(team.id)}
-                                                        type="button"
-                                                    >
-                                                        <svg
-                                                            aria-hidden="true"
-                                                            className={`h-4 w-4 transition-transform duration-200 ${collapsedTeams.has(team.id) ? '-rotate-90' : 'rotate-0'}`}
-                                                            fill="currentColor"
-                                                            viewBox="0 0 20 20"
-                                                        >
-                                                            <path
-                                                                clipRule="evenodd"
-                                                                d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                                                                fillRule="evenodd"
-                                                            />
-                                                        </svg>
-                                                    </button>
                                                 </div>
                                             </div>
 
-                                            {!collapsedTeams.has(team.id) && elements.length === 0 ? (
+                                            {elements.length === 0 ? (
                                                 <p className="text-xs text-slate-400">
                                                     Loading elements…
                                                 </p>
@@ -1078,7 +1058,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                     onCardsChange={(field, val) =>
                                                         handleCardChange(team.id, field, val)
                                                     }
-                                                    showBaseElements={!collapsedTeams.has(team.id)}
+                                                    showBaseElements
                                                     teamId={team.id}
                                                     values={baseInputs[team.id] ?? {}}
                                                 />
