@@ -19,17 +19,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        try {
-            User::factory()->create([
-                'name' => 'Test User',
-                'email' => 'test@example.com',
-            ]);
-        } catch (\Exception $e) {
-            // Ignore if the user already exists
-        }
-
         $this->call([
             BaseElementSeeder::class,
             CardWeightSeeder::class,
