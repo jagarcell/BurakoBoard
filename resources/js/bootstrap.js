@@ -31,7 +31,7 @@ window.Echo = new Echo({
                     socket_id: socketId,
                     channel_name: channel.name,
                 })
-                .then((response) => callback(false, response.data))
+                .then((response) => callback(false, response?.data))
                 .catch((error) => callback(true, error));
         },
     }),
