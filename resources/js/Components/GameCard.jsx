@@ -1,7 +1,7 @@
 import api from '@/api/client';
 import { formatDefaultGameName } from '@/utils/formatGameName';
 import { createPortal } from 'react-dom';
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import Checkbox from '@/Components/Checkbox';
 import CreateGameModal from '@/Components/CreateGameModal';
@@ -152,10 +152,8 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
         echo.private(`game.${gameId}`)
             .listen('.game.deleted', () => {
-                startTransition(() => {
-                    setGames((current) => current.filter((g) => String(g.id) !== gameId));
-                    setSelectedGameId('');
-                });
+                setGames((current) => current.filter((g) => String(g.id) !== gameId));
+                setSelectedGameId('');
             });
 
         return () => {
@@ -302,25 +300,23 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 throw new Error('Game payload missing from response.');
             }
 
-            startTransition(() => {
-                setPendingGames((currentPending) => {
-                    const updated = currentPending.filter(
-                        (g) => String(g.id) !== String(updatedGame.id),
-                    );
-                    setHasPending(updated.length > 0);
-                    return updated;
-                });
-                setGames((currentGames) => {
-                    if (currentGames.some((g) => String(g.id) === String(updatedGame.id))) {
-                        return currentGames.map((g) =>
-                            String(g.id) === String(updatedGame.id) ? updatedGame : g,
-                        );
-                    }
-
-                    return [updatedGame, ...currentGames];
-                });
-                setSelectedGameId(String(updatedGame.id));
+            setPendingGames((currentPending) => {
+                const updated = currentPending.filter(
+                    (g) => String(g.id) !== String(updatedGame.id),
+                );
+                setHasPending(updated.length > 0);
+                return updated;
             });
+            setGames((currentGames) => {
+                if (currentGames.some((g) => String(g.id) === String(updatedGame.id))) {
+                    return currentGames.map((g) =>
+                        String(g.id) === String(updatedGame.id) ? updatedGame : g,
+                    );
+                }
+
+                return [updatedGame, ...currentGames];
+            });
+            setSelectedGameId(String(updatedGame.id));
         } catch {
             setAcceptInviteError('Unable to accept the invitation right now. Please try again.');
         } finally {
@@ -364,13 +360,11 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 throw new Error('Game payload missing from response.');
             }
 
-            startTransition(() => {
-                setGames((currentGames) =>
-                    currentGames.map((game) =>
-                        String(game.id) === String(updatedGame.id) ? updatedGame : game,
-                    ),
-                );
-            });
+            setGames((currentGames) =>
+                currentGames.map((game) =>
+                    String(game.id) === String(updatedGame.id) ? updatedGame : game,
+                ),
+            );
 
             setIsEditModalOpen(false);
             resetForm();
@@ -401,12 +395,10 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         try {
             await api.delete(`/games/${selectedGameId}`);
 
-            startTransition(() => {
-                setGames((currentGames) =>
-                    currentGames.filter((game) => String(game.id) !== selectedGameId),
-                );
-                setSelectedGameId('');
-            });
+            setGames((currentGames) =>
+                currentGames.filter((game) => String(game.id) !== selectedGameId),
+            );
+            setSelectedGameId('');
 
             setIsEditModalOpen(false);
             resetForm();
@@ -455,9 +447,8 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 throw new Error('Game payload missing from response.');
             }
 
-            // Immediately (outside the deferred transition) mark the source game as
-            // has_rematch: true so the Rematch button disappears the instant the
-            // modal closes, without waiting for the startTransition to commit.
+            // Immediately mark the source game as has_rematch: true so the Rematch
+            // button disappears the instant the modal closes.
             if (isRematch) {
                 setGames((currentGames) =>
                     currentGames.map((g) =>
@@ -466,13 +457,11 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 );
             }
 
-            startTransition(() => {
-                setGames((currentGames) => [
-                    { ...createdGame, user_role: 'creator' },
-                    ...currentGames.filter((game) => game.id !== createdGame.id),
-                ]);
-                setSelectedGameId(String(createdGame.id));
-            });
+            setGames((currentGames) => [
+                { ...createdGame, user_role: 'creator' },
+                ...currentGames.filter((game) => game.id !== createdGame.id),
+            ]);
+            setSelectedGameId(String(createdGame.id));
 
             setIsCreateModalOpen(false);
             setIsRematch(false);
