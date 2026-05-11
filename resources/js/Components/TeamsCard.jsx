@@ -274,6 +274,17 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                                         opponentScore={teams[1 - slot]?.current_score ?? null}
                                                         score={team.current_score}
                                                     />
+                                                    {selectedGame?.status === 'in_progress' && selectedGame?.target_points != null && (() => {
+                                                        const rem = Math.max(0, selectedGame.target_points - team.current_score);
+                                                        return rem > 0 ? (
+                                                            <span
+                                                                className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-sky-700"
+                                                                title="Points remaining to reach the game goal"
+                                                            >
+                                                                -{rem}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
                                                 </div>
                                                 <div className="mt-1">
                                                     <h4 className="text-base font-semibold text-slate-900">

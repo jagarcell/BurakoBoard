@@ -43,6 +43,7 @@ export default function ViewerRoundPanel({
     getAccruedScore,
     onToggleCircle,
     isCreatorLive = false,
+    targetPoints = null,
 }) {
     // Active team tab for mobile (stacked) layout — only one team's panel is shown at a time.
     const [activeTeamTab, setActiveTeamTab] = useState(teams[0]?.id ?? null);
@@ -149,6 +150,20 @@ export default function ViewerRoundPanel({
                                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${partialChipCls}`}>
                                             {partialScore}
                                         </span>
+                                        {targetPoints != null && (() => {
+                                            const rem = Math.max(0, targetPoints - partialScore);
+                                            return rem > 0 ? (
+                                                <>
+                                                    <span className="text-xs font-medium text-slate-400">Rem:</span>
+                                                    <span
+                                                        className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-sky-700"
+                                                        title="Points remaining to reach the game goal"
+                                                    >
+                                                        -{rem}
+                                                    </span>
+                                                </>
+                                            ) : null;
+                                        })()}
                                     </div>
                                 </button>
                             );
@@ -207,6 +222,20 @@ export default function ViewerRoundPanel({
                                                     {partialScore}
                                                 </span>
                                             </div>
+                                            {targetPoints != null && (() => {
+                                                const rem = Math.max(0, targetPoints - partialScore);
+                                                return rem > 0 ? (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-xs font-medium text-slate-400">Rem:</span>
+                                                        <span
+                                                            className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-sky-700"
+                                                            title="Points remaining to reach the game goal"
+                                                        >
+                                                            -{rem}
+                                                        </span>
+                                                    </div>
+                                                ) : null;
+                                            })()}
                                         </div>
                                     </div>
                                     {elements.length === 0 ? (
