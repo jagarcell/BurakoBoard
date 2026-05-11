@@ -1,5 +1,5 @@
 import api from '@/api/client';
-import { startTransition, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Checkbox from '@/Components/Checkbox';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
@@ -51,12 +51,10 @@ export default function InviteUsersModal({ isOpen, onClose, gameId }) {
             });
             const payload = response.data?.data?.users ?? {};
 
-            startTransition(() => {
-                setInviteUsers(payload.data ?? []);
-                setInviteMeta({
-                    current_page: payload.meta?.current_page ?? 1,
-                    last_page: payload.meta?.last_page ?? 1,
-                });
+            setInviteUsers(payload.data ?? []);
+            setInviteMeta({
+                current_page: payload.meta?.current_page ?? 1,
+                last_page: payload.meta?.last_page ?? 1,
             });
         } catch {
             setLoadError('Unable to load users right now.');
@@ -119,15 +117,13 @@ export default function InviteUsersModal({ isOpen, onClose, gameId }) {
             );
             const count = response.data?.data?.invited_count ?? 0;
 
-            startTransition(() => {
-                setSendSuccess(
-                    count === 0
-                        ? 'All selected users are already invited or members of this game.'
-                        : `${count} invitation${count === 1 ? '' : 's'} sent successfully.`,
-                );
-                setSelectedIds(new Set());
-                fetchUsers(1);
-            });
+            setSendSuccess(
+                count === 0
+                    ? 'All selected users are already invited or members of this game.'
+                    : `${count} invitation${count === 1 ? '' : 's'} sent successfully.`,
+            );
+            setSelectedIds(new Set());
+            fetchUsers(1);
         } catch {
             setSendError('Unable to send invitations right now. Please try again.');
         } finally {
