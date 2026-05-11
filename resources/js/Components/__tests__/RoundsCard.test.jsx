@@ -2621,5 +2621,41 @@ describe('RoundsCard', () => {
         });
     });
 
+    describe('points remaining to goal chips (scorer form)', () => {
+        it('shows the remaining-points chip in the desktop form header while score is below goal', async () => {
+            const tA = { id: 10, name: 'Team Alpha', current_score: 500, players: [] };
+            const tB = { id: 11, name: 'Team Beta', current_score: 900, players: [] };
+            // accrued scores are 0 (no rounds), round score is 0 (blank inputs)
+            // target=2000 → rem=2000 for both
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[tA, tB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            const chips = await screen.findAllByTitle('Points remaining to reach the game goal');
+            expect(chips.length).toBeGreaterThanOrEqual(2);
+        });
+
+        it('does not show the remaining-points chip when target_points is not set', async () => {
+            const gameNoTarget = { ...selectedGame, target_points: null };
+            render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialRounds={[]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={gameNoTarget}
+                />,
+            );
+
+            await screen.findAllByText('Team Alpha');
+
+            expect(screen.queryByTitle('Points remaining to reach the game goal')).not.toBeInTheDocument();
+        });
+    });
+
 });
 

@@ -56,6 +56,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/games/{gameId}/invitable-users', [UserController::class, 'indexInvitable']);
         Route::post('/games/{gameId}/invitations', [GameController::class, 'storeInvitations']);
         Route::put('/games/{gameId}/invitation', [GameController::class, 'acceptInvitation']);
+        Route::get('/games/{gameId}/viewers', [GameController::class, 'listViewers']);
+        Route::put('/games/{gameId}/host', [GameController::class, 'delegateHost']);
 
         Route::get('/user', function (Request $request) {
             return [

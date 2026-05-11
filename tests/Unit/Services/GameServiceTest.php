@@ -5,6 +5,7 @@ namespace Tests\Unit\Services;
 use App\Data\GameSummaryData;
 use App\Enums\GameStatus;
 use App\Enums\GameUserRole;
+use App\Events\GameRoleUpdated;
 use App\Models\Game;
 use App\Models\User;
 use App\Repositories\GameRepository;
@@ -13,6 +14,7 @@ use App\Repositories\TeamRepository;
 use App\Services\GameService;
 use App\Services\InvitationService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Mockery;
 use Mockery\MockInterface;
@@ -334,5 +336,183 @@ class GameServiceTest extends TestCase
         $this->assertIsArray($result);
         $this->assertArrayHasKey('game', $result);
         $this->assertArrayHasKey('teams', $result);
+    }
+
+    // ─── delegateHost ─────────────────────────────────────────────────────────
+
+    public function test_list_game_viewers_delegates_to_repository(): void
+    {
+        $game    = new Game();
+        $viewers = collect([
+            (object) ['id' => 10, 'name' => 'Alice', 'email' => 'alice@example.com'],
+        ]);
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(7)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('getGameViewers')
+            ->once()
+            ->with(7)
+            ->andReturn($viewers);
+
+        $result = $this->service->listGameViewers(7);
+
+        $this->assertCount(1, $result);
+        $this->assertEquals(10, $result->first()->id);
+    }
+
+    public function test_delegate_host_aborts_when_not_creator(): void
+    {
+        $game = new Game();
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 99)
+            ->andReturn(false);
+
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+
+        $this->service->delegateHost(1, 99, 10);
+    }
+
+    public function test_delegate_host_throws_when_target_is_not_a_viewer(): void
+    {
+        $game = new Game();
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 5)
+            ->andReturn(true);
+
+        $this->gameRepository->shouldReceive('getGameViewers')
+            ->once()
+            ->with(1)
+            ->andReturn(collect([
+                (object) ['id' => 20, 'name' => 'Carol', 'email' => 'carol@example.com'],
+            ]));
+
+        $this->expectException(ValidationException::class);
+
+        // user_id 99 is not in the viewers list
+        $this->service->delegateHost(1, 5, 99);
+    }
+
+    public function test_delegate_host_swaps_roles_atomically_and_returns_updated_game(): void
+    {
+        $game        = new Game();
+        $returnedGame = new Game();
+        $returnedGame->id        = 1;
+        $returnedGame->user_role = GameUserRole::Viewer->value;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 5)
+            ->andReturn(true);
+
+        $this->gameRepository->shouldReceive('getGameViewers')
+            ->once()
+            ->with(1)
+            ->andReturn(collect([
+                (object) ['id' => 10, 'name' => 'Alice', 'email' => 'alice@example.com'],
+            ]));
+
+        DB::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn ($cb) => $cb());
+
+        $this->gameRepository->shouldReceive('updateUserRole')
+            ->once()
+            ->with(1, 10, GameUserRole::Creator->value);
+
+        $this->gameRepository->shouldReceive('updateUserRole')
+            ->once()
+            ->with(1, 5, GameUserRole::Viewer->value);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
+        $this->gameRepository->shouldReceive('getGameWithUserRole')
+            ->once()
+            ->with(1, 5)
+            ->andReturn($returnedGame);
+
+        $result = $this->service->delegateHost(1, 5, 10);
+
+        $this->assertSame($returnedGame, $result);
+        $this->assertEquals(GameUserRole::Viewer->value, $result->user_role);
+    }
+
+    public function test_delegate_host_broadcasts_game_role_updated_to_new_host(): void
+    {
+        Event::fake([GameRoleUpdated::class]);
+
+        $game         = new Game();
+        $returnedGame = new Game();
+        $returnedGame->id        = 1;
+        $returnedGame->user_role = GameUserRole::Viewer->value;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 5)
+            ->andReturn(true);
+
+        $this->gameRepository->shouldReceive('getGameViewers')
+            ->once()
+            ->with(1)
+            ->andReturn(collect([
+                (object) ['id' => 10, 'name' => 'Alice', 'email' => 'alice@example.com'],
+            ]));
+
+        DB::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn ($cb) => $cb());
+
+        $this->gameRepository->shouldReceive('updateUserRole')
+            ->once()
+            ->with(1, 10, GameUserRole::Creator->value);
+
+        $this->gameRepository->shouldReceive('updateUserRole')
+            ->once()
+            ->with(1, 5, GameUserRole::Viewer->value);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
+        $this->gameRepository->shouldReceive('getGameWithUserRole')
+            ->once()
+            ->with(1, 5)
+            ->andReturn($returnedGame);
+
+        $this->service->delegateHost(1, 5, 10);
+
+        Event::assertDispatched(GameRoleUpdated::class, function (GameRoleUpdated $event): bool {
+            return $event->userId  === 10
+                && $event->gameId  === 1
+                && $event->newRole === GameUserRole::Creator->value;
+        });
     }
 }

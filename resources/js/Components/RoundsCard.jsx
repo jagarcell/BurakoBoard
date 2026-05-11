@@ -818,6 +818,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                             getAccruedScore={getAccruedScore}
                             onToggleCircle={toggleCircle}
                             isCreatorLive={isCreatorLive}
+                            targetPoints={selectedGame?.target_points ?? null}
                         />
                     ) : (
                         <div className="relative border-b border-slate-100 px-6 py-5">
@@ -963,6 +964,20 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                             {partialScore}
                                                         </span>
                                                     </div>
+                                                    {selectedGame?.target_points != null && (() => {
+                                                        const rem = Math.max(0, selectedGame.target_points - partialScore);
+                                                        return rem > 0 ? (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-xs font-medium text-slate-400">Rem:</span>
+                                                                <span
+                                                                    className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-sky-700"
+                                                                    title="Points remaining to reach the game goal"
+                                                                >
+                                                                    -{rem}
+                                                                </span>
+                                                            </div>
+                                                        ) : null;
+                                                    })()}
                                                 </div>
                                             </button>
                                         );
@@ -1014,6 +1029,20 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                                 >
                                                                     {partialScore}
                                                                 </span>
+                                                                {selectedGame?.target_points != null && (() => {
+                                                                    const rem = Math.max(0, selectedGame.target_points - partialScore);
+                                                                    return rem > 0 ? (
+                                                                        <>
+                                                                            <span className="text-xs font-medium text-slate-400">Rem:</span>
+                                                                            <span
+                                                                                className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-sky-700"
+                                                                                title="Points remaining to reach the game goal"
+                                                                            >
+                                                                                -{rem}
+                                                                            </span>
+                                                                        </>
+                                                                    ) : null;
+                                                                })()}
                                                             </>
                                                         );
                                                     })()}

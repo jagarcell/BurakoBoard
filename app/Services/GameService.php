@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\GameStatus;
 use App\Enums\GameUserRole;
 use App\Events\GameDeleted;
+use App\Events\GameRoleUpdated;
 use App\Http\Resources\Api\V1\GameSummaryResource;
 use App\Http\Resources\Api\V1\RematchChainItemResource;
 use App\Models\Game;
@@ -285,5 +286,85 @@ class GameService
         $games = $this->gameRepository->getRematchChain($gameId);
 
         return RematchChainItemResource::collection($games)->resolve();
+    }
+
+    /**
+     * Return all users who are currently following a game as viewers.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Support\Collection<int, \stdClass> Users with viewer role (id, name, email).
+     * Logic: verify the game exists, then delegate the viewer lookup to the repository so the
+     *   delegation modal can display only the registered viewers eligible to receive the host role.
+     */
+    public function listGameViewers(int $gameId): Collection
+    {
+        $this->gameRepository->findGameOrFail($gameId);
+
+        return $this->gameRepository->getGameViewers($gameId);
+    }
+
+    /**
+     * Transfer the host (creator) role from the requesting user to a viewer.
+     *
+     * @param  int  $gameId            Identifier of the game.
+     * @param  int  $requestingUserId  Identifier of the authenticated user requesting the transfer (must be creator).
+     * @param  int  $targetUserId      Identifier of the viewer who will receive the creator role.
+     * @return \App\Models\Game The game record with the requesting user's updated role attached as user_role.
+     * Logic:
+     *   1. Verify the requesting user is the game creator; abort 403 otherwise.
+     *   2. Verify the target user exists in the game with the viewer role; throw a validation
+     *      exception if not, so a meaningful 422 is returned rather than a silent no-op.
+     *   3. Within a DB transaction, atomically promote the target user to creator and demote
+     *      the requesting user to viewer so the pivot is never in a partially-updated state.
+     *   4. Invalidate the game summary cache so any subsequent read reflects the new state.
+     *   5. Return the game with the requesting user's new role (viewer) attached so the API
+     *      response can update the caller's session immediately.
+     */
+    public function delegateHost(int $gameId, int $requestingUserId, int $targetUserId): Game
+    {
+        $this->gameRepository->findGameOrFail($gameId);
+
+        if (! $this->gameRepository->isGameCreator($gameId, $requestingUserId)) {
+            abort(403, 'Only the game creator can delegate the host role.');
+        }
+
+        $viewers = $this->gameRepository->getGameViewers($gameId);
+        $isViewer = $viewers->contains('id', $targetUserId);
+
+        if (! $isViewer) {
+            throw ValidationException::withMessages([
+                'user_id' => ['The selected user is not a viewer of this game.'],
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($gameId, $requestingUserId, $targetUserId): void {
+                $this->gameRepository->updateUserRole($gameId, $targetUserId, GameUserRole::Creator->value);
+                $this->gameRepository->updateUserRole($gameId, $requestingUserId, GameUserRole::Viewer->value);
+            });
+        } catch (\Throwable $e) {
+            Log::error('Failed to delegate host role', [
+                'game_id'           => $gameId,
+                'requesting_user'   => $requestingUserId,
+                'target_user'       => $targetUserId,
+                'error'             => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+
+        $this->gameRepository->forgetGameSummaryCache($gameId);
+
+        // Notify the new host on their private user channel so their UI can
+        // update the user_role for this game entry in real time without any
+        // additional HTTP request or page reload.
+        broadcast(new GameRoleUpdated($targetUserId, $gameId, GameUserRole::Creator->value));
+
+        Log::info('Host role delegated', [
+            'game_id'    => $gameId,
+            'new_creator' => $targetUserId,
+            'new_viewer'  => $requestingUserId,
+        ]);
+
+        return $this->gameRepository->getGameWithUserRole($gameId, $requestingUserId);
     }
 }

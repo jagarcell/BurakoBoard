@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\DelegateHostRequest;
 use App\Http\Requests\Api\V1\SetInitialShufflerRequest;
 use App\Http\Requests\Api\V1\StoreGameInviteRequest;
 use App\Http\Requests\Api\V1\StoreGameRematchRequest;
@@ -265,5 +266,41 @@ class GameController extends Controller
         return response()->json([
             'games' => $chain,
         ]);
+    }
+
+    /**
+     * Return the list of registered users following the game as viewers.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Http\JsonResponse Viewer list (id, name, email).
+     * Logic: delegate viewer retrieval to the service, then return the collection directly
+     *   since each row only carries lightweight public user data.
+     */
+    public function listViewers(int $gameId): JsonResponse
+    {
+        $viewers = $this->gameService->listGameViewers($gameId);
+
+        return response()->json(['viewers' => $viewers->values()]);
+    }
+
+    /**
+     * Transfer the host (creator) role to a viewer of the game.
+     *
+     * @param  \App\Http\Requests\Api\V1\DelegateHostRequest  $request  Validated request containing the target user_id.
+     * @param  int  $gameId  Identifier of the game for which the role is being delegated.
+     * @return \Illuminate\Http\JsonResponse The game with the requesting user's updated role (viewer).
+     * Logic: delegate the role-swap business logic to the service (creator guard + viewer check +
+     *   transactional role update), then return the game record with the caller's new viewer role
+     *   so the frontend can immediately reflect the demotion without a separate re-fetch.
+     */
+    public function delegateHost(DelegateHostRequest $request, int $gameId): JsonResponse
+    {
+        $game = $this->gameService->delegateHost(
+            $gameId,
+            (int) auth()->id(),
+            (int) $request->validated('user_id'),
+        );
+
+        return response()->json(['game' => new GameListItemResource($game)]);
     }
 }

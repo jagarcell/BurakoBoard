@@ -218,6 +218,43 @@ class GameRepository
     }
 
     /**
+     * Return all users currently holding the viewer role for a game.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Support\Collection<int, \stdClass> Rows with id, name, and email for each viewer.
+     * Logic: join the game_user pivot with the users table, filter to rows whose role equals
+     *   'viewer', and return only the columns needed to populate the delegation picker.
+     */
+    public function getGameViewers(int $gameId): Collection
+    {
+        return DB::table('game_user')
+            ->join('users', 'users.id', '=', 'game_user.user_id')
+            ->where('game_user.game_id', $gameId)
+            ->where('game_user.role', GameUserRole::Viewer->value)
+            ->select(['users.id', 'users.name', 'users.email'])
+            ->orderBy('users.name')
+            ->get();
+    }
+
+    /**
+     * Update the role of a user in a game's pivot table.
+     *
+     * @param  int     $gameId   Identifier of the game.
+     * @param  int     $userId   Identifier of the user whose role is being updated.
+     * @param  string  $newRole  The new role value to assign.
+     * @return void
+     * Logic: issue a targeted UPDATE on the game_user pivot for the (game_id, user_id) pair
+     *   and refresh the updated_at timestamp so auditing is consistent.
+     */
+    public function updateUserRole(int $gameId, int $userId, string $newRole): void
+    {
+        DB::table('game_user')
+            ->where('game_id', $gameId)
+            ->where('user_id', $userId)
+            ->update(['role' => $newRole, 'updated_at' => now()]);
+    }
+
+    /**
      * Determine whether a game has any recorded rounds.
      *
      * @param  int  $gameId  Identifier of the game.

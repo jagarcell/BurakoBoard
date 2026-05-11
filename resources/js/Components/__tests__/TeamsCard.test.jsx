@@ -2195,4 +2195,68 @@ describe('TeamsCard', () => {
         });
     });
 
+    describe('points remaining to goal chip', () => {
+        it('shows the remaining-points chip next to the score badge when game is in progress', async () => {
+            setupGetMocks();
+
+            const team = { ...makeTeam(10, 'Team Alpha'), current_score: 800 };
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            // target_points=2000, score=800 → remaining=1200
+            expect(screen.getByTitle('Points remaining to reach the game goal')).toHaveTextContent('-1200');
+        });
+
+        it('does not show the remaining-points chip when the game is finished', async () => {
+            setupGetMocks();
+
+            const team = { ...makeTeam(10, 'Team Alpha'), current_score: 800 };
+            render(<TeamsCard initialTeams={[team]} selectedGame={finishedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.queryByTitle('Points remaining to reach the game goal')).not.toBeInTheDocument();
+        });
+
+        it('does not show the remaining-points chip when target_points is null', async () => {
+            setupGetMocks();
+
+            const gameWithoutTarget = { ...selectedGame, target_points: null };
+            const team = { ...makeTeam(10, 'Team Alpha'), current_score: 800 };
+            render(<TeamsCard initialTeams={[team]} selectedGame={gameWithoutTarget} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.queryByTitle('Points remaining to reach the game goal')).not.toBeInTheDocument();
+        });
+
+        it('does not show the remaining-points chip when team score meets or exceeds target_points', async () => {
+            setupGetMocks();
+
+            const team = { ...makeTeam(10, 'Team Alpha'), current_score: 2000 };
+            render(<TeamsCard initialTeams={[team]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            expect(screen.queryByTitle('Points remaining to reach the game goal')).not.toBeInTheDocument();
+        });
+
+        it('shows correct remaining values for two teams independently', async () => {
+            setupGetMocks();
+
+            const tA = { ...makeTeam(10, 'Team Alpha'), current_score: 600 };
+            const tB = { ...makeTeam(11, 'Team Beta'), current_score: 1500 };
+            render(<TeamsCard initialTeams={[tA, tB]} selectedGame={selectedGame} />);
+
+            await screen.findByText('Team Alpha');
+
+            // target=2000: Alpha rem=1400, Beta rem=500
+            const chips = screen.getAllByTitle('Points remaining to reach the game goal');
+            const texts = chips.map((c) => c.textContent);
+            expect(texts).toContain('-1400');
+            expect(texts).toContain('-500');
+        });
+    });
+
 });
