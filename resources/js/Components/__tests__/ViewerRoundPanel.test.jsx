@@ -187,4 +187,47 @@ describe('ViewerRoundPanel', () => {
             ).not.toBeInTheDocument();
         });
     });
+
+    describe('points remaining to goal chips', () => {
+        it('shows Rem chips in the desktop tile header when score is below targetPoints', () => {
+            const computeTeamScore = vi.fn(() => 0);
+            const getAccruedScore = vi.fn(() => 300);
+            render(
+                <ViewerRoundPanel
+                    {...baseProps}
+                    computeTeamScore={computeTeamScore}
+                    getAccruedScore={getAccruedScore}
+                    targetPoints={2000}
+                />,
+            );
+            // partial=300, rem=1700 — shown in both mobile tab and desktop tile
+            const chips = screen.getAllByTitle('Points remaining to reach the game goal');
+            expect(chips.length).toBeGreaterThanOrEqual(2);
+            chips.forEach((c) => expect(c).toHaveTextContent('-1700'));
+        });
+
+        it('does not show Rem chips when targetPoints is null', () => {
+            render(
+                <ViewerRoundPanel
+                    {...baseProps}
+                    computeTeamScore={() => 0}
+                    getAccruedScore={() => 300}
+                    targetPoints={null}
+                />,
+            );
+            expect(screen.queryByTitle('Points remaining to reach the game goal')).not.toBeInTheDocument();
+        });
+
+        it('does not show Rem chips when the partial score meets or exceeds targetPoints', () => {
+            render(
+                <ViewerRoundPanel
+                    {...baseProps}
+                    computeTeamScore={() => 0}
+                    getAccruedScore={() => 2000}
+                    targetPoints={2000}
+                />,
+            );
+            expect(screen.queryByTitle('Points remaining to reach the game goal')).not.toBeInTheDocument();
+        });
+    });
 });

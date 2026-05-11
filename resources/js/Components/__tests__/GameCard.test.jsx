@@ -1996,9 +1996,9 @@ describe('GameCard', () => {
     // -------------------------------------------------------------------------
 
     it('shows the invitation popup when a real-time invitation event arrives', async () => {
-        let capturedCallback = null;
+        let capturedCallbacks = {};
         const channelStub = {
-            listen: vi.fn((_event, cb) => { capturedCallback = cb; return channelStub; }),
+            listen: vi.fn((event, cb) => { capturedCallbacks[event] = cb; return channelStub; }),
             stopListening: vi.fn().mockReturnThis(),
         };
         window.Echo = {
@@ -2013,9 +2013,9 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={vi.fn()} />);
         await screen.findByRole('combobox');
 
-        // Fire the real-time event from Reverb
+        // Fire the real-time event from Reverb on the user's private channel
         await act(async () => {
-            capturedCallback?.({ game_id: pendingGame.id });
+            capturedCallbacks['.game.invitation.sent']?.({ game_id: pendingGame.id });
         });
 
         await waitFor(() =>
@@ -2025,9 +2025,9 @@ describe('GameCard', () => {
     });
 
     it('closes the invitation popup when the × button is clicked', async () => {
-        let capturedCallback = null;
+        let capturedCallbacks = {};
         const channelStub = {
-            listen: vi.fn((_event, cb) => { capturedCallback = cb; return channelStub; }),
+            listen: vi.fn((event, cb) => { capturedCallbacks[event] = cb; return channelStub; }),
             stopListening: vi.fn().mockReturnThis(),
         };
         window.Echo = {
@@ -2041,7 +2041,7 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={vi.fn()} />);
         await screen.findByRole('combobox');
 
-        await act(async () => { capturedCallback?.({ game_id: pendingGame.id }); });
+        await act(async () => { capturedCallbacks['.game.invitation.sent']?.({ game_id: pendingGame.id }); });
 
         await waitFor(() =>
             expect(screen.getByRole('dialog', { name: 'New game invitation' })).toBeInTheDocument(),
@@ -2055,9 +2055,9 @@ describe('GameCard', () => {
     });
 
     it('auto-closes the invitation popup after the invitation is accepted', async () => {
-        let capturedCallback = null;
+        let capturedCallbacks = {};
         const channelStub = {
-            listen: vi.fn((_event, cb) => { capturedCallback = cb; return channelStub; }),
+            listen: vi.fn((event, cb) => { capturedCallbacks[event] = cb; return channelStub; }),
             stopListening: vi.fn().mockReturnThis(),
         };
         window.Echo = {
@@ -2074,7 +2074,7 @@ describe('GameCard', () => {
         render(<GameCard onGameSelect={vi.fn()} />);
         await screen.findByRole('combobox');
 
-        await act(async () => { capturedCallback?.({ game_id: pendingGame.id }); });
+        await act(async () => { capturedCallbacks['.game.invitation.sent']?.({ game_id: pendingGame.id }); });
 
         await waitFor(() =>
             expect(screen.getByRole('dialog', { name: 'New game invitation' })).toBeInTheDocument(),
@@ -2241,6 +2241,77 @@ describe('GameCard', () => {
             ([ch]) => ch.startsWith('game.'),
         );
         expect(gameChannelCalls).toHaveLength(0);
+    });
+
+    // -------------------------------------------------------------------------
+    // Real-time role update — .game.role.updated Echo event
+    // -------------------------------------------------------------------------
+
+    it('updates user_role to creator in the games list when .game.role.updated arrives for the current user', async () => {
+        let capturedRoleCallback = null;
+        const userChannelStub = {
+            listen: vi.fn((event, cb) => {
+                if (event === '.game.role.updated') capturedRoleCallback = cb;
+                return userChannelStub;
+            }),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        const gameChannelStub = {
+            listen: vi.fn().mockReturnThis(),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn((ch) => ch.startsWith('App.Models.User') ? userChannelStub : gameChannelStub),
+            leave: vi.fn(),
+        };
+
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        // Pre-select the viewer game so we can watch the role badge change
+        localStorage.setItem('burako_selected_game_id', '11');
+
+        render(<GameCard onGameSelect={vi.fn()} />);
+
+        const trigger = await screen.findByRole('combobox');
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await waitFor(() => expect(trigger).toHaveTextContent(/Their Game/));
+
+        // Confirm viewer role icon is shown before the event
+        expect(screen.getByTitle('Viewer')).toBeInTheDocument();
+
+        // Simulate the server broadcasting .game.role.updated to this user
+        await act(async () => {
+            capturedRoleCallback?.({ game_id: 11, new_role: 'creator' });
+        });
+
+        // After the event the role icon must switch to Creator
+        await waitFor(() => expect(screen.getByTitle('Creator')).toBeInTheDocument());
+        expect(screen.queryByTitle('Viewer')).not.toBeInTheDocument();
+    });
+
+    it('stops listening to .game.role.updated when the component unmounts', async () => {
+        const userChannelStub = {
+            listen: vi.fn().mockReturnThis(),
+            stopListening: vi.fn().mockReturnThis(),
+        };
+        window.Echo = {
+            private: vi.fn(() => userChannelStub),
+            leave: vi.fn(),
+        };
+
+        api.get.mockResolvedValueOnce({
+            data: { data: { games: gamesWithRoles } },
+        });
+
+        const { unmount } = render(<GameCard onGameSelect={vi.fn()} />);
+
+        await screen.findByRole('combobox');
+
+        unmount();
+
+        expect(userChannelStub.stopListening).toHaveBeenCalledWith('.game.role.updated');
     });
 
     // -------------------------------------------------------------------------
