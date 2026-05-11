@@ -40,7 +40,7 @@ export default function useVoiceAliases() {
             setIsLoading(true);
             setError(null);
             const { data } = await api.get('/user/voice-aliases');
-            setAliases(Array.isArray(data.data?.aliases) ? data.data.aliases : []);
+            setAliases(Array.isArray(data?.data?.aliases) ? data?.data?.aliases : []);
         } catch {
             setError('Failed to load voice aliases.');
         } finally {
@@ -65,7 +65,7 @@ export default function useVoiceAliases() {
     const addAlias = useCallback(async (alias, keyword) => {
         try {
             const { data } = await api.post('/user/voice-aliases', { alias, keyword });
-            const created = data.data ?? data;
+            const created = data?.data ?? data;
             setAliases((prev) =>
                 [...prev.filter((a) => a.id !== created.id), created].sort((a, b) => a.alias.localeCompare(b.alias))
             );
