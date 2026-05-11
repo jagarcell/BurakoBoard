@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import Checkbox from '@/Components/Checkbox';
 import CreateGameModal from '@/Components/CreateGameModal';
+import DelegateHostModal from '@/Components/DelegateHostModal';
 import EditGameModal from '@/Components/EditGameModal';
 import InvitationPopup from '@/Components/InvitationPopup';
 import InviteUsersModal from '@/Components/InviteUsersModal';
@@ -38,6 +39,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     const dropdownAnchorRef = useRef(null);
 
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [isDelegateHostModalOpen, setIsDelegateHostModalOpen] = useState(false);
 
     const [acceptingGameIds, setAcceptingGameIds] = useState(() => new Set());
     const [hasPending, setHasPending] = useState(hasPendingInvitations);
@@ -171,6 +173,30 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGameId is the only dependency that drives channel (re)subscription; other referenced values (echo, setGames) are stable
     }, [selectedGameId]);
 
+    // Subscribe to the authenticated user's private notification channel to receive
+    // real-time role changes.  When the current user is promoted to host (creator)
+    // by the previous host, the `.game.role.updated` event arrives here and the
+    // affected game's user_role is updated in local state immediately — no HTTP
+    // re-fetch or page reload required.
+    useEffect(() => {
+        if (! user?.id || typeof window === 'undefined' || ! window.Echo) return;
+
+        const channel = window.Echo.private(`App.Models.User.${user.id}`);
+
+        channel.listen('.game.role.updated', ({ game_id, new_role }) => {
+            setGames((current) =>
+                current.map((g) =>
+                    String(g.id) === String(game_id) ? { ...g, user_role: new_role } : g,
+                ),
+            );
+        });
+
+        return () => {
+            channel.stopListening('.game.role.updated');
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- user.id is the only value that identifies which private channel to subscribe to; setGames is a stable setter
+    }, [user?.id]);
+
     // When Dashboard's authoritative game state marks the selected game as finished
     // (e.g. because the current user just recorded the final round), mirror that
     // status change into the local games array so the rematch button appears
@@ -252,6 +278,14 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
     const closeInviteModal = () => {
         setIsInviteModalOpen(false);
+    };
+
+    const handleDelegateHostSuccess = (updatedGame) => {
+        setGames((currentGames) =>
+            currentGames.map((g) =>
+                String(g.id) === String(updatedGame.id) ? updatedGame : g,
+            ),
+        );
     };
 
     const fetchPendingInvitations = async () => {
@@ -564,6 +598,28 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
                         {selectedGame?.user_role === 'creator' && selectedGame?.status !== 'finished' && (
                             <button
+                                aria-label="Delegate host role to a viewer"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                                onClick={() => setIsDelegateHostModalOpen(true)}
+                                type="button"
+                            >
+                                <svg
+                                    aria-hidden="true"
+                                    className="h-3.5 w-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM12 14a7 7 0 0 0-7 7h14a7 7 0 0 0-7-7z" strokeLinecap="round" strokeLinejoin="round" />
+                                    <path d="M19 12l2 2-2 2M21 14h-4" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                Delegate Host
+                            </button>
+                        )}
+
+                        {selectedGame?.user_role === 'creator' && selectedGame?.status !== 'finished' && (
+                            <button
                                 aria-label="Invite a viewer to this game"
                                 className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                                 onClick={openInviteModal}
@@ -830,6 +886,13 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 isOpen={isInviteModalOpen}
                 onClose={closeInviteModal}
                 gameId={selectedGame?.id ?? null}
+            />
+
+            <DelegateHostModal
+                isOpen={isDelegateHostModalOpen}
+                onClose={() => setIsDelegateHostModalOpen(false)}
+                gameId={selectedGame?.id ?? null}
+                onSuccess={handleDelegateHostSuccess}
             />
         </>
     );
