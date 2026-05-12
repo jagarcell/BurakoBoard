@@ -1,8 +1,9 @@
 import api from '@/api/client';
 import { formatDefaultGameName } from '@/utils/formatGameName';
 import { createPortal } from 'react-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePage } from '@inertiajs/react';
+import useVisibilityRefresh from '@/hooks/useVisibilityRefresh';
 import Checkbox from '@/Components/Checkbox';
 import CreateGameModal from '@/Components/CreateGameModal';
 import DelegateHostModal from '@/Components/DelegateHostModal';
@@ -77,63 +78,49 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         ? games
         : games.filter((g) => g.status !== 'finished');
 
+    const fetchGames = useCallback(async () => {
+        setIsLoading(true);
+        setLoadError('');
+
+        try {
+            const response = await api.get('/games');
+            const availableGames = response.data?.data?.games ?? [];
+
+            setGames(availableGames);
+            setSelectedGameId((currentGameId) => {
+                // URL-specified preselect takes priority over localStorage.
+                if (
+                    preselectedGameId !== null &&
+                    availableGames.some(
+                        (game) => String(game.id) === String(preselectedGameId),
+                    )
+                ) {
+                    return String(preselectedGameId);
+                }
+
+                if (
+                    currentGameId !== '' &&
+                    availableGames.some(
+                        (game) => String(game.id) === currentGameId,
+                    )
+                ) {
+                    return currentGameId;
+                }
+
+                return '';
+            });
+        } catch {
+            setLoadError('Unable to load games right now.');
+        } finally {
+            setIsLoading(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- safe: preselectedGameId is a one-time URL param; setters are stable
+    }, [preselectedGameId]);
+
+    // Initial load.
     useEffect(() => {
-        let isActive = true;
-
-        const fetchGames = async () => {
-            setIsLoading(true);
-            setLoadError('');
-
-            try {
-                const response = await api.get('/games');
-                const availableGames = response.data?.data?.games ?? [];
-
-                if (! isActive) {
-                    return;
-                }
-
-                setGames(availableGames);
-                setSelectedGameId((currentGameId) => {
-                    // URL-specified preselect takes priority over localStorage.
-                    if (
-                        preselectedGameId !== null &&
-                        availableGames.some(
-                            (game) => String(game.id) === String(preselectedGameId),
-                        )
-                    ) {
-                        return String(preselectedGameId);
-                    }
-
-                    if (
-                        currentGameId !== '' &&
-                        availableGames.some(
-                            (game) => String(game.id) === currentGameId,
-                        )
-                    ) {
-                        return currentGameId;
-                    }
-
-                    return '';
-                });
-            } catch (error) {
-                if (! isActive) {
-                    return;
-                }
-
-                setLoadError('Unable to load games right now.');
-            } finally {
-                if (isActive) {
-                    setIsLoading(false);
-                }
-            }
-        };
-
         fetchGames();
-
-        return () => {
-            isActive = false;
-        };
-    }, []);
+    }, [fetchGames]);
 
     useEffect(() => {
         if (selectedGameId !== '') {
@@ -288,7 +275,7 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         );
     };
 
-    const fetchPendingInvitations = async () => {
+    const fetchPendingInvitations = useCallback(async () => {
         setIsFetchingInvitations(true);
 
         try {
@@ -306,7 +293,16 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         }
 
         return [];
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- safe: all setters are stable useState dispatchers; api is a module-level stable import
+    }, []);
+
+    // Re-sync when the user returns from a locked screen or switches back to the tab.
+    useVisibilityRefresh(useCallback(() => {
+        fetchGames();
+        if (hasPending) {
+            fetchPendingInvitations();
+        }
+    }, [fetchGames, fetchPendingInvitations, hasPending]));
 
     const handleNewInvitation = async () => {
         setHasPending(true);

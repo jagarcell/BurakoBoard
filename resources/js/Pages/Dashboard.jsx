@@ -8,6 +8,7 @@ import RoundsCard from '@/Components/RoundsCard';
 import TeamsCard from '@/Components/TeamsCard';
 import useConfetti from '@/hooks/useConfetti';
 import useWinnerSound from '@/hooks/useWinnerSound';
+import useVisibilityRefresh from '@/hooks/useVisibilityRefresh';
 
 export default function Dashboard() {
     const [preselectedGameId] = useState(() => {
@@ -97,6 +98,43 @@ export default function Dashboard() {
             isActive = false;
         };
     }, [selectedGame?.id]);
+
+    // Re-fetch the current game's summary when the user returns from a locked screen
+    // or switches back to the tab, bridging any events missed while the page was hidden.
+    const fetchGameSummary = useCallback(() => {
+        if (! selectedGame?.id) return;
+
+        setIsFetching(true);
+
+        api
+            .get(`/games/${selectedGame.id}`)
+            .then((response) => {
+                const summary = response.data?.data?.game ?? {};
+                const teams = summary.teams ?? [];
+
+                setGameSummary({
+                    game: summary.game ?? null,
+                    teams,
+                    rounds: summary.rounds ?? [],
+                    round_roles: summary.round_roles ?? [],
+                    total_rounds: summary.total_rounds ?? 0,
+                    has_more_rounds: summary.has_more_rounds ?? false,
+                });
+
+                if (summary.game?.status) {
+                    setSelectedGame((prev) =>
+                        prev ? { ...prev, status: summary.game.status, current_round_number: summary.game.current_round_number } : prev,
+                    );
+                }
+
+                setIsFetching(false);
+            })
+            .catch(() => {
+                setIsFetching(false);
+            });
+    }, [selectedGame?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- safe: setters are stable; selectedGame.id is the only value that determines which game to fetch
+
+    useVisibilityRefresh(fetchGameSummary);
 
     const initialTeams = useMemo(() => gameSummary?.teams ?? [], [gameSummary]);
     const initialRounds = useMemo(() => gameSummary?.rounds ?? [], [gameSummary]);

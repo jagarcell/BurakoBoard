@@ -1,5 +1,5 @@
 import api from '@/api/client';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import BaseElementsInput from '@/Components/BaseElementsInput';
 import CardSpinner from '@/Components/CardSpinner';
@@ -9,6 +9,7 @@ import VoiceAliasManager from '@/Components/VoiceAliasManager';
 import VoiceMicButton from '@/Components/VoiceMicButton';
 import useVoiceAliases from '@/hooks/useVoiceAliases';
 import useVoiceCommands from '@/hooks/useVoiceCommands';
+import useVisibilityRefresh from '@/hooks/useVisibilityRefresh';
 
 /** Human-readable labels for each round role key, used in the player order reference strip. */
 const PLAYER_ROLE_LABEL_MAP = {
@@ -247,30 +248,38 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     }, [elements]);
 
     // Fetch the saved draft for the current game once elements are available.
-    // Runs on mount (after elements load) and whenever the selected game changes.
+    // Runs on mount (after elements load), whenever the selected game changes,
+    // and whenever the screen becomes visible again (via useVisibilityRefresh).
     // Draft values overlay any defaults that were populated by the effects above.
-    useEffect(() => {
-        if (!selectedGame?.id || elements.length === 0) return;
+    const fetchRoundDraft = useCallback(() => {
+        if (!selectedGameRef.current?.id || elements.length === 0) return;
 
         draftLoadedRef.current = false;
-        let cancelled = false;
 
         api
-            .get(`/games/${selectedGame.id}/round-draft`)
+            .get(`/games/${selectedGameRef.current.id}/round-draft`)
             .then((response) => {
-                if (cancelled) return;
                 const draft = response.data?.data?.round_draft;
+                if (draft?.base_inputs || draft?.card_inputs) {
+                    // Prevent the auto-save effect from bouncing a redundant PUT
+                    // back to the server just because we overwrote local state.
+                    skipNextDraftSave.current = true;
+                }
                 if (draft?.base_inputs) setBaseInputs(draft.base_inputs);
                 if (draft?.card_inputs) setCardInputs(draft.card_inputs);
             })
             .catch(() => { /* silently ignore – leave defaults in place */ })
             .finally(() => {
-                if (!cancelled) draftLoadedRef.current = true;
+                draftLoadedRef.current = true;
             });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGameRef is a stable ref kept current by its own effect; setBaseInputs and setCardInputs are stable state setters; elements.length drives re-creation intentionally
+    }, [elements.length]);
 
-        return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setBaseInputs and setCardInputs are stable state setters; draftLoadedRef is a stable ref
-    }, [selectedGame?.id, elements.length]);
+    useEffect(() => {
+        fetchRoundDraft();
+    }, [selectedGame?.id, fetchRoundDraft]);
+
+    useVisibilityRefresh(fetchRoundDraft);
 
     // Debounced auto-save: persist inputs to round-draft whenever they change,
     // but only after the initial draft fetch has completed and the form is active.
