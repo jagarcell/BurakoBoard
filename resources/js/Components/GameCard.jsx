@@ -9,6 +9,7 @@ import Checkbox from '@/Components/Checkbox';
 import CreateGameModal from '@/Components/CreateGameModal';
 import DelegateHostModal from '@/Components/DelegateHostModal';
 import EditGameModal from '@/Components/EditGameModal';
+import ExtendGameModal from '@/Components/ExtendGameModal';
 import InvitationPopup from '@/Components/InvitationPopup';
 import InviteUsersModal from '@/Components/InviteUsersModal';
 import RematchHistoryModal from '@/Components/RematchHistoryModal';
@@ -57,6 +58,11 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
     const [rematchSourceId, setRematchSourceId] = useState(null);
 
     const [isRematchHistoryOpen, setIsRematchHistoryOpen] = useState(false);
+
+    const [isExtendModalOpen, setIsExtendModalOpen] = useState(false);
+    const [extendTargetPoints, setExtendTargetPoints] = useState('');
+    const [isExtending, setIsExtending] = useState(false);
+    const [extendErrors, setExtendErrors] = useState({});
 
     const [latestInvitation, setLatestInvitation] = useState(null);
     const [showInvitationPopup, setShowInvitationPopup] = useState(false);
@@ -254,6 +260,70 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
         setIsEditModalOpen(false);
         resetForm();
+    };
+
+    const openExtendModal = (game) => {
+        setExtendTargetPoints(String((game.target_points ?? 0) + 500));
+        setExtendErrors({});
+        setIsExtendModalOpen(true);
+    };
+
+    const closeExtendModal = () => {
+        if (isExtending) {
+            return;
+        }
+
+        setIsExtendModalOpen(false);
+        setExtendTargetPoints('');
+        setExtendErrors({});
+    };
+
+    const handleExtendGame = async (event) => {
+        event.preventDefault();
+        setExtendErrors({});
+
+        const targetPoints = Number(extendTargetPoints);
+
+        if (Number.isNaN(targetPoints) || targetPoints < 1) {
+            setExtendErrors({
+                target_points: 'Winning score must be at least 1.',
+            });
+
+            return;
+        }
+
+        setIsExtending(true);
+
+        try {
+            const response = await api.patch(`/games/${selectedGameId}/extend`, {
+                target_points: targetPoints,
+            });
+            const updatedGame = response.data?.data?.game;
+
+            if (! updatedGame) {
+                throw new Error('Game payload missing from response.');
+            }
+
+            setGames((currentGames) =>
+                currentGames.map((game) =>
+                    String(game.id) === String(updatedGame.id) ? updatedGame : game,
+                ),
+            );
+
+            setIsExtendModalOpen(false);
+            setExtendTargetPoints('');
+        } catch (error) {
+            const apiErrors = error.response?.data?.data?.errors ?? {};
+
+            setExtendErrors({
+                target_points: apiErrors.target_points?.[0],
+                general:
+                    apiErrors.target_points?.[0] ||
+                    'Unable to extend the game right now.',
+            });
+        } finally {
+            setIsExtending(false);
+        }
     };
 
     const openInviteModal = () => {
@@ -602,6 +672,27 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                             </button>
                         )}
 
+                        {selectedGame?.user_role === 'creator' && selectedGame?.status === 'finished' && (
+                            <button
+                                aria-label="Extend this game with a new points goal"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                                onClick={() => openExtendModal(selectedGame)}
+                                type="button"
+                            >
+                                <svg
+                                    aria-hidden="true"
+                                    className="h-3.5 w-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                Extend
+                            </button>
+                        )}
+
                         {selectedGame?.user_role === 'creator' && selectedGame?.status !== 'finished' && (
                             <button
                                 aria-label="Delegate host role to a viewer"
@@ -899,6 +990,17 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                 onClose={() => setIsDelegateHostModalOpen(false)}
                 gameId={selectedGame?.id ?? null}
                 onSuccess={handleDelegateHostSuccess}
+            />
+
+            <ExtendGameModal
+                isOpen={isExtendModalOpen}
+                onClose={closeExtendModal}
+                game={selectedGame}
+                targetPoints={extendTargetPoints}
+                errors={extendErrors}
+                isExtending={isExtending}
+                onChange={setExtendTargetPoints}
+                onSubmit={handleExtendGame}
             />
         </>
     );
