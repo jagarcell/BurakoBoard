@@ -697,6 +697,116 @@ describe('RoundsCard', () => {
             await new Promise((r) => setTimeout(r, 100));
             expect(api.put).not.toHaveBeenCalled();
         });
+
+        it('keeps inputs filled and shows an error when the API returns HTTP 200 but the round confirmation is missing', async () => {
+            api.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+            // Malformed response: HTTP 200 but no game.id in the payload
+            api.post.mockResolvedValueOnce({
+                data: { data: { game: { game: null, teams: [], rounds: [] } } },
+            });
+
+            render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+            await userEvent.click(burakoCheckboxes[0]);
+            expect(burakoCheckboxes[0]).toBeChecked();
+
+            await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+            // Input must NOT be cleared when confirmation is absent
+            await waitFor(() => expect(api.post).toHaveBeenCalled());
+            expect(burakoCheckboxes[0]).toBeChecked();
+            expect(screen.getByText('Unable to record the round right now.')).toBeInTheDocument();
+        });
+
+        it('does not overwrite cleared inputs with a stale draft that resolves after a round save', async () => {
+            let resolveDraftFetch;
+            const staleDraftPromise = new Promise((resolve) => { resolveDraftFetch = resolve; });
+
+            api.get.mockImplementation((url) => {
+                if (url.includes('round-draft')) {
+                    // Return a promise we can manually resolve later to simulate a
+                    // slow in-flight GET that settles after the round is saved.
+                    return staleDraftPromise;
+                }
+                return Promise.resolve(elementsResponse);
+            });
+            api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+
+            render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+            await userEvent.click(burakoCheckboxes[0]);
+            expect(burakoCheckboxes[0]).toBeChecked();
+
+            // Save the round — inputs should clear on confirmed success
+            await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+            await waitFor(() => expect(burakoCheckboxes[0]).not.toBeChecked());
+
+            // Now the stale draft fetch resolves with the old checked state
+            await act(async () => {
+                resolveDraftFetch({
+                    data: {
+                        data: {
+                            round_draft: {
+                                base_inputs: { 10: { 1: true, 2: 0 }, 11: { 1: false, 2: 0 } },
+                                card_inputs: { 10: { cardsInHand: 0, cardsOnTable: 0 }, 11: { cardsInHand: 0, cardsOnTable: 0 } },
+                            },
+                        },
+                    },
+                });
+            });
+
+            // The cleared state must be preserved — stale draft must not restore the old checkbox
+            expect(burakoCheckboxes[0]).not.toBeChecked();
+        });
+    });
+
+    describe('game extension — round inputs reopen', () => {
+        it('reopens the round input form when selectedGame.status changes from finished to in_progress', async () => {
+            api.get.mockImplementation((url) =>
+                url.includes('round-draft')
+                    ? Promise.resolve({ data: { data: { round_draft: null } } })
+                    : Promise.resolve(elementsResponse),
+            );
+
+            const finishedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'finished' };
+
+            const { rerender } = render(
+                <RoundsCard
+                    hasTwoTeams
+                    initialTeams={[teamA, teamB]}
+                    initialRounds={[]}
+                    selectedGame={finishedGame}
+                />,
+            );
+
+            // Confirm the "concluded" message is shown and the form is hidden
+            await screen.findByText('This game has concluded — no further rounds can be recorded.');
+            expect(screen.queryByRole('button', { name: 'Record Round' })).not.toBeInTheDocument();
+
+            // Simulate the game being extended: status flips back to in_progress on the same game id
+            const extendedGame = { ...finishedGame, status: 'in_progress', target_points: 3000 };
+
+            await act(async () => {
+                rerender(
+                    <RoundsCard
+                        hasTwoTeams
+                        initialTeams={[teamA, teamB]}
+                        initialRounds={[]}
+                        selectedGame={extendedGame}
+                    />,
+                );
+            });
+
+            // The "concluded" message must be gone and the scoring form must reappear
+            expect(screen.queryByText('This game has concluded — no further rounds can be recorded.')).not.toBeInTheDocument();
+            await screen.findByRole('button', { name: 'Record Round' });
+        });
     });
 
     describe('round history expand/collapse', () => {
