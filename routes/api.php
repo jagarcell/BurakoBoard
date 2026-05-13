@@ -37,6 +37,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/games/{gameId}', [GameController::class, 'update']);
         Route::delete('/games/{gameId}', [GameController::class, 'destroy']);
         Route::post('/games/{gameId}/rematch', [GameController::class, 'rematch']);
+        Route::patch('/games/{gameId}/extend', [GameController::class, 'extend']);
 
         Route::put('/games/{gameId}/shuffler', [GameController::class, 'setInitialShuffler']);
 

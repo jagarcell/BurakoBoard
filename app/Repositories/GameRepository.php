@@ -385,6 +385,40 @@ class GameRepository
     }
 
     /**
+     * Reactivate a finished game by setting a new points goal and clearing the winner.
+     *
+     * @param  \App\Models\Game  $game            The finished game to extend.
+     * @param  int               $newTargetPoints The new match-points goal that players must reach to win.
+     * @return \App\Models\Game The refreshed game model after persistence.
+     * Logic: set status back to in_progress, apply the new target_points, clear winning_team_id,
+     *   and save so the round scoring UI becomes active again without creating a separate game record.
+     */
+    public function extendGame(Game $game, int $newTargetPoints): Game
+    {
+        $game->status          = GameStatus::InProgress;
+        $game->target_points   = $newTargetPoints;
+        $game->winning_team_id = null;
+        $game->save();
+
+        return $game->fresh();
+    }
+
+    /**
+     * Return the highest current_score held by any team in a game.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return int The maximum team score, or 0 when no teams are attached.
+     * Logic: aggregate MAX(current_score) from the game_team pivot filtered by game_id so the
+     *   service layer can validate that the new target exceeds the leading team's accumulated total.
+     */
+    public function getHighestTeamScore(int $gameId): int
+    {
+        return (int) DB::table('game_team')
+            ->where('game_id', $gameId)
+            ->max('current_score');
+    }
+
+    /**
      * Build a raw game summary data object containing the query results needed for presentation.
      *
      * @param  int  $gameId  Identifier of the game.
