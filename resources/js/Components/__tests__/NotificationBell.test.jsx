@@ -132,13 +132,16 @@ describe('NotificationBell', () => {
         ).not.toThrow();
     });
 
-    it('leaves the channel on unmount', () => {
+    it('does NOT leave the shared user channel on unmount (prevents destroying GameCard role listener)', () => {
         buildEchoMock();
         const { unmount } = render(
             <NotificationBell userId={3} hasPending={false} onNewInvitation={vi.fn()} />,
         );
         unmount();
-        expect(window.Echo.leave).toHaveBeenCalledWith('App.Models.User.3');
+        // echo.leave() must NOT be called — the App.Models.User channel is shared with
+        // GameCard's .game.role.updated subscription; tearing it down here would silently
+        // kill host-delegation events for the rest of the session.
+        expect(window.Echo.leave).not.toHaveBeenCalled();
     });
 
     it('stops listening on unmount', () => {

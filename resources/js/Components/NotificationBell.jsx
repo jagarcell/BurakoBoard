@@ -52,8 +52,13 @@ export default function NotificationBell({
         });
 
         return () => {
+            // Only stop listening on this specific event — do not call
+            // echo.leave() here.  GameCard subscribes to the same
+            // `App.Models.User.${userId}` channel for `.game.role.updated`
+            // events.  Calling leave() would destroy the shared underlying
+            // Pusher channel and permanently kill GameCard's host-delegation
+            // listener for the rest of the session.
             channel.stopListening('.game.invitation.sent');
-            window.Echo?.leave(`App.Models.User.${userId}`);
         };
     }, [userId]);
 
