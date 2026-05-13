@@ -10,6 +10,7 @@ import VoiceMicButton from '@/Components/VoiceMicButton';
 import useVoiceAliases from '@/hooks/useVoiceAliases';
 import useVoiceCommands from '@/hooks/useVoiceCommands';
 import useVisibilityRefresh from '@/hooks/useVisibilityRefresh';
+import useEchoReconnect from '@/hooks/useEchoReconnect';
 
 /** Human-readable labels for each round role key, used in the player order reference strip. */
 const PLAYER_ROLE_LABEL_MAP = {
@@ -280,6 +281,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     }, [selectedGame?.id, fetchRoundDraft]);
 
     useVisibilityRefresh(fetchRoundDraft);
+    // Re-fetch the draft when the Pusher socket reconnects after an iOS
+    // background/foreground cycle, closing the event gap.
+    useEchoReconnect(fetchRoundDraft);
 
     // Debounced auto-save: persist inputs to round-draft whenever they change,
     // but only after the initial draft fetch has completed and the form is active.
