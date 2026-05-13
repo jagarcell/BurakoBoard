@@ -304,6 +304,66 @@ class GameService
     }
 
     /**
+     * Extend a finished game by raising its match-points goal, allowing play to continue.
+     *
+     * @param  int  $gameId          Identifier of the finished game to extend.
+     * @param  array<string, mixed>  $payload  Validated payload containing the new target_points.
+     * @param  int  $userId          Identifier of the authenticated user requesting the extension.
+     * @return \App\Models\Game The game model with status=in_progress and the updated target, suitable for GameListItemResource.
+     * Logic:
+     *   1. Resolve the game or fail with 404.
+     *   2. Guard: the game must be Finished; throw a ValidationException if it is still in progress.
+     *   3. Guard: only the creator may extend; abort 403 for any other role.
+     *   4. Guard: the new target_points must exceed the highest team score already accumulated so
+     *      the game cannot be extended to a goal that is already met.
+     *   5. Persist the new goal and reactivate the game via the repository.
+     *   6. Invalidate the cached game summary so the next broadcast reflects the updated state.
+     *   7. Broadcast a GameUpdated event to ALL channel members (including the creator) so every
+     *      connected client — whether creator or viewer — transitions from the finished state back
+     *      to the active scoring view in real time without a manual refresh.
+     *   8. Return the game record with the caller's role attached for immediate serialisation.
+     */
+    public function extendGame(int $gameId, array $payload, int $userId): Game
+    {
+        $game = $this->gameRepository->findGameOrFail($gameId);
+
+        if ($game->status !== GameStatus::Finished) {
+            throw ValidationException::withMessages([
+                'target_points' => ['Only finished games can be extended.'],
+            ]);
+        }
+
+        if (! $this->gameRepository->isGameCreator($gameId, $userId)) {
+            abort(403, 'Only the game creator can extend this game.');
+        }
+
+        $newTargetPoints = (int) $payload['target_points'];
+        $highestScore    = $this->gameRepository->getHighestTeamScore($gameId);
+
+        if ($newTargetPoints <= $highestScore) {
+            throw ValidationException::withMessages([
+                'target_points' => ["The new goal must exceed the leading team's current score ({$highestScore} pts)."],
+            ]);
+        }
+
+        $this->gameRepository->extendGame($game, $newTargetPoints);
+        $this->gameRepository->forgetGameSummaryCache($gameId);
+
+        $data    = $this->gameRepository->getGameSummary($gameId);
+        $summary = (new \App\Http\Resources\Api\V1\GameSummaryResource($data))->resolve();
+
+        broadcast(new \App\Events\GameUpdated($gameId, $summary));
+
+        Log::info('Game extended', [
+            'game_id'          => $gameId,
+            'new_target_points' => $newTargetPoints,
+            'extended_by'      => $userId,
+        ]);
+
+        return $this->gameRepository->getGameWithUserRole($gameId, $userId);
+    }
+
+    /**
      * Transfer the host (creator) role from the requesting user to a viewer.
      *
      * @param  int  $gameId            Identifier of the game.

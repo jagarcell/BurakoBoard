@@ -141,6 +141,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // Tracks whether the draft for the current game has been fetched so the
     // auto-save effect is blocked until the initial draft load is complete.
     const draftLoadedRef = useRef(false);
+    // Monotonically-incrementing counter used to discard stale draft GET responses.
+    // Incremented whenever a new fetch is started or a round is confirmed saved, so
+    // any in-flight fetch that resolves later is silently ignored.
+    const draftFetchGenRef = useRef(0);
     // When true, the very next auto-save is skipped (used after round submission
     // to prevent saving the reset-to-default inputs as a new draft).
     const skipNextDraftSave = useRef(false);
@@ -222,9 +226,14 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // eslint-disable-next-line react-hooks/exhaustive-deps -- draftSaveTimerRef and skipNextDraftSave are stable refs; elements is intentionally excluded to avoid disrupting the dedicated elements-load reset
     }, [initialTeams, initialRounds, initialHasMoreRounds]);
 
-    // Reset game status and round-length tracker when the selected game changes
+    // Keep gameStatus in sync whenever the selected game's status changes
+    // (covers game extension: status flips from 'finished' → 'in_progress' without the id changing).
     useEffect(() => {
         setGameStatus(selectedGame?.status ?? 'in_progress');
+    }, [selectedGame?.status]);
+
+    // Reset the rounds-length tracker when the selected game itself changes.
+    useEffect(() => {
         prevRoundsLengthRef.current = 0;
     }, [selectedGame?.id]);
 
@@ -257,9 +266,17 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
         draftLoadedRef.current = false;
 
+        // Capture the generation at fetch start so any response that arrives
+        // after a round save (which increments draftFetchGenRef) is discarded.
+        const myGen = ++draftFetchGenRef.current;
+
         api
             .get(`/games/${selectedGameRef.current.id}/round-draft`)
             .then((response) => {
+                // A round was confirmed while this request was in-flight; discard
+                // the stale draft so the cleared inputs are not overwritten.
+                if (draftFetchGenRef.current !== myGen) return;
+
                 const draft = response.data?.data?.round_draft;
                 if (draft?.base_inputs || draft?.card_inputs) {
                     // Prevent the auto-save effect from bouncing a redundant PUT
@@ -271,9 +288,11 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             })
             .catch(() => { /* silently ignore – leave defaults in place */ })
             .finally(() => {
-                draftLoadedRef.current = true;
+                if (draftFetchGenRef.current === myGen) {
+                    draftLoadedRef.current = true;
+                }
             });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGameRef is a stable ref kept current by its own effect; setBaseInputs and setCardInputs are stable state setters; elements.length drives re-creation intentionally
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGameRef and draftFetchGenRef are stable refs kept current by their own effects; setBaseInputs and setCardInputs are stable state setters; elements.length drives re-creation intentionally
     }, [elements.length]);
 
     useEffect(() => {
@@ -545,20 +564,33 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
 
             const gameSummary = response.data?.data?.game ?? {};
             const updatedTeams = gameSummary.teams ?? teams;
-
             const newGameStatus = gameSummary.game?.status ?? gameStatus;
-            setTeams(updatedTeams);
-            setRounds(gameSummary.rounds ?? rounds);
-            setHasMoreRounds(gameSummary.has_more_rounds ?? false);
-            setGameStatus(newGameStatus);
-            if (newGameStatus === 'finished') playWinnerSound();
-            // Cancel any pending draft save and skip the next one triggered by
-            // the input reset below — the backend already deleted the draft.
-            if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
-            skipNextDraftSave.current = true;
-            setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
-            setCardInputs(buildDefaultCardInputs(updatedTeams));
-            onRoundRecorded?.(updatedTeams, newGameStatus, gameSummary);
+
+            // Confirm the round was actually persisted: the API always returns a
+            // game object with an id inside a committed transaction, so a missing
+            // id means the response is malformed or the transaction did not commit.
+            const roundConfirmed = !!gameSummary.game?.id;
+
+            if (roundConfirmed) {
+                setTeams(updatedTeams);
+                setRounds(gameSummary.rounds ?? rounds);
+                setHasMoreRounds(gameSummary.has_more_rounds ?? false);
+                setGameStatus(newGameStatus);
+                if (newGameStatus === 'finished') playWinnerSound();
+                // Advance the fetch generation so any draft GET that is still
+                // in-flight (triggered by a visibility or reconnect event just
+                // before the user tapped save) cannot overwrite the cleared state.
+                draftFetchGenRef.current += 1;
+                // Cancel any pending draft save and skip the next one triggered by
+                // the input reset below — the backend already deleted the draft.
+                if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+                skipNextDraftSave.current = true;
+                setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
+                setCardInputs(buildDefaultCardInputs(updatedTeams));
+                onRoundRecorded?.(updatedTeams, newGameStatus, gameSummary);
+            } else {
+                setSaveError('Unable to record the round right now.');
+            }
         } catch {
             setSaveError('Unable to record the round right now.');
         } finally {

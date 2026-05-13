@@ -6,6 +6,7 @@ use App\Data\GameSummaryData;
 use App\Enums\GameStatus;
 use App\Enums\GameUserRole;
 use App\Events\GameRoleUpdated;
+use App\Events\GameUpdated;
 use App\Models\Game;
 use App\Models\User;
 use App\Repositories\GameRepository;
@@ -514,5 +515,134 @@ class GameServiceTest extends TestCase
                 && $event->gameId  === 1
                 && $event->newRole === GameUserRole::Creator->value;
         });
+    }
+
+    // -------------------------------------------------------------------------
+    // extendGame
+    // -------------------------------------------------------------------------
+
+    public function test_extend_game_reactivates_finished_game_and_broadcasts(): void
+    {
+        Event::fake();
+
+        $game          = new Game();
+        $game->id      = 1;
+        $game->status  = GameStatus::Finished;
+
+        $extendedGame          = new Game();
+        $extendedGame->id      = 1;
+        $extendedGame->status  = GameStatus::InProgress;
+        $extendedGame->target_points = 3000;
+
+        $returnedGame           = new Game();
+        $returnedGame->id       = 1;
+        $returnedGame->user_role = GameUserRole::Creator->value;
+
+        $summaryData = $this->makeGameSummaryData(1);
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 7)
+            ->andReturn(true);
+
+        $this->gameRepository->shouldReceive('getHighestTeamScore')
+            ->once()
+            ->with(1)
+            ->andReturn(2500);
+
+        $this->gameRepository->shouldReceive('extendGame')
+            ->once()
+            ->with($game, 3000)
+            ->andReturn($extendedGame);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
+        $this->gameRepository->shouldReceive('getGameSummary')
+            ->once()
+            ->with(1)
+            ->andReturn($summaryData);
+
+        $this->gameRepository->shouldReceive('getGameWithUserRole')
+            ->once()
+            ->with(1, 7)
+            ->andReturn($returnedGame);
+
+        $result = $this->service->extendGame(1, ['target_points' => 3000], 7);
+
+        $this->assertSame($returnedGame, $result);
+        Event::assertDispatched(GameUpdated::class, function (GameUpdated $event): bool {
+            return $event->gameId === 1;
+        });
+    }
+
+    public function test_extend_game_throws_if_game_is_not_finished(): void
+    {
+        $game         = new Game();
+        $game->id     = 1;
+        $game->status = GameStatus::InProgress;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->expectException(ValidationException::class);
+
+        $this->service->extendGame(1, ['target_points' => 3000], 7);
+    }
+
+    public function test_extend_game_aborts_403_if_caller_is_not_creator(): void
+    {
+        $game         = new Game();
+        $game->id     = 1;
+        $game->status = GameStatus::Finished;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 99)
+            ->andReturn(false);
+
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+
+        $this->service->extendGame(1, ['target_points' => 3000], 99);
+    }
+
+    public function test_extend_game_throws_when_new_target_does_not_exceed_highest_score(): void
+    {
+        $game         = new Game();
+        $game->id     = 1;
+        $game->status = GameStatus::Finished;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 7)
+            ->andReturn(true);
+
+        $this->gameRepository->shouldReceive('getHighestTeamScore')
+            ->once()
+            ->with(1)
+            ->andReturn(1500);
+
+        $this->expectException(ValidationException::class);
+
+        // 1500 is not > 1500, so this must be rejected.
+        $this->service->extendGame(1, ['target_points' => 1500], 7);
     }
 }

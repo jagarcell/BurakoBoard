@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react';
+
 /**
  * A numeric input with custom decrement (−) and increment (+) buttons that replace the
  * default browser spin arrows.
@@ -22,6 +24,11 @@
  * `step`. Both buttons are disabled when `disabled` or `readOnly` is true; the decrement button is
  * additionally disabled when the current value is already at `min`. The input remains type="number"
  * so that screen-reader label associations and keyboard input continue to work correctly.
+ *
+ * Mobile touch-edit mode: when the user taps the input on a touch device, focus is intercepted to
+ * enter a local edit mode — if the current value is 0 the field is cleared so typing can begin
+ * immediately; otherwise the current value is shown for in-place editing. The onChange callback is
+ * fired when the input loses focus; if blurred while empty the value is clamped to `min`.
  */
 export default function NumericStepper({
     id,
@@ -35,6 +42,16 @@ export default function NumericStepper({
     className = '',
 }) {
     const current = parseInt(value, 10) || 0;
+
+    // Ref to the underlying <input> element for cursor positioning in edit mode.
+    const inputRef = useRef(null);
+    // Touch-edit mode: tracks whether the last focus was initiated by a touch gesture.
+    const touchRef = useRef(false);
+    // localValue is non-null only while in touch-edit mode; it holds the intermediate string.
+    const [localValue, setLocalValue] = useState(null);
+
+    // Use localValue when in edit mode so the decrease-button disabled state stays accurate.
+    const effectiveCurrent = localValue !== null ? (parseInt(localValue, 10) || 0) : current;
 
     const variantMap = {
         default: {
@@ -59,12 +76,52 @@ export default function NumericStepper({
 
     const decrement = () => {
         if (inactive) return;
-        onChange(String(Math.max(min, current - step)));
+        onChange(String(Math.max(min, effectiveCurrent - step)));
     };
 
     const increment = () => {
         if (inactive) return;
-        onChange(String(current + step));
+        onChange(String(effectiveCurrent + step));
+    };
+
+    /** Mark the next focus event as touch-initiated so handleFocus can enter edit mode. */
+    const handleTouchStart = () => {
+        if (!inactive) touchRef.current = true;
+    };
+
+    /** On touch-initiated focus: clear the field if value is 0, else keep it for in-place editing
+     *  with the cursor positioned after the last digit. */
+    const handleFocus = () => {
+        if (!touchRef.current) return;
+        touchRef.current = false;
+        if (current === 0) {
+            setLocalValue('');
+        } else {
+            const strVal = String(current);
+            setLocalValue(strVal);
+            // Position cursor at end; requires type='text' (set reactively) — schedule after paint.
+            requestAnimationFrame(() => {
+                inputRef.current?.setSelectionRange(strVal.length, strVal.length);
+            });
+        }
+    };
+
+    /** While in touch-edit mode update localValue; otherwise propagate directly to onChange. */
+    const handleChange = (e) => {
+        if (readOnly) return;
+        if (localValue !== null) {
+            setLocalValue(e.target.value);
+        } else {
+            onChange(e.target.value);
+        }
+    };
+
+    /** Commit the edited value on blur; clamp to min if the field was left empty. */
+    const handleBlur = () => {
+        if (localValue === null) return;
+        const committed = localValue === '' ? String(min) : localValue;
+        onChange(committed);
+        setLocalValue(null);
     };
 
     const sharedBtn = `flex h-7 w-7 items-center justify-center border text-sm font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${v.btn}`;
@@ -75,7 +132,7 @@ export default function NumericStepper({
                 <button
                     aria-label="Decrease"
                     className={`${sharedBtn} rounded-l-lg border-r-0`}
-                    disabled={inactive || current <= min}
+                    disabled={inactive || effectiveCurrent <= min}
                     onClick={decrement}
                     tabIndex={-1}
                     type="button"
@@ -93,11 +150,16 @@ export default function NumericStepper({
                 disabled={disabled}
                 id={id}
                 min={min}
-                onChange={readOnly ? undefined : (e) => onChange(e.target.value)}
+                onBlur={readOnly ? undefined : handleBlur}
+                onChange={readOnly ? undefined : handleChange}
+                onFocus={handleFocus}
+                onTouchStart={inactive ? undefined : handleTouchStart}
                 readOnly={readOnly}
+                ref={inputRef}
                 step={step}
-                type="number"
-                value={value}
+                type={localValue !== null ? 'text' : 'number'}
+                {...(localValue !== null ? { inputMode: 'numeric' } : {})}
+                value={localValue !== null ? localValue : value}
             />
 
             {!readOnly && (

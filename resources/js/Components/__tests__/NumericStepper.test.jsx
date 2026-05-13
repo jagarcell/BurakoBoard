@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NumericStepper from '@/Components/NumericStepper';
 
@@ -160,6 +160,88 @@ describe('NumericStepper', () => {
             await userEvent.type(screen.getByRole('spinbutton'), '9');
 
             expect(onChange).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('mobile touch-edit mode', () => {
+        it('clears the field when tapped and current value is 0', () => {
+            render(<NumericStepper id="test-input" onChange={() => {}} value={0} />);
+
+            const input = screen.getByRole('spinbutton');
+            fireEvent.touchStart(input);
+            fireEvent.focus(input);
+
+            // type switches to 'text' in edit mode; empty text input has value ''
+            expect(input).toHaveValue('');
+        });
+
+        it('keeps the current value when tapped and value is non-zero', () => {
+            render(<NumericStepper id="test-input" onChange={() => {}} value={5} />);
+
+            const input = screen.getByRole('spinbutton');
+            fireEvent.touchStart(input);
+            fireEvent.focus(input);
+
+            // type switches to 'text' in edit mode; value is the string representation
+            expect(input).toHaveValue('5');
+        });
+
+        it('does not enter edit mode when focused without a preceding touch', () => {
+            render(<NumericStepper id="test-input" onChange={() => {}} value={0} />);
+
+            const input = screen.getByRole('spinbutton');
+            // plain focus, no touchStart — should keep original value
+            fireEvent.focus(input);
+
+            expect(input).toHaveValue(0);
+        });
+
+        it('commits the min value via onChange when blurred with an empty field', () => {
+            const onChange = vi.fn();
+
+            render(<NumericStepper id="test-input" min={0} onChange={onChange} value={0} />);
+
+            const input = screen.getByRole('spinbutton');
+            fireEvent.touchStart(input);
+            fireEvent.focus(input); // clears to ''
+            fireEvent.blur(input);
+
+            expect(onChange).toHaveBeenCalledWith('0');
+        });
+
+        it('commits the typed value via onChange when blurred after typing', () => {
+            const onChange = vi.fn();
+
+            render(<NumericStepper id="test-input" onChange={onChange} value={0} />);
+
+            const input = screen.getByRole('spinbutton');
+            fireEvent.touchStart(input);
+            fireEvent.focus(input); // clears to ''
+            fireEvent.change(input, { target: { value: '7' } });
+            fireEvent.blur(input);
+
+            expect(onChange).toHaveBeenLastCalledWith('7');
+        });
+
+        it('does not enter edit mode when disabled', () => {
+            render(<NumericStepper disabled id="test-input" onChange={() => {}} value={0} />);
+
+            const input = screen.getByRole('spinbutton');
+            fireEvent.touchStart(input);
+            fireEvent.focus(input);
+
+            // disabled — touchRef should not have been set
+            expect(input).toHaveValue(0);
+        });
+
+        it('does not enter edit mode when readOnly', () => {
+            render(<NumericStepper id="test-input" onChange={() => {}} readOnly value={3} />);
+
+            const input = screen.getByRole('spinbutton');
+            fireEvent.touchStart(input);
+            fireEvent.focus(input);
+
+            expect(input).toHaveValue(3);
         });
     });
 });

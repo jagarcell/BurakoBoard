@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\DelegateHostRequest;
+use App\Http\Requests\Api\V1\ExtendGameRequest;
 use App\Http\Requests\Api\V1\SetInitialShufflerRequest;
 use App\Http\Requests\Api\V1\StoreGameInviteRequest;
 use App\Http\Requests\Api\V1\StoreGameRematchRequest;
@@ -281,6 +282,24 @@ class GameController extends Controller
         $viewers = $this->gameService->listGameViewers($gameId);
 
         return response()->json(['viewers' => $viewers->values()]);
+    }
+
+    /**
+     * Extend a finished game by raising its match-points goal so play can continue.
+     *
+     * @param  \App\Http\Requests\Api\V1\ExtendGameRequest  $request  Validated request containing the new target_points.
+     * @param  int  $gameId  Identifier of the finished game to extend.
+     * @return \Illuminate\Http\JsonResponse Updated game list-item response with status=in_progress.
+     * Logic: delegate all guards and persistence to the service, then return a GameListItemResource
+     *   so the frontend can update the game entry in the selector without a full re-fetch.
+     */
+    public function extend(ExtendGameRequest $request, int $gameId): JsonResponse
+    {
+        $game = $this->gameService->extendGame($gameId, $request->validated(), (int) auth()->id());
+
+        return response()->json([
+            'game' => new GameListItemResource($game),
+        ]);
     }
 
     /**
