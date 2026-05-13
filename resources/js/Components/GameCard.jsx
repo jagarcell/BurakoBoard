@@ -317,9 +317,9 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
 
             setExtendErrors({
                 target_points: apiErrors.target_points?.[0],
-                general:
-                    apiErrors.target_points?.[0] ||
-                    'Unable to extend the game right now.',
+                general: apiErrors.target_points?.[0]
+                    ? undefined
+                    : 'Unable to extend the game right now.',
             });
         } finally {
             setIsExtending(false);
