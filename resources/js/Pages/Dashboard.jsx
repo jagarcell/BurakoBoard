@@ -9,6 +9,7 @@ import TeamsCard from '@/Components/TeamsCard';
 import useConfetti from '@/hooks/useConfetti';
 import useWinnerSound from '@/hooks/useWinnerSound';
 import useVisibilityRefresh from '@/hooks/useVisibilityRefresh';
+import useEchoReconnect from '@/hooks/useEchoReconnect';
 
 export default function Dashboard() {
     const [preselectedGameId] = useState(() => {
@@ -135,6 +136,9 @@ export default function Dashboard() {
     }, [selectedGame?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- safe: setters are stable; selectedGame.id is the only value that determines which game to fetch
 
     useVisibilityRefresh(fetchGameSummary);
+    // Re-fetch when the Pusher socket reconnects after an iOS background/foreground
+    // cycle, closing the event gap between socket drop and socket restore.
+    useEchoReconnect(fetchGameSummary);
 
     const initialTeams = useMemo(() => gameSummary?.teams ?? [], [gameSummary]);
     const initialRounds = useMemo(() => gameSummary?.rounds ?? [], [gameSummary]);

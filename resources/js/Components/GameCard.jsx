@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import useVisibilityRefresh from '@/hooks/useVisibilityRefresh';
+import useEchoReconnect from '@/hooks/useEchoReconnect';
 import Checkbox from '@/Components/Checkbox';
 import CreateGameModal from '@/Components/CreateGameModal';
 import DelegateHostModal from '@/Components/DelegateHostModal';
@@ -302,6 +303,15 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
         if (hasPending) {
             fetchPendingInvitations();
         }
+    }, [fetchGames, fetchPendingInvitations, hasPending]));
+
+    // Re-sync when the Pusher socket reconnects after an iOS background/foreground cycle.
+    useEchoReconnect(useCallback(() => {
+        fetchGames();
+        if (hasPending) {
+            fetchPendingInvitations();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- safe: fetchGames and fetchPendingInvitations are stable; hasPending is captured via ref semantics in the hook
     }, [fetchGames, fetchPendingInvitations, hasPending]));
 
     const handleNewInvitation = async () => {

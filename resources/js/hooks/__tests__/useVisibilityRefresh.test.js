@@ -19,6 +19,17 @@ function setVisibility(state) {
     document.dispatchEvent(new Event('visibilitychange'));
 }
 
+/**
+ * Simulate a `pageshow` event on window.
+ *
+ * @param {boolean} persisted  Whether the page was restored from BFCache.
+ */
+function firePageShow(persisted) {
+    const event = new Event('pageshow');
+    Object.defineProperty(event, 'persisted', { value: persisted });
+    window.dispatchEvent(event);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -133,3 +144,81 @@ describe('useVisibilityRefresh', () => {
         }).not.toThrow();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests — BFCache (pageshow) handling
+// ---------------------------------------------------------------------------
+
+describe('useVisibilityRefresh — pageshow / BFCache', () => {
+    beforeEach(() => {
+        setVisibility('visible');
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('calls onVisible when pageshow fires with persisted=true (BFCache restore)', () => {
+        const onVisible = vi.fn();
+
+        renderHook(() => useVisibilityRefresh(onVisible));
+
+        act(() => firePageShow(true));
+
+        expect(onVisible).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT call onVisible when pageshow fires with persisted=false (fresh load)', () => {
+        const onVisible = vi.fn();
+
+        renderHook(() => useVisibilityRefresh(onVisible));
+
+        act(() => firePageShow(false));
+
+        expect(onVisible).not.toHaveBeenCalled();
+    });
+
+    it('calls onVisible on every BFCache restore', () => {
+        const onVisible = vi.fn();
+
+        renderHook(() => useVisibilityRefresh(onVisible));
+
+        act(() => firePageShow(true));
+        act(() => firePageShow(true));
+
+        expect(onVisible).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses the latest callback on pageshow without re-registering the listener', () => {
+        const first = vi.fn();
+        const second = vi.fn();
+
+        const { rerender } = renderHook(({ cb }) => useVisibilityRefresh(cb), {
+            initialProps: { cb: first },
+        });
+
+        rerender({ cb: second });
+
+        act(() => firePageShow(true));
+
+        expect(first).not.toHaveBeenCalled();
+        expect(second).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes the pageshow listener on unmount', () => {
+        const removeSpy = vi.spyOn(window, 'removeEventListener');
+        const onVisible = vi.fn();
+
+        const { unmount } = renderHook(() => useVisibilityRefresh(onVisible));
+
+        unmount();
+
+        expect(removeSpy).toHaveBeenCalledWith('pageshow', expect.any(Function));
+
+        // Firing after unmount must not call the callback.
+        act(() => firePageShow(true));
+
+        expect(onVisible).not.toHaveBeenCalled();
+    });
+});
+
