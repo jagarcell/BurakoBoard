@@ -417,6 +417,72 @@ describe('RoundsCard', () => {
         await waitFor(() => expect(inHandInputs[0]).toHaveValue(0));
     });
 
+    it('fires api.delete on the round-draft endpoint after a successful round submission', async () => {
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+        api.delete.mockResolvedValue({});
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        await screen.findAllByLabelText('Burako');
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(api.delete).toHaveBeenCalledWith('/games/5/round-draft'),
+        );
+    });
+
+    it('does not overwrite cleared inputs when a draft GET resolves after round confirmation', async () => {
+        // Simulate a draft GET that is in-flight when the round is confirmed.
+        // The GET should resolve AFTER the POST, but draftBlockedRef must prevent
+        // the stale draft values from being written back into the cleared inputs.
+        let resolveDraftGet;
+        api.get.mockImplementation((url) => {
+            if (url === '/base-elements') {
+                return Promise.resolve(elementsResponse);
+            }
+            if (url.includes('/round-draft')) {
+                return new Promise((resolve) => {
+                    resolveDraftGet = resolve;
+                });
+            }
+            return Promise.reject(new Error(`Unexpected GET: ${url}`));
+        });
+
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+        api.delete.mockResolvedValue({});
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        // Set a checkbox so the input has a non-default value before saving.
+        const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+        await userEvent.click(burakoCheckboxes[0]);
+        expect(burakoCheckboxes[0]).toBeChecked();
+
+        // Record the round — this confirms the round and clears inputs.
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        // Wait for inputs to be cleared.
+        await waitFor(() => expect(burakoCheckboxes[0]).not.toBeChecked());
+
+        // Now resolve the stale draft GET with old (checked) values — the block must
+        // prevent these from being written back into the already-cleared inputs.
+        act(() => {
+            resolveDraftGet({
+                data: {
+                    data: {
+                        round_draft: {
+                            base_inputs: { [teamA.id]: { 1: true }, [teamB.id]: { 1: false } },
+                            card_inputs: { [teamA.id]: { cardsInHand: 5, cardsOnTable: 0 }, [teamB.id]: { cardsInHand: 0, cardsOnTable: 0 } },
+                        },
+                    },
+                },
+            });
+        });
+
+        // Inputs must remain cleared — draftBlockedRef protected them.
+        await waitFor(() => expect(burakoCheckboxes[0]).not.toBeChecked());
+    });
+
     it('shows a validation error and blocks submission when cards in hand is a decimal', async () => {
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
