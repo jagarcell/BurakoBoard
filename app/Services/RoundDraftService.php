@@ -90,4 +90,22 @@ class RoundDraftService
 
         return $draft;
     }
+
+    /**
+     * Delete the active round draft for a game.
+     *
+     * @param  int  $gameId  Identifier of the game whose active draft should be deleted.
+     * @return void
+     * Logic: verify the game exists so unknown game IDs raise a 404, then delegate the
+     *   deletion to the repository. This is used by the frontend after a round is
+     *   successfully recorded to clean up any stale draft that an in-flight auto-save
+     *   PUT may have re-created after the round commit archived the original draft.
+     *   If no active draft exists the repository operation is a silent no-op.
+     */
+    public function deleteRoundDraft(int $gameId): void
+    {
+        $this->gameRepository->findGameOrFail($gameId);
+
+        $this->roundDraftRepository->deleteRoundDraft($gameId);
+    }
 }

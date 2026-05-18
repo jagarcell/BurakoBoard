@@ -52,6 +52,7 @@ Route::prefix('v1')->group(function () {
 
         Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);
         Route::put('/games/{gameId}/round-draft', [RoundDraftController::class, 'upsert']);
+        Route::delete('/games/{gameId}/round-draft', [RoundDraftController::class, 'destroy']);
 
         Route::get('/invitations', [GameController::class, 'pendingInvitations']);
         Route::get('/games/{gameId}/invitable-users', [UserController::class, 'indexInvitable']);

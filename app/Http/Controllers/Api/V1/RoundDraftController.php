@@ -84,4 +84,21 @@ class RoundDraftController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Delete the active round draft for a game.
+     *
+     * @param  int  $gameId  Identifier of the game whose active draft should be deleted.
+     * @return \Illuminate\Http\JsonResponse Empty 204 No Content response.
+     * Logic: delegate deletion to the service (which verifies game existence), then return
+     *   a 204 so the frontend knows the stale draft has been removed. Used after a round
+     *   is recorded to prevent an in-flight auto-save PUT from leaving behind a stale draft
+     *   that would be loaded back into cleared inputs on the next fetchRoundDraft call.
+     */
+    public function destroy(int $gameId): JsonResponse
+    {
+        $this->service->deleteRoundDraft($gameId);
+
+        return response()->json(null, 204);
+    }
 }
