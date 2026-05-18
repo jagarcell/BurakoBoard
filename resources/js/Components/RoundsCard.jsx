@@ -148,6 +148,11 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // When true, the very next auto-save is skipped (used after round submission
     // to prevent saving the reset-to-default inputs as a new draft).
     const skipNextDraftSave = useRef(false);
+    // When true, fetchRoundDraft will not update inputs even if the server returns
+    // a draft. Set after a round is confirmed to guard against an in-flight draft
+    // PUT re-creating a stale active draft that would otherwise be loaded back into
+    // the already-cleared inputs. Reset when the user starts entering new values.
+    const draftBlockedRef = useRef(false);
     const draftSaveTimerRef = useRef(null);
     // Tracks the previous initialRounds length so we can detect when a new round
     // has been recorded by another user (via .game.updated) and clear the inputs.
@@ -276,6 +281,11 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 // A round was confirmed while this request was in-flight; discard
                 // the stale draft so the cleared inputs are not overwritten.
                 if (draftFetchGenRef.current !== myGen) return;
+
+                // A round was just confirmed and we are waiting for the server-side
+                // DELETE to remove any stale draft that an in-flight auto-save PUT
+                // may have re-created. Skip this response to keep inputs cleared.
+                if (draftBlockedRef.current) return;
 
                 const draft = response.data?.data?.round_draft;
                 if (draft?.base_inputs || draft?.card_inputs) {
@@ -414,6 +424,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     }, [selectedGame?.id]);
 
     const handleElementChange = (teamId, elementId, value) => {
+        // User is entering values for the new round — unblock draft loading so
+        // future fetchRoundDraft calls can restore work-in-progress normally.
+        draftBlockedRef.current = false;
         setBaseInputs((prev) => {
             const el = elements.find((e) => e.id === elementId);
             const next = {
@@ -443,6 +456,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     };
 
     const handleCardChange = (teamId, field, value) => {
+        // User is entering values for the new round — unblock draft loading so
+        // future fetchRoundDraft calls can restore work-in-progress normally.
+        draftBlockedRef.current = false;
         setCardInputs((prev) => ({
             ...prev,
             [teamId]: { ...prev[teamId], [field]: value },
@@ -585,6 +601,15 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 // the input reset below — the backend already deleted the draft.
                 if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
                 skipNextDraftSave.current = true;
+                // Block fetchRoundDraft from overwriting the cleared inputs while
+                // the server-side DELETE is in-flight. An in-flight auto-save PUT
+                // that races with the POST could re-create an active draft; the
+                // DELETE removes it. draftBlockedRef is reset when the user first
+                // modifies an input for the new round.
+                draftBlockedRef.current = true;
+                Promise.resolve(
+                    api.delete(`/games/${selectedGame.id}/round-draft`),
+                ).catch(() => { /* fire-and-forget */ });
                 setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
                 setCardInputs(buildDefaultCardInputs(updatedTeams));
                 onRoundRecorded?.(updatedTeams, newGameStatus, gameSummary);
