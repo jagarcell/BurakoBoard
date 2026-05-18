@@ -372,4 +372,92 @@ class RoundDraftTest extends TestCase
             $event->broadcastWith(),
         );
     }
+
+    /**
+     * DELETE /api/v1/games/{id}/round-draft removes the active draft and returns 204.
+     *
+     * @return void
+     * Logic: confirm that when an active draft exists, the DELETE endpoint removes
+     *   it and returns an empty 204 response so the frontend can confirm the stale
+     *   draft has been cleaned up.
+     */
+    public function test_destroy_deletes_active_draft_and_returns_204(): void
+    {
+        RoundDraft::query()->create([
+            'game_id'      => $this->game->id,
+            'round_number' => 0,
+            'base_inputs'  => [],
+            'card_inputs'  => [],
+        ]);
+
+        $this->assertDatabaseHas('round_drafts', ['game_id' => $this->game->id, 'round_number' => 0]);
+
+        $response = $this->deleteJson("/api/v1/games/{$this->game->id}/round-draft");
+
+        $response->assertNoContent();
+        $this->assertDatabaseMissing('round_drafts', ['game_id' => $this->game->id, 'round_number' => 0]);
+    }
+
+    /**
+     * DELETE /api/v1/games/{id}/round-draft returns 204 even when no draft exists (idempotent).
+     *
+     * @return void
+     * Logic: confirm the endpoint does not error when no active draft row is present,
+     *   since the frontend fires this delete as a fire-and-forget safety call.
+     */
+    public function test_destroy_returns_204_when_no_draft_exists(): void
+    {
+        $this->assertDatabaseMissing('round_drafts', ['game_id' => $this->game->id, 'round_number' => 0]);
+
+        $response = $this->deleteJson("/api/v1/games/{$this->game->id}/round-draft");
+
+        $response->assertNoContent();
+    }
+
+    /**
+     * DELETE /api/v1/games/{id}/round-draft returns 404 for an unknown game.
+     *
+     * @return void
+     * Logic: confirm the service delegates game lookup before deleting so an
+     *   unknown game ID raises a 404 rather than silently doing nothing.
+     */
+    public function test_destroy_returns_404_for_unknown_game(): void
+    {
+        $this->deleteJson('/api/v1/games/99999/round-draft')->assertNotFound();
+    }
+
+    /**
+     * DELETE /api/v1/games/{id}/round-draft requires authentication.
+     *
+     * @return void
+     * Logic: confirm the route is covered by the auth:sanctum middleware so
+     *   unauthenticated requests receive a 401 rather than deleting the draft.
+     */
+    public function test_destroy_requires_authentication(): void
+    {
+        auth()->logout();
+
+        $this->deleteJson("/api/v1/games/{$this->game->id}/round-draft")->assertUnauthorized();
+    }
+
+    /**
+     * DELETE /api/v1/games/{id}/round-draft does not affect archived drafts (round_number > 0).
+     *
+     * @return void
+     * Logic: confirm that only the active draft (round_number = 0) is removed so historical
+     *   scoring breakdowns for completed rounds are not accidentally deleted.
+     */
+    public function test_destroy_does_not_delete_archived_drafts(): void
+    {
+        RoundDraft::query()->create([
+            'game_id'      => $this->game->id,
+            'round_number' => 1,
+            'base_inputs'  => [],
+            'card_inputs'  => [],
+        ]);
+
+        $this->deleteJson("/api/v1/games/{$this->game->id}/round-draft")->assertNoContent();
+
+        $this->assertDatabaseHas('round_drafts', ['game_id' => $this->game->id, 'round_number' => 1]);
+    }
 }

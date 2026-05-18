@@ -132,4 +132,32 @@ class RoundDraftServiceTest extends TestCase
 
         $this->assertSame($draft, $result);
     }
+
+    public function test_delete_round_draft_verifies_game_exists_and_deletes_draft(): void
+    {
+        $game = new Game();
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->roundDraftRepository->shouldReceive('deleteRoundDraft')
+            ->once()
+            ->with(1);
+
+        $this->service->deleteRoundDraft(1);
+    }
+
+    public function test_delete_round_draft_raises_model_not_found_for_unknown_game(): void
+    {
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(99999)
+            ->andThrow(new \Illuminate\Database\Eloquent\ModelNotFoundException());
+
+        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+
+        $this->service->deleteRoundDraft(99999);
+    }
 }

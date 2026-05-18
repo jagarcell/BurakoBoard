@@ -417,6 +417,72 @@ describe('RoundsCard', () => {
         await waitFor(() => expect(inHandInputs[0]).toHaveValue(0));
     });
 
+    it('fires api.delete on the round-draft endpoint after a successful round submission', async () => {
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+        api.delete.mockResolvedValue({});
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        await screen.findAllByLabelText('Burako');
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        await waitFor(() =>
+            expect(api.delete).toHaveBeenCalledWith('/games/5/round-draft'),
+        );
+    });
+
+    it('does not overwrite cleared inputs when a draft GET resolves after round confirmation', async () => {
+        // Simulate a draft GET that is in-flight when the round is confirmed.
+        // The GET should resolve AFTER the POST, but draftBlockedRef must prevent
+        // the stale draft values from being written back into the cleared inputs.
+        let resolveDraftGet;
+        api.get.mockImplementation((url) => {
+            if (url === '/base-elements') {
+                return Promise.resolve(elementsResponse);
+            }
+            if (url.includes('/round-draft')) {
+                return new Promise((resolve) => {
+                    resolveDraftGet = resolve;
+                });
+            }
+            return Promise.reject(new Error(`Unexpected GET: ${url}`));
+        });
+
+        api.post.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1]));
+        api.delete.mockResolvedValue({});
+
+        render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+        // Set a checkbox so the input has a non-default value before saving.
+        const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+        await userEvent.click(burakoCheckboxes[0]);
+        expect(burakoCheckboxes[0]).toBeChecked();
+
+        // Record the round — this confirms the round and clears inputs.
+        await userEvent.click(screen.getByRole('button', { name: 'Record Round' }));
+
+        // Wait for inputs to be cleared.
+        await waitFor(() => expect(burakoCheckboxes[0]).not.toBeChecked());
+
+        // Now resolve the stale draft GET with old (checked) values — the block must
+        // prevent these from being written back into the already-cleared inputs.
+        act(() => {
+            resolveDraftGet({
+                data: {
+                    data: {
+                        round_draft: {
+                            base_inputs: { [teamA.id]: { 1: true }, [teamB.id]: { 1: false } },
+                            card_inputs: { [teamA.id]: { cardsInHand: 5, cardsOnTable: 0 }, [teamB.id]: { cardsInHand: 0, cardsOnTable: 0 } },
+                        },
+                    },
+                },
+            });
+        });
+
+        // Inputs must remain cleared — draftBlockedRef protected them.
+        await waitFor(() => expect(burakoCheckboxes[0]).not.toBeChecked());
+    });
+
     it('shows a validation error and blocks submission when cards in hand is a decimal', async () => {
         render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
 
@@ -763,6 +829,86 @@ describe('RoundsCard', () => {
 
             // The cleared state must be preserved — stale draft must not restore the old checkbox
             expect(burakoCheckboxes[0]).not.toBeChecked();
+        });
+
+        it('does not overwrite a checkbox the user just checked when a slow draft GET resolves while the debounce is pending', async () => {
+            let resolveDraftFetch;
+            const slowDraftPromise = new Promise((resolve) => { resolveDraftFetch = resolve; });
+
+            api.get.mockImplementation((url) => {
+                if (url.includes('round-draft')) {
+                    // Simulate a slow in-flight GET that settles after the user has
+                    // already made a change (hasPendingDraftSave guard scenario).
+                    return slowDraftPromise;
+                }
+                return Promise.resolve(elementsResponse);
+            });
+
+            render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+            // Wait for elements to load; the draft GET is still in-flight
+            const burakoCheckboxes = await screen.findAllByLabelText('Burako');
+            expect(burakoCheckboxes[0]).not.toBeChecked();
+
+            // User checks the checkbox — hasPendingDraftSave becomes true
+            await userEvent.click(burakoCheckboxes[0]);
+            expect(burakoCheckboxes[0]).toBeChecked();
+
+            // The slow draft GET resolves with stale data (checkbox would be unchecked)
+            await act(async () => {
+                resolveDraftFetch({
+                    data: {
+                        data: {
+                            round_draft: {
+                                base_inputs: { 10: { 1: false, 2: 0 }, 11: { 1: false, 2: 0 } },
+                                card_inputs: { 10: { cardsInHand: 0, cardsOnTable: 0 }, 11: { cardsInHand: 0, cardsOnTable: 0 } },
+                            },
+                        },
+                    },
+                });
+            });
+
+            // The user's checked value must be preserved — hasPendingDraftSave blocked the stale response
+            expect(burakoCheckboxes[0]).toBeChecked();
+        });
+
+        it('does not overwrite a numeric value the user just entered when a slow draft GET resolves while the debounce is pending', async () => {
+            let resolveDraftFetch;
+            const slowDraftPromise = new Promise((resolve) => { resolveDraftFetch = resolve; });
+
+            api.get.mockImplementation((url) => {
+                if (url.includes('round-draft')) {
+                    return slowDraftPromise;
+                }
+                return Promise.resolve(elementsResponse);
+            });
+
+            render(<RoundsCard initialTeams={[teamA, teamB]} initialRounds={[]} selectedGame={selectedGame} />);
+
+            // Wait for elements to load; the draft GET is still in-flight
+            const canInputs = await screen.findAllByLabelText('Clean Canastra');
+
+            // User types a quantity — hasPendingDraftSave becomes true
+            await userEvent.clear(canInputs[0]);
+            await userEvent.type(canInputs[0], '3');
+            expect(canInputs[0]).toHaveValue(3);
+
+            // The slow draft GET resolves with stale data (field would be 0)
+            await act(async () => {
+                resolveDraftFetch({
+                    data: {
+                        data: {
+                            round_draft: {
+                                base_inputs: { 10: { 1: false, 2: 0 }, 11: { 1: false, 2: 0 } },
+                                card_inputs: { 10: { cardsInHand: 0, cardsOnTable: 0 }, 11: { cardsInHand: 0, cardsOnTable: 0 } },
+                            },
+                        },
+                    },
+                });
+            });
+
+            // The user's typed value must be preserved
+            expect(canInputs[0]).toHaveValue(3);
         });
     });
 
