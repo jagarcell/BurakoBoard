@@ -153,6 +153,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // PUT re-creating a stale active draft that would otherwise be loaded back into
     // the already-cleared inputs. Reset when the user starts entering new values.
     const draftBlockedRef = useRef(false);
+    // When true, a user has made input changes that have not yet been persisted
+    // (the 800 ms debounce timer is running). fetchRoundDraft must not apply a
+    // GET response while this flag is set because the server draft is behind
+    // what the user has typed, so applying it would silently clear their work.
+    // Reset when the debounce timer fires and the PUT is sent to the server.
+    const hasPendingDraftSave = useRef(false);
     const draftSaveTimerRef = useRef(null);
     // Tracks the previous initialRounds length so we can detect when a new round
     // has been recorded by another user (via .game.updated) and clear the inputs.
@@ -287,6 +293,11 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 // may have re-created. Skip this response to keep inputs cleared.
                 if (draftBlockedRef.current) return;
 
+                // User has unsaved input changes (debounce timer is still running).
+                // The server draft is behind what the user has typed — applying it
+                // now would silently wipe out their in-progress values.
+                if (hasPendingDraftSave.current) return;
+
                 const draft = response.data?.data?.round_draft;
                 if (draft?.base_inputs || draft?.card_inputs) {
                     // Prevent the auto-save effect from bouncing a redundant PUT
@@ -328,6 +339,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
 
         draftSaveTimerRef.current = setTimeout(() => {
+            // Draft is now being persisted — clear the pending flag so that
+            // subsequent fetchRoundDraft calls can safely apply the server's
+            // up-to-date draft without risking overwriting user input.
+            hasPendingDraftSave.current = false;
             const game = selectedGameRef.current;
             if (game?.id) {
                 api.put(`/games/${game.id}/round-draft`, {
@@ -427,6 +442,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         // User is entering values for the new round — unblock draft loading so
         // future fetchRoundDraft calls can restore work-in-progress normally.
         draftBlockedRef.current = false;
+        // Signal that there are unsaved changes so any concurrent fetchRoundDraft
+        // response is held off until the 800 ms debounce PUT fires.
+        hasPendingDraftSave.current = true;
         setBaseInputs((prev) => {
             const el = elements.find((e) => e.id === elementId);
             const next = {
@@ -459,6 +477,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         // User is entering values for the new round — unblock draft loading so
         // future fetchRoundDraft calls can restore work-in-progress normally.
         draftBlockedRef.current = false;
+        // Signal that there are unsaved changes so any concurrent fetchRoundDraft
+        // response is held off until the 800 ms debounce PUT fires.
+        hasPendingDraftSave.current = true;
         setCardInputs((prev) => ({
             ...prev,
             [teamId]: { ...prev[teamId], [field]: value },
@@ -607,6 +628,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 // DELETE removes it. draftBlockedRef is reset when the user first
                 // modifies an input for the new round.
                 draftBlockedRef.current = true;
+                // No pending save exists once a round is confirmed — the draft
+                // was archived/deleted by the round commit on the backend.
+                hasPendingDraftSave.current = false;
                 Promise.resolve(
                     api.delete(`/games/${selectedGame.id}/round-draft`),
                 ).catch(() => { /* fire-and-forget */ });
@@ -650,6 +674,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         if (el.input_type === 'boolean') {
             handleElementChange(teamId, elementId, action === 'add' || action === 'set');
         } else {
+            // Voice quantity commands bypass handleElementChange, so set the flag
+            // directly so fetchRoundDraft does not overwrite the spoken value.
+            hasPendingDraftSave.current = true;
             setBaseInputs((prev) => {
                 const current = parseInt(prev[teamId]?.[elementId], 10) || 0;
                 let next;
