@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import BaseElementsInput from '@/Components/BaseElementsInput';
 import PlayerCircle from '@/Components/PlayerCircle';
 
@@ -46,7 +46,154 @@ export default function RoundHistoryTable({
     onExpandRound,
     onToggleCircle,
     onLoadEarlier,
+    onSaveAmend,
+    onAmendModeChange,
 }) {
+    const [amendModeByRound, setAmendModeByRound] = useState({});
+    const [editedDraftByRound, setEditedDraftByRound] = useState({});
+    const [isSavingAmendByRound, setIsSavingAmendByRound] = useState({});
+
+    useEffect(() => {
+        const isAnyRoundInAmendMode = Object.values(amendModeByRound).some(Boolean);
+        onAmendModeChange?.(isAnyRoundInAmendMode);
+    }, [amendModeByRound, onAmendModeChange]);
+
+    const ensureEditableDraft = (roundNumber) => {
+        const draft = roundDraftCache[roundNumber];
+        if (!draft || editedDraftByRound[roundNumber]) return;
+
+        setEditedDraftByRound((prev) => ({
+            ...prev,
+            [roundNumber]: {
+                base_inputs: structuredClone(draft.base_inputs ?? {}),
+                card_inputs: structuredClone(draft.card_inputs ?? {}),
+            },
+        }));
+    };
+
+    const handleToggleAmendMode = (roundNumber) => {
+        setAmendModeByRound((prev) => {
+            const next = !prev[roundNumber];
+            if (next) ensureEditableDraft(roundNumber);
+            return { ...prev, [roundNumber]: next };
+        });
+    };
+
+    const handleAmendedBaseChange = (roundNumber, teamId, elementId, value) => {
+        setEditedDraftByRound((prev) => {
+            const currentRound = prev[roundNumber] ?? {
+                base_inputs: structuredClone(roundDraftCache[roundNumber]?.base_inputs ?? {}),
+                card_inputs: structuredClone(roundDraftCache[roundNumber]?.card_inputs ?? {}),
+            };
+            const teamInputs = currentRound.base_inputs?.[teamId] ?? currentRound.base_inputs?.[String(teamId)] ?? {};
+
+            return {
+                ...prev,
+                [roundNumber]: {
+                    ...currentRound,
+                    base_inputs: {
+                        ...currentRound.base_inputs,
+                        [teamId]: {
+                            ...teamInputs,
+                            [elementId]: value,
+                        },
+                    },
+                },
+            };
+        });
+    };
+
+    const handleAmendedCardChange = (roundNumber, teamId, field, value) => {
+        setEditedDraftByRound((prev) => {
+            const currentRound = prev[roundNumber] ?? {
+                base_inputs: structuredClone(roundDraftCache[roundNumber]?.base_inputs ?? {}),
+                card_inputs: structuredClone(roundDraftCache[roundNumber]?.card_inputs ?? {}),
+            };
+            const teamCards = currentRound.card_inputs?.[teamId] ?? currentRound.card_inputs?.[String(teamId)] ?? {};
+
+            return {
+                ...prev,
+                [roundNumber]: {
+                    ...currentRound,
+                    card_inputs: {
+                        ...currentRound.card_inputs,
+                        [teamId]: {
+                            ...teamCards,
+                            [field]: value,
+                        },
+                    },
+                },
+            };
+        });
+    };
+
+    const computeTeamScore = (baseValues, cardValues) => {
+        const inHand = parseInt(cardValues?.cardsInHand, 10) || 0;
+        const onTable = parseInt(cardValues?.cardsOnTable, 10) || 0;
+
+        const scoreOverrideActive = elements.some(
+            (el) => el.score_override && !!baseValues?.[el.id],
+        );
+
+        const baseScore = elements.reduce((sum, el) => {
+            const val = baseValues?.[el.id];
+
+            if (el.input_type === 'boolean') {
+                const isActive = !!val;
+                return sum + (isActive ? el.points : -(el.penalty ?? 0));
+            }
+
+            const qty = parseInt(val, 10) || 0;
+            return sum + (qty > 0 ? el.points * qty : -(el.penalty ?? 0));
+        }, 0);
+
+        const canastrasAllZero = elements
+            .filter((el) => el.name.includes('canastra') && !el.score_override)
+            .every((el) => {
+                const val = baseValues?.[el.id];
+                return el.input_type === 'boolean' ? !val : (parseInt(val, 10) || 0) === 0;
+            });
+
+        return (scoreOverrideActive || canastrasAllZero)
+            ? baseScore - inHand - onTable
+            : baseScore - inHand + onTable;
+    };
+
+    const handleSaveAmend = async (round) => {
+        if (!onSaveAmend) return;
+
+        const roundNumber = round.round_number;
+        const persisted = roundDraftCache[roundNumber] ?? { base_inputs: {}, card_inputs: {} };
+        const edited = editedDraftByRound[roundNumber] ?? persisted;
+        const baseInputs = edited.base_inputs ?? {};
+        const cardInputs = edited.card_inputs ?? {};
+
+        const scores = teams.map((team) => {
+            const teamBase = baseInputs?.[team.id] ?? baseInputs?.[String(team.id)] ?? {};
+            const teamCards = cardInputs?.[team.id] ?? cardInputs?.[String(team.id)] ?? {};
+
+            return {
+                team_id: team.id,
+                points: computeTeamScore(teamBase, teamCards),
+            };
+        });
+
+        setIsSavingAmendByRound((prev) => ({ ...prev, [roundNumber]: true }));
+        try {
+            const saved = await onSaveAmend(roundNumber, {
+                scores,
+                base_inputs: baseInputs,
+                card_inputs: cardInputs,
+            });
+
+            if (saved) {
+                setAmendModeByRound((prev) => ({ ...prev, [roundNumber]: false }));
+            }
+        } finally {
+            setIsSavingAmendByRound((prev) => ({ ...prev, [roundNumber]: false }));
+        }
+    };
+
     return (
         <div className="px-6 py-5">
             <p className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
@@ -193,10 +340,46 @@ export default function RoundHistoryTable({
                                     {expandedRound === round.round_number && (
                                         <tr>
                                             <td className="pb-3 pt-0" colSpan={teams.length + 2}>
-                                                <div className="rounded-xl border border-indigo-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_60%),linear-gradient(135deg,_#eef2ff_0%,_#f8fafc_100%)] px-4 py-4">
-                                                    <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-indigo-400">
-                                                        Round {round.round_number} — Scoring Detail
-                                                    </p>
+                                                <div
+                                                    className="rounded-xl border border-indigo-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_60%),linear-gradient(135deg,_#eef2ff_0%,_#f8fafc_100%)] px-4 py-4"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-400">
+                                                            Round {round.round_number} — Scoring Detail
+                                                        </p>
+                                                        <div className="flex items-center gap-2">
+                                                            {amendModeByRound[round.round_number] && (
+                                                                <button
+                                                                    aria-label={`Save amendment for round ${round.round_number}`}
+                                                                    className="inline-flex items-center rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                                    disabled={!!isSavingAmendByRound[round.round_number]}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleSaveAmend(round);
+                                                                    }}
+                                                                    type="button"
+                                                                >
+                                                                    {isSavingAmendByRound[round.round_number] ? 'Saving…' : 'Save Amend'}
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                aria-label={`Amend round ${round.round_number}`}
+                                                                className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors ${
+                                                                    amendModeByRound[round.round_number]
+                                                                        ? 'bg-orange-600 hover:bg-orange-700'
+                                                                        : 'bg-orange-500 hover:bg-orange-600'
+                                                                }`}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleToggleAmendMode(round.round_number);
+                                                                }}
+                                                                type="button"
+                                                            >
+                                                                Amend
+                                                            </button>
+                                                        </div>
+                                                    </div>
 
                                                     {loadingDraftRound === round.round_number ? (
                                                         <p className="text-xs text-slate-400">Loading detail…</p>
@@ -204,8 +387,29 @@ export default function RoundHistoryTable({
                                                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                                             {teams.map((t) => {
                                                                 const draft = roundDraftCache[round.round_number];
-                                                                const draftBase = draft?.base_inputs?.[t.id] ?? draft?.base_inputs?.[String(t.id)] ?? {};
-                                                                const draftCards = draft?.card_inputs?.[t.id] ?? draft?.card_inputs?.[String(t.id)] ?? {};
+                                                                const editedRoundDraft = editedDraftByRound[round.round_number] ?? null;
+                                                                const isAmendMode = !!amendModeByRound[round.round_number];
+                                                                const originalBase = draft?.base_inputs?.[t.id] ?? draft?.base_inputs?.[String(t.id)] ?? {};
+                                                                const originalCards = draft?.card_inputs?.[t.id] ?? draft?.card_inputs?.[String(t.id)] ?? {};
+                                                                const draftBase = isAmendMode
+                                                                    ? (editedRoundDraft?.base_inputs?.[t.id] ?? editedRoundDraft?.base_inputs?.[String(t.id)] ?? originalBase)
+                                                                    : originalBase;
+                                                                const draftCards = isAmendMode
+                                                                    ? (editedRoundDraft?.card_inputs?.[t.id] ?? editedRoundDraft?.card_inputs?.[String(t.id)] ?? originalCards)
+                                                                    : originalCards;
+
+                                                                const amendedElementIds = elements
+                                                                    .filter((el) => {
+                                                                        const before = originalBase?.[el.id] ?? 0;
+                                                                        const after = draftBase?.[el.id] ?? 0;
+                                                                        return String(before) !== String(after);
+                                                                    })
+                                                                    .map((el) => el.id);
+
+                                                                const amendedCardFields = {
+                                                                    cardsInHand: String(originalCards?.cardsInHand ?? 0) !== String(draftCards?.cardsInHand ?? 0),
+                                                                    cardsOnTable: String(originalCards?.cardsOnTable ?? 0) !== String(draftCards?.cardsOnTable ?? 0),
+                                                                };
 
                                                                 const rs = round.scores.find((sc) => sc.team_id === t.id);
                                                                 const otherRs = round.scores.find((sc) => sc.team_id !== t.id);
@@ -244,10 +448,19 @@ export default function RoundHistoryTable({
                                                                             </p>
                                                                         ) : (
                                                                             <BaseElementsInput
+                                                                                amendedCardFields={amendedCardFields}
+                                                                                amendedElementIds={amendedElementIds}
                                                                                 cardsInHand={draftCards.cardsInHand ?? 0}
                                                                                 cardsOnTable={draftCards.cardsOnTable ?? 0}
                                                                                 elements={elements}
-                                                                                readOnly
+                                                                                onCardsChange={(field, value) =>
+                                                                                    handleAmendedCardChange(round.round_number, t.id, field, value)
+                                                                                }
+                                                                                onChange={(elementId, value) =>
+                                                                                    handleAmendedBaseChange(round.round_number, t.id, elementId, value)
+                                                                                }
+                                                                                readOnly={!isAmendMode}
+                                                                                showCardScanner={false}
                                                                                 teamId={`hist-${round.round_number}-${t.id}`}
                                                                                 values={draftBase}
                                                                             />

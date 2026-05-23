@@ -698,4 +698,54 @@ describe('BaseElementsInput', () => {
             expect(onCardsChange).toHaveBeenCalledWith('cardsOnTable', '2');
         });
     });
+
+    describe('amended highlights', () => {
+        it('styles amended quantity inputs with orange stepper colors', () => {
+            render(
+                <BaseElementsInput
+                    amendedElementIds={[2]}
+                    elements={[quantityEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 2: 1 }}
+                />,
+            );
+
+            const quantityInput = screen.getByLabelText('Clean Canastra');
+            expect(quantityInput).toHaveClass('border-orange-300');
+        });
+
+        it('styles amended checkbox inputs with orange classes', () => {
+            render(
+                <BaseElementsInput
+                    amendedElementIds={[1]}
+                    elements={[booleanEl]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{ 1: false }}
+                />,
+            );
+
+            const checkbox = screen.getByRole('checkbox');
+            expect(checkbox).toHaveClass('border-orange-400');
+            expect(checkbox).toHaveClass('text-orange-500');
+        });
+
+        it('styles amended card inputs with orange stepper colors', () => {
+            render(
+                <BaseElementsInput
+                    amendedCardFields={{ cardsInHand: true, cardsOnTable: true }}
+                    cardsInHand={20}
+                    cardsOnTable={40}
+                    elements={[]}
+                    onChange={() => {}}
+                    teamId={10}
+                    values={{}}
+                />,
+            );
+
+            expect(screen.getByLabelText('Points in Hand')).toHaveClass('border-orange-300');
+            expect(screen.getByLabelText('Points on Table')).toHaveClass('border-orange-300');
+        });
+    });
 });

@@ -31,7 +31,7 @@ const CardPointsScanner = lazy(() => import('@/Components/CardPointsScanner'));
  * quantity = 0), the points slot displays the penalty as a negative score (e.g. −100 pts) in
  * rose/red text, giving the user a visual cue that a deduction will be applied.
  */
-export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false, showBaseElements = true }) {
+export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false, showBaseElements = true, amendedElementIds = [], amendedCardFields = {}, showCardScanner = true }) {
     const [scannerTarget, setScannerTarget] = useState(null);
     // When a score_override boolean element is checked both cardsInHand and
     // cardsOnTable are subtracted from the base score (penalty mode).
@@ -76,6 +76,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
     const renderElement = (el) => {
         const inputId = `team-${teamId}-el-${el.id}`;
         const isBoolean = el.input_type === 'boolean';
+        const isAmended = amendedElementIds.includes(el.id);
 
         // An element is "active" when its checkbox is checked (boolean) or its
         // quantity is greater than zero. When inactive and the element carries a
@@ -90,6 +91,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                     {isBoolean ? (
                         <Checkbox
                             checked={!!values[el.id]}
+                            className={isAmended ? 'border-orange-400 text-orange-500 focus:ring-orange-400' : ''}
                             disabled={readOnly}
                             id={inputId}
                             onChange={readOnly ? undefined : (e) => onChange(el.id, e.target.checked)}
@@ -101,6 +103,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             onChange={(val) => onChange(el.id, val)}
                             readOnly={readOnly}
                             value={values[el.id] ?? 0}
+                            variant={isAmended ? 'amber' : 'default'}
                         />
                     )}
 
@@ -153,7 +156,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             onChange={(val) => onCardsChange?.('cardsInHand', val)}
                             readOnly={readOnly}
                             value={cardsInHand}
-                            variant="rose"
+                            variant={amendedCardFields.cardsInHand ? 'amber' : 'rose'}
                         />
                         <InputLabel
                             className="flex-1 cursor-pointer select-none"
@@ -161,7 +164,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             value="Points in Hand"
                         />
                         <span className="shrink-0 text-xs font-medium text-rose-500">−pts</span>
-                        {!readOnly && (
+                        {!readOnly && showCardScanner && (
                             <button
                                 aria-label="Scan cards in hand"
                                 className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
@@ -185,7 +188,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             onChange={(val) => onCardsChange?.('cardsOnTable', val)}
                             readOnly={readOnly}
                             value={cardsOnTable}
-                            variant={cardsOnTableNegative ? 'rose' : 'emerald'}
+                            variant={amendedCardFields.cardsOnTable ? 'amber' : (cardsOnTableNegative ? 'rose' : 'emerald')}
                         />
                         <InputLabel
                             className="flex-1 cursor-pointer select-none"
@@ -195,7 +198,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                         <span className={`shrink-0 text-xs font-medium ${cardsOnTableNegative ? 'text-rose-500' : 'text-emerald-600'}`}>
                             {cardsOnTableNegative ? '−pts' : '+pts'}
                         </span>
-                        {!readOnly && (
+                        {!readOnly && showCardScanner && (
                             <button
                                 aria-label="Scan cards on table"
                                 className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
