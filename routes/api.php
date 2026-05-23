@@ -51,6 +51,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/games/{gameId}/players/swap-seats', [TeamPlayerController::class, 'swapSeats']);
 
         Route::post('/games/{gameId}/rounds', [RoundController::class, 'store']);
+        Route::patch('/games/{gameId}/rounds/{roundNumber}', [RoundController::class, 'amend']);
         Route::put('/games/{gameId}/round-draft', [RoundDraftController::class, 'upsert']);
         Route::delete('/games/{gameId}/round-draft', [RoundDraftController::class, 'destroy']);
 

@@ -419,6 +419,33 @@ class GameRepository
     }
 
     /**
+     * Reconcile game status fields from recomputed team scores.
+     *
+     * @param  \App\Models\Game  $game  Game to update.
+     * @param  int|null  $winningTeamId  Winner team id, or null when no team currently reaches target.
+     * @param  int  $roundNumber  Latest recorded round number for the game.
+     * @return \App\Models\Game Refreshed game model after persistence.
+     * Logic: keep game.current_round_number aligned with history and switch status/winner based
+     * on whether a winner exists after an amended round recalculates cumulative scores.
+     */
+    public function reconcileGameOutcome(Game $game, ?int $winningTeamId, int $roundNumber): Game
+    {
+        $game->current_round_number = $roundNumber;
+
+        if ($winningTeamId !== null) {
+            $game->status = GameStatus::Finished;
+            $game->winning_team_id = $winningTeamId;
+        } else {
+            $game->status = GameStatus::InProgress;
+            $game->winning_team_id = null;
+        }
+
+        $game->save();
+
+        return $game->fresh();
+    }
+
+    /**
      * Build a raw game summary data object containing the query results needed for presentation.
      *
      * @param  int  $gameId  Identifier of the game.
