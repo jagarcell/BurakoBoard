@@ -48,6 +48,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [activeCircleRound, setActiveCircleRound] = useState(null);
     const [closingCircleRound, setClosingCircleRound] = useState(null);
     const [circleButtonRect, setCircleButtonRect] = useState(null);
+    const [isHistoryAmendLocked, setIsHistoryAmendLocked] = useState(false);
     const circleTimerRef = useRef(null);
     const activeCircleRoundRef = useRef(activeCircleRound);
     useEffect(() => { activeCircleRoundRef.current = activeCircleRound; }, [activeCircleRound]);
@@ -80,6 +81,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // Collapse any expanded round detail and circle when the user clicks anywhere outside a round toggle.
     useEffect(() => {
         const collapse = () => {
+            if (isHistoryAmendLocked) return;
             setExpandedRound(null);
             savedExpandedRoundRef.current = null;
             // Restore the active team tab if the circle was open over the scoring form.
@@ -93,7 +95,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         };
         document.addEventListener('click', collapse);
         return () => document.removeEventListener('click', collapse);
-    }, []);
+    }, [isHistoryAmendLocked]);
 
     // Collapse any expanded round detail when the selected game changes.
     useEffect(() => {
@@ -102,6 +104,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         setActiveCircleRound(null);
         setClosingCircleRound(null);
         circleOpenTabSnapshotRef.current = null;
+        setIsHistoryAmendLocked(false);
         if (circleTimerRef.current) clearTimeout(circleTimerRef.current);
         setRoundDraftCache((prev) => (Object.keys(prev).length > 0 ? {} : prev));
     }, [selectedGame?.id]);
@@ -755,6 +758,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
      */
     const toggleCircle = (e, roundNumber) => {
         e.stopPropagation();
+        if (isHistoryAmendLocked && roundNumber !== nextRound) return;
         if (activeCircleRoundRef.current === roundNumber) {
             // Start closing animation; restore state only after the circle is fully gone.
             // Keep circleButtonRect so the close animation can travel back to the button.
@@ -824,6 +828,43 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             // Silent — the existing rounds remain intact; user can retry.
         } finally {
             setIsLoadingMoreRounds(false);
+        }
+    };
+
+    /**
+     * Persist an amendment for a closed round and refresh local round/game state.
+     *
+     * @param {number} roundNumber
+     * @param {{scores: Array<{team_id:number, points:number}>, base_inputs?: object, card_inputs?: object}} payload
+     * @return {Promise<boolean>}
+     * Logic: PATCH the amended round, then merge the returned game summary into local state so
+     * history chips, totals, and status stay reactive without a full-page refresh.
+     */
+    const handleSaveRoundAmendment = async (roundNumber, payload) => {
+        if (!selectedGame?.id) return false;
+
+        try {
+            const response = await api.patch(`/games/${selectedGame.id}/rounds/${roundNumber}`, payload);
+            const gameSummary = response.data?.data?.game ?? {};
+            const updatedTeams = gameSummary.teams ?? teams;
+            const updatedRounds = gameSummary.rounds ?? rounds;
+            const newGameStatus = gameSummary.game?.status ?? gameStatus;
+
+            setTeams(updatedTeams);
+            setRounds(updatedRounds);
+            setHasMoreRounds(gameSummary.has_more_rounds ?? hasMoreRounds);
+            setGameStatus(newGameStatus);
+            setRoundDraftCache((prev) => ({
+                ...prev,
+                [roundNumber]: {
+                    base_inputs: payload.base_inputs ?? {},
+                    card_inputs: payload.card_inputs ?? {},
+                },
+            }));
+            onRoundRecorded?.(updatedTeams, newGameStatus, gameSummary);
+            return true;
+        } catch {
+            return false;
         }
     };
 
@@ -1222,12 +1263,15 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                         hasMoreRounds={hasMoreRounds}
                         isLoadingMoreRounds={isLoadingMoreRounds}
                         onExpandRound={(roundNumber) =>
-                            setExpandedRound((prev) =>
-                                prev === roundNumber ? null : roundNumber,
-                            )
+                            setExpandedRound((prev) => {
+                                if (isHistoryAmendLocked) return prev;
+                                return prev === roundNumber ? null : roundNumber;
+                            })
                         }
                         onToggleCircle={toggleCircle}
                         onLoadEarlier={handleLoadEarlierRounds}
+                        onSaveAmend={handleSaveRoundAmendment}
+                        onAmendModeChange={setIsHistoryAmendLocked}
                     />
                 </>
             )}

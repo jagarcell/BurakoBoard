@@ -8,6 +8,7 @@ vi.mock('@/api/client', () => ({
     default: {
         get: vi.fn(),
         post: vi.fn(),
+        patch: vi.fn(),
         put: vi.fn(),
         delete: vi.fn(),
     },
@@ -1146,6 +1147,45 @@ describe('RoundsCard', () => {
             fireEvent.click(document.body);
 
             expect(screen.queryByText(/scoring detail/i)).not.toBeInTheDocument();
+        });
+
+        it('keeps the amended round expanded until Save Amend is clicked', async () => {
+            api.get.mockImplementation((url) => {
+                if (url.match(/\/rounds\/\d+\/draft/)) return Promise.resolve(roundDraftResponse);
+                if (url.includes('/round-draft')) return Promise.resolve(nullDraftResponse);
+                return Promise.resolve(elementsResponse);
+            });
+            api.patch.mockResolvedValueOnce(makeGameResponse([teamA, teamB], [round1, round2]));
+
+            render(
+                <RoundsCard
+                    initialRounds={[round1, round2]}
+                    initialTeams={[teamA, teamB]}
+                    selectedGame={selectedGame}
+                />,
+            );
+
+            await screen.findAllByLabelText('Burako');
+
+            await userEvent.click(screen.getByRole('button', { name: /expand round 1 detail/i }));
+            await waitFor(() =>
+                expect(screen.queryByText(/loading detail/i)).not.toBeInTheDocument(),
+            );
+
+            await userEvent.click(screen.getByRole('button', { name: /amend round 1/i }));
+            expect(screen.getByRole('button', { name: /save amendment for round 1/i })).toBeInTheDocument();
+
+            fireEvent.click(document.body);
+            expect(screen.getByText(/round 1.*scoring detail/i)).toBeInTheDocument();
+
+            await userEvent.click(screen.getByRole('button', { name: /save amendment for round 1/i }));
+
+            await waitFor(() => {
+                expect(screen.queryByRole('button', { name: /save amendment for round 1/i })).not.toBeInTheDocument();
+            });
+
+            fireEvent.click(document.body);
+            expect(screen.queryByText(/round 1.*scoring detail/i)).not.toBeInTheDocument();
         });
 
         it('recording a round collapses any expanded detail', async () => {

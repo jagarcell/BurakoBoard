@@ -11,7 +11,7 @@ import { useRef, useState } from 'react';
  * @param {boolean}       readOnly  - When true the − and + buttons are hidden and the input becomes read-only; only the value is shown.
  * @param {number}        min       - Minimum allowed value (default 0). Decrement is blocked at this limit.
  * @param {number}        step      - Amount added or subtracted on each button click (default 1).
- * @param {string}        variant   - Colour scheme for borders and focus ring: 'default' | 'rose' | 'emerald'.
+ * @param {string}        variant   - Colour scheme for borders and focus ring: 'default' | 'rose' | 'emerald' | 'amber'.
  * @param {string}        className - Additional classes applied to the outer wrapper div.
  *
  * @return {JSX.Element}
@@ -68,6 +68,11 @@ export default function NumericStepper({
             border: 'border-emerald-200',
             focus: 'focus:border-emerald-400 focus:ring-emerald-200',
             btn: 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 disabled:hover:bg-emerald-50',
+        },
+        amber: {
+            border: 'border-orange-300',
+            focus: 'focus:border-orange-500 focus:ring-orange-200',
+            btn: 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 disabled:hover:bg-orange-50',
         },
     };
 

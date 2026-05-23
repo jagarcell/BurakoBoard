@@ -441,4 +441,217 @@ class RoundServiceTest extends TestCase
         $this->assertArrayHasKey('game', $result);
         $this->assertArrayHasKey('teams', $result);
     }
+
+    public function test_amend_round_updates_scores_syncs_totals_and_finishes_game_when_target_reached(): void
+    {
+        $game                = new Game();
+        $game->status        = GameStatus::InProgress;
+        $game->target_points = 500;
+
+        $round               = new Round();
+        $round->id           = 21;
+        $round->round_number = 1;
+
+        $team1Model     = new Team();
+        $team1Model->id = 1;
+
+        $team2Model     = new Team();
+        $team2Model->id = 2;
+
+        $updatedTeam1                = new \stdClass();
+        $updatedTeam1->id            = 1;
+        $updatedTeam1->current_score = 600;
+
+        $updatedTeam2                = new \stdClass();
+        $updatedTeam2->id            = 2;
+        $updatedTeam2->current_score = 300;
+
+        $summaryData = $this->makeGameSummaryData(1);
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->teamRepository->shouldReceive('getTeamsForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(collect([['id' => 1], ['id' => 2]]));
+
+        DB::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn ($cb) => $cb());
+
+        $this->roundRepository->shouldReceive('findRoundInGameOrFail')
+            ->once()
+            ->with(1, 1)
+            ->andReturn($round);
+
+        $this->teamRepository->shouldReceive('findTeamInGameOrFail')
+            ->once()
+            ->with(1, 1)
+            ->andReturn($team1Model);
+
+        $this->roundRepository->shouldReceive('upsertRoundScore')
+            ->once()
+            ->with(21, 1, 600);
+
+        $this->teamRepository->shouldReceive('findTeamInGameOrFail')
+            ->once()
+            ->with(1, 2)
+            ->andReturn($team2Model);
+
+        $this->roundRepository->shouldReceive('upsertRoundScore')
+            ->once()
+            ->with(21, 2, 300);
+
+        $this->roundDraftRepository->shouldReceive('upsertArchivedRoundDraft')
+            ->once()
+            ->with(1, 1, ['1' => [1 => true]], ['1' => ['cardsInHand' => 3, 'cardsOnTable' => 0]]);
+
+        $this->teamRepository->shouldReceive('syncTeamScoresForGame')
+            ->once()
+            ->with(1);
+
+        $this->teamRepository->shouldReceive('getTeamsForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(collect([$updatedTeam1, $updatedTeam2]));
+
+        $this->roundRepository->shouldReceive('getMaxRoundNumberForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(4);
+
+        $this->gameRepository->shouldReceive('reconcileGameOutcome')
+            ->once()
+            ->with($game, 1, 4);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
+        $this->gameRepository->shouldReceive('getGameSummary')
+            ->once()
+            ->with(1)
+            ->andReturn($summaryData);
+
+        $result = $this->service->amendRound(1, 1, [
+            'scores' => [
+                ['team_id' => 1, 'points' => 600],
+                ['team_id' => 2, 'points' => 300],
+            ],
+            'base_inputs' => ['1' => [1 => true]],
+            'card_inputs' => ['1' => ['cardsInHand' => 3, 'cardsOnTable' => 0]],
+        ]);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
+    }
+
+    public function test_amend_round_reopens_game_when_no_team_reaches_target_after_resync(): void
+    {
+        $game                = new Game();
+        $game->status        = GameStatus::Finished;
+        $game->target_points = 2000;
+
+        $round               = new Round();
+        $round->id           = 33;
+        $round->round_number = 2;
+
+        $team1Model     = new Team();
+        $team1Model->id = 1;
+
+        $team2Model     = new Team();
+        $team2Model->id = 2;
+
+        $updatedTeam1                = new \stdClass();
+        $updatedTeam1->id            = 1;
+        $updatedTeam1->current_score = 1800;
+
+        $updatedTeam2                = new \stdClass();
+        $updatedTeam2->id            = 2;
+        $updatedTeam2->current_score = 1500;
+
+        $summaryData = $this->makeGameSummaryData(1);
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->teamRepository->shouldReceive('getTeamsForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(collect([['id' => 1], ['id' => 2]]));
+
+        DB::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn ($cb) => $cb());
+
+        $this->roundRepository->shouldReceive('findRoundInGameOrFail')
+            ->once()
+            ->with(1, 2)
+            ->andReturn($round);
+
+        $this->teamRepository->shouldReceive('findTeamInGameOrFail')
+            ->once()
+            ->with(1, 1)
+            ->andReturn($team1Model);
+
+        $this->roundRepository->shouldReceive('upsertRoundScore')
+            ->once()
+            ->with(33, 1, 100);
+
+        $this->teamRepository->shouldReceive('findTeamInGameOrFail')
+            ->once()
+            ->with(1, 2)
+            ->andReturn($team2Model);
+
+        $this->roundRepository->shouldReceive('upsertRoundScore')
+            ->once()
+            ->with(33, 2, 150);
+
+        $this->roundDraftRepository->shouldReceive('upsertArchivedRoundDraft')
+            ->once()
+            ->with(1, 2, [], []);
+
+        $this->teamRepository->shouldReceive('syncTeamScoresForGame')
+            ->once()
+            ->with(1);
+
+        $this->teamRepository->shouldReceive('getTeamsForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(collect([$updatedTeam1, $updatedTeam2]));
+
+        $this->roundRepository->shouldReceive('getMaxRoundNumberForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(7);
+
+        $this->gameRepository->shouldReceive('reconcileGameOutcome')
+            ->once()
+            ->with($game, null, 7);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
+        $this->gameRepository->shouldReceive('getGameSummary')
+            ->once()
+            ->with(1)
+            ->andReturn($summaryData);
+
+        $result = $this->service->amendRound(1, 2, [
+            'scores' => [
+                ['team_id' => 1, 'points' => 100],
+                ['team_id' => 2, 'points' => 150],
+            ],
+        ]);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+    }
 }

@@ -59,4 +59,54 @@ class RoundRepository
             'points' => $points,
         ]);
     }
+
+    /**
+     * Resolve a specific round in a game by its round number.
+     *
+     * @param  int  $gameId  Identifier of the game.
+    * @param  int  $roundNumber  Round number within the game timeline.
+    * @return \App\Models\Round The matching round model.
+     * Logic: constrain by both game_id and round_number so callers cannot accidentally amend a
+     * round that belongs to another game.
+     */
+    public function findRoundInGameOrFail(int $gameId, int $roundNumber): Round
+    {
+        return Round::query()
+            ->where('game_id', $gameId)
+            ->where('round_number', $roundNumber)
+            ->firstOrFail();
+    }
+
+    /**
+     * Update one team's points for an existing round.
+     *
+     * @param  int  $roundId  Identifier of the round.
+     * @param  int  $teamId  Identifier of the team.
+     * @param  int  $points  New points value for this round/team pair.
+     * @return void
+     * Logic: update the existing round_scores row for the round/team pair; if no row exists,
+     * create it so the round remains complete and self-healing.
+     */
+    public function upsertRoundScore(int $roundId, int $teamId, int $points): void
+    {
+        RoundScore::query()->updateOrCreate(
+            ['round_id' => $roundId, 'team_id' => $teamId],
+            ['points' => $points],
+        );
+    }
+
+    /**
+     * Return the latest round number recorded for a game.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return int The highest round_number, or 0 when no rounds exist.
+     * Logic: aggregate MAX(round_number) scoped to the game so services can reconcile
+     * game.current_round_number after score amendments.
+     */
+    public function getMaxRoundNumberForGame(int $gameId): int
+    {
+        return (int) Round::query()
+            ->where('game_id', $gameId)
+            ->max('round_number');
+    }
 }

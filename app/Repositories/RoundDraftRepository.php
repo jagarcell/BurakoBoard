@@ -78,6 +78,27 @@ class RoundDraftRepository
     }
 
     /**
+     * Create or update the archived draft for a specific completed round.
+     *
+     * @param  int  $gameId      Identifier of the game.
+     * @param  int  $roundNumber The completed round number.
+     * @param  array<string, mixed>  $baseInputs  Per-team base element values keyed by team ID then element ID.
+     * @param  array<string, mixed>  $cardInputs  Per-team card inputs keyed by team ID.
+     * @return \App\Models\RoundDraft The archived draft row after persistence.
+     * Logic: update or create the composite key (game_id, round_number) so amendments to a
+     * closed round keep its scoring detail snapshot in sync with edited values.
+     */
+    public function upsertArchivedRoundDraft(int $gameId, int $roundNumber, array $baseInputs, array $cardInputs): RoundDraft
+    {
+        $draft = RoundDraft::query()->updateOrCreate(
+            ['game_id' => $gameId, 'round_number' => $roundNumber],
+            ['base_inputs' => $baseInputs, 'card_inputs' => $cardInputs],
+        );
+
+        return $draft->fresh();
+    }
+
+    /**
      * Delete the round draft for a game.
      *
      * @param  int  $gameId  Identifier of the game whose draft should be removed.

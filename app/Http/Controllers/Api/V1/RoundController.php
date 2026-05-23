@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\AmendRoundRequest;
 use App\Http\Requests\Api\V1\RecordRoundRequest;
 use App\Services\RoundService;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +32,25 @@ class RoundController extends Controller
     public function store(RecordRoundRequest $request, int $gameId): JsonResponse
     {
         $summary = $this->service->recordRound($gameId, $request->validated());
+
+        return response()->json([
+            'game' => $summary,
+        ]);
+    }
+
+    /**
+     * Amend a previously recorded round.
+     *
+     * @param  \App\Http\Requests\Api\V1\AmendRoundRequest  $request  Validated amendment payload.
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $roundNumber  Round number to amend.
+     * @return \Illuminate\Http\JsonResponse Updated game summary response.
+     * Logic: delegate the amendment operation to the service and return the refreshed
+     * scoreboard/history projection after persistence.
+     */
+    public function amend(AmendRoundRequest $request, int $gameId, int $roundNumber): JsonResponse
+    {
+        $summary = $this->service->amendRound($gameId, $roundNumber, $request->validated());
 
         return response()->json([
             'game' => $summary,

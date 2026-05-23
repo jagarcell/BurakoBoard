@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import RoundHistoryTable from '@/Components/RoundHistoryTable';
 
 vi.mock('@/Components/BaseElementsInput', () => ({
@@ -50,6 +51,7 @@ const baseProps = {
     onExpandRound: vi.fn(),
     onToggleCircle: vi.fn(),
     onLoadEarlier: vi.fn(),
+    onSaveAmend: vi.fn().mockResolvedValue(true),
 };
 
 describe('RoundHistoryTable', () => {
@@ -161,5 +163,70 @@ describe('RoundHistoryTable', () => {
         const inputs = screen.getAllByTestId(/base-elements-input-hist/);
         expect(inputs.length).toBeGreaterThanOrEqual(1);
         inputs.forEach((el) => expect(el).toHaveAttribute('data-readonly', 'true'));
+    });
+
+    it('shows an orange Amend button when a closed round is inspected', () => {
+        const roundDraftCache = {
+            1: {
+                base_inputs: { 10: {}, 11: {} },
+                card_inputs: { 10: {}, 11: {} },
+            },
+        };
+
+        render(
+            <RoundHistoryTable {...baseProps} expandedRound={1} roundDraftCache={roundDraftCache} />,
+        );
+
+        const amendButton = screen.getByRole('button', { name: /amend round 1/i });
+        expect(amendButton).toBeInTheDocument();
+        expect(amendButton).toHaveClass('bg-orange-500');
+        expect(amendButton).toHaveTextContent('Amend');
+    });
+
+    it('enables edit mode for inspected round detail after clicking Amend', () => {
+        const roundDraftCache = {
+            1: {
+                base_inputs: { 10: {}, 11: {} },
+                card_inputs: { 10: {}, 11: {} },
+            },
+        };
+
+        render(
+            <RoundHistoryTable {...baseProps} expandedRound={1} roundDraftCache={roundDraftCache} />,
+        );
+
+        const amendButton = screen.getByRole('button', { name: /amend round 1/i });
+        fireEvent.click(amendButton);
+
+        const inputs = screen.getAllByTestId(/base-elements-input-hist/);
+        inputs.forEach((el) => expect(el).toHaveAttribute('data-readonly', 'false'));
+    });
+
+    it('calls onSaveAmend when Save Amend is clicked in amend mode', async () => {
+        const roundDraftCache = {
+            1: {
+                base_inputs: { 10: {}, 11: {} },
+                card_inputs: { 10: { cardsInHand: 0, cardsOnTable: 0 }, 11: { cardsInHand: 0, cardsOnTable: 0 } },
+            },
+        };
+
+        render(
+            <RoundHistoryTable {...baseProps} expandedRound={1} roundDraftCache={roundDraftCache} />,
+        );
+
+        await userEvent.click(screen.getByRole('button', { name: /amend round 1/i }));
+        await userEvent.click(screen.getByRole('button', { name: /save amendment for round 1/i }));
+
+        await waitFor(() => {
+            expect(baseProps.onSaveAmend).toHaveBeenCalledTimes(1);
+            expect(baseProps.onSaveAmend).toHaveBeenCalledWith(
+                1,
+                expect.objectContaining({
+                    scores: expect.any(Array),
+                    base_inputs: expect.any(Object),
+                    card_inputs: expect.any(Object),
+                }),
+            );
+        });
     });
 });

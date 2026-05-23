@@ -168,6 +168,91 @@ class RoundService
     }
 
     /**
+     * Amend a previously recorded round and reconcile all derived game state.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $roundNumber  Round number to amend.
+     * @param  array<string, mixed>  $payload  Validated amendment payload.
+     * @return array<string, mixed> Refreshed game summary after amendment.
+     * Logic: validate full team coverage, update per-team round points for the target round,
+     * upsert the archived draft snapshot for that round, recompute all team cumulative scores,
+     * reconcile winner/status from the recomputed totals, then broadcast and return summary.
+     */
+    public function amendRound(int $gameId, int $roundNumber, array $payload): array
+    {
+        $game = $this->gameRepository->findGameOrFail($gameId);
+
+        $scores       = collect($payload['scores']);
+        $teams        = $this->teamRepository->getTeamsForGame($gameId);
+        $teamIds      = $teams->pluck('id');
+        $inputTeamIds = $scores->pluck('team_id');
+
+        if ($teamIds->count() < 2) {
+            throw ValidationException::withMessages([
+                'scores' => 'At least two teams are required before amending rounds.',
+            ]);
+        }
+
+        if ($inputTeamIds->sort()->values()->all() !== $teamIds->sort()->values()->all()) {
+            throw ValidationException::withMessages([
+                'scores' => 'Round scores must include every team in the game exactly once.',
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($game, $gameId, $roundNumber, $scores, $payload): void {
+                $round = $this->roundRepository->findRoundInGameOrFail($gameId, $roundNumber);
+
+                foreach ($scores as $score) {
+                    $teamId = (int) $score['team_id'];
+                    $points = (int) $score['points'];
+
+                    $this->teamRepository->findTeamInGameOrFail($gameId, $teamId);
+                    $this->roundRepository->upsertRoundScore((int) $round->id, $teamId, $points);
+                }
+
+                $this->roundDraftRepository->upsertArchivedRoundDraft(
+                    $gameId,
+                    $roundNumber,
+                    $payload['base_inputs'] ?? [],
+                    $payload['card_inputs'] ?? [],
+                );
+
+                $this->teamRepository->syncTeamScoresForGame($gameId);
+
+                $updatedTeams = $this->teamRepository->getTeamsForGame($gameId);
+                $winner = $this->resolveWinner($updatedTeams, (int) $game->target_points);
+                $maxRoundNumber = $this->roundRepository->getMaxRoundNumberForGame($gameId);
+
+                $this->gameRepository->reconcileGameOutcome(
+                    $game,
+                    $winner !== null ? (int) $winner->id : null,
+                    $maxRoundNumber,
+                );
+            });
+        } catch (QueryException $e) {
+            Log::error('DB transaction failed in amendRound', [
+                'game_id' => $gameId,
+                'round_number' => $roundNumber,
+                'sql' => $e->getSql(),
+                'bindings' => $e->getBindings(),
+                'message' => $e->getMessage(),
+                'user_id' => auth()->id(),
+            ]);
+            throw ValidationException::withMessages([
+                'round' => ['The round amendment could not be saved due to a database error. Please try again.'],
+            ]);
+        }
+
+        Log::info('Round amended', [
+            'game_id' => $gameId,
+            'round_number' => $roundNumber,
+        ]);
+
+        return $this->broadcastAndReturn($gameId);
+    }
+
+    /**
      * Recompute and persist current_score for every team in a game from its round history.
      *
      * @param  int  $gameId  Identifier of the game whose team scores need syncing.
