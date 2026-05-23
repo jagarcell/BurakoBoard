@@ -24,12 +24,15 @@ class UpsertRoundDraftRequest extends FormRequest
      * @return array<string, mixed> Validation rules for the draft payload.
      * Logic: accept nullable JSON blobs for both input maps; deeper key validation
      * is not required because the values are treated as opaque UI state by the backend.
+     * An optional expected_current_round_number guard allows the service to reject
+     * stale in-flight saves after a round has already been committed.
      */
     public function rules(): array
     {
         return [
             'base_inputs' => ['nullable', 'array'],
             'card_inputs' => ['nullable', 'array'],
+            'expected_current_round_number' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

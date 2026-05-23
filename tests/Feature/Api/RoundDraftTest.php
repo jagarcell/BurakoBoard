@@ -103,6 +103,7 @@ class RoundDraftTest extends TestCase
                 (string) $this->teamA->id => ['cardsInHand' => 5, 'cardsOnTable' => 0],
                 (string) $this->teamB->id => ['cardsInHand' => 0, 'cardsOnTable' => 2],
             ],
+            'expected_current_round_number' => 0,
         ];
 
         $response = $this->putJson("/api/v1/games/{$this->game->id}/round-draft", $payload);
@@ -112,6 +113,56 @@ class RoundDraftTest extends TestCase
             ->assertJsonPath('data.round_draft.card_inputs.' . $this->teamA->id . '.cardsInHand', 5);
 
         $this->assertDatabaseHas('round_drafts', ['game_id' => $this->game->id]);
+    }
+
+    /**
+     * PUT /api/v1/games/{id}/round-draft rejects stale payloads after round progression.
+     *
+     * @return void
+     * Logic: simulate a delayed in-flight draft PUT started before round 1 was committed;
+     *   once current_round_number has advanced, the stale expected round value must be
+     *   rejected and no active draft row should be re-created.
+     */
+    public function test_upsert_rejects_stale_expected_round_number_after_round_progression(): void
+    {
+        // Commit round 1 so game.current_round_number advances from 0 -> 1.
+        $this->service->recordRound($this->game->id, [
+            'scores' => [
+                ['team_id' => $this->teamA->id, 'points' => 100],
+                ['team_id' => $this->teamB->id, 'points' => 80],
+            ],
+        ]);
+
+        $this->game->refresh();
+        $this->assertSame(1, (int) $this->game->current_round_number);
+
+        $response = $this->putJson("/api/v1/games/{$this->game->id}/round-draft", [
+            'base_inputs' => [(string) $this->teamA->id => [1 => true]],
+            'card_inputs' => [(string) $this->teamA->id => ['cardsInHand' => 3, 'cardsOnTable' => 0]],
+            'expected_current_round_number' => 0,
+        ]);
+
+        $response->assertStatus(422);
+
+        $this->assertDatabaseMissing('round_drafts', ['game_id' => $this->game->id, 'round_number' => 0]);
+    }
+
+    /**
+     * PUT /api/v1/games/{id}/round-draft accepts payloads when expected round matches.
+     *
+     * @return void
+     * Logic: ensures the stale guard does not block valid saves for the current round baseline.
+     */
+    public function test_upsert_accepts_matching_expected_round_number(): void
+    {
+        $response = $this->putJson("/api/v1/games/{$this->game->id}/round-draft", [
+            'base_inputs' => [(string) $this->teamA->id => [1 => true]],
+            'card_inputs' => [(string) $this->teamA->id => ['cardsInHand' => 2, 'cardsOnTable' => 0]],
+            'expected_current_round_number' => 0,
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('round_drafts', ['game_id' => $this->game->id, 'round_number' => 0]);
     }
 
     /**

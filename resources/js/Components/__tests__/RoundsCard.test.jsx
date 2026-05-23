@@ -733,7 +733,10 @@ describe('RoundsCard', () => {
                 () =>
                     expect(api.put).toHaveBeenCalledWith(
                         '/games/5/round-draft',
-                        expect.objectContaining({ base_inputs: expect.any(Object) }),
+                        expect.objectContaining({
+                            base_inputs: expect.any(Object),
+                            expected_current_round_number: 0,
+                        }),
                     ),
                 { timeout: 2000 },
             );

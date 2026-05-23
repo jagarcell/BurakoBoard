@@ -112,6 +112,7 @@ class RoundDraftServiceTest extends TestCase
 
         $game         = new Game();
         $game->status = GameStatus::InProgress;
+        $game->current_round_number = 0;
 
         $draft              = new RoundDraft();
         $draft->game_id     = 1;
@@ -129,6 +130,71 @@ class RoundDraftServiceTest extends TestCase
             ->andReturn($draft);
 
         $result = $this->service->saveRoundDraft(1, ['base_inputs' => ['a' => 1], 'card_inputs' => ['b' => 2]]);
+
+        $this->assertSame($draft, $result);
+    }
+
+    /**
+     * saveRoundDraft rejects stale payloads when expected_current_round_number mismatches.
+     *
+     * @return void
+     * Logic: when a delayed PUT arrives after the game advanced to a newer round,
+     *   the service must throw a validation error and skip repository persistence.
+     */
+    public function test_save_round_draft_throws_when_expected_round_number_is_stale(): void
+    {
+        $game = new Game();
+        $game->status = GameStatus::InProgress;
+        $game->current_round_number = 1;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->roundDraftRepository->shouldNotReceive('upsertRoundDraft');
+
+        $this->expectException(ValidationException::class);
+
+        $this->service->saveRoundDraft(1, [
+            'base_inputs' => ['a' => 1],
+            'card_inputs' => ['b' => 2],
+            'expected_current_round_number' => 0,
+        ]);
+    }
+
+    /**
+     * saveRoundDraft allows persistence when expected_current_round_number matches.
+     *
+     * @return void
+     * Logic: validates the optimistic guard is non-blocking for non-stale requests.
+     */
+    public function test_save_round_draft_allows_when_expected_round_number_matches(): void
+    {
+        $game = new Game();
+        $game->status = GameStatus::InProgress;
+        $game->current_round_number = 2;
+
+        $draft = new RoundDraft();
+        $draft->game_id = 1;
+        $draft->base_inputs = ['x' => true];
+        $draft->card_inputs = ['y' => 3];
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->roundDraftRepository->shouldReceive('upsertRoundDraft')
+            ->once()
+            ->with(1, ['x' => true], ['y' => 3])
+            ->andReturn($draft);
+
+        $result = $this->service->saveRoundDraft(1, [
+            'base_inputs' => ['x' => true],
+            'card_inputs' => ['y' => 3],
+            'expected_current_round_number' => 2,
+        ]);
 
         $this->assertSame($draft, $result);
     }
