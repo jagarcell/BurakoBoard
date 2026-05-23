@@ -63,8 +63,10 @@ class RoundDraftService
      * @param  array<string, mixed>  $payload  Validated payload containing base_inputs and card_inputs.
      * @return \App\Models\RoundDraft The created or updated draft.
      * Logic: verify the game exists and is still in progress, then delegate persistence
-     *   to the repository, maintaining the one-draft-per-game invariant. Broadcasts the
-     *   updated draft to other channel members for real-time sync.
+     *   to the repository, maintaining the one-draft-per-game invariant. When provided,
+     *   expected_current_round_number is compared against game.current_round_number to
+     *   reject stale in-flight saves that started before a round was committed. Broadcasts
+     *   the updated draft to other channel members for real-time sync.
      */
     public function saveRoundDraft(int $gameId, array $payload): RoundDraft
     {
@@ -74,6 +76,17 @@ class RoundDraftService
             throw ValidationException::withMessages([
                 'game' => 'Cannot save a draft for a finished game.',
             ]);
+        }
+
+        if (array_key_exists('expected_current_round_number', $payload)) {
+            $expectedCurrentRoundNumber = (int) $payload['expected_current_round_number'];
+            $actualCurrentRoundNumber = (int) $game->current_round_number;
+
+            if ($expectedCurrentRoundNumber !== $actualCurrentRoundNumber) {
+                throw ValidationException::withMessages([
+                    'expected_current_round_number' => 'Cannot save stale draft data after round progression.',
+                ]);
+            }
         }
 
         $draft = $this->roundDraftRepository->upsertRoundDraft(

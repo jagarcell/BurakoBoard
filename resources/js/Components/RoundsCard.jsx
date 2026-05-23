@@ -351,6 +351,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 api.put(`/games/${game.id}/round-draft`, {
                     base_inputs: baseInputs,
                     card_inputs: cardInputs,
+                    expected_current_round_number: Number(game.current_round_number ?? 0),
                 }).catch(() => { /* silently ignore draft save failures */ });
             }
         }, 800);
