@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Enums\GameUserRole;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Team;
@@ -50,6 +51,26 @@ class TeamStoreTest extends TestCase
         ]);
 
         return $team;
+    }
+
+    /**
+     * Enrol a user into a game with a specific pivot role.
+     *
+     * @param  \App\Models\Game  $game  Target game.
+     * @param  \App\Models\User  $user  User to enrol.
+     * @param  string  $role  Game role to assign.
+     * @return void
+     * Logic: create a deterministic game_user pivot row so feature tests can exercise role-based guards.
+     */
+    private function enrollUserInGame(Game $game, User $user, string $role): void
+    {
+        DB::table('game_user')->insert([
+            'game_id' => $game->id,
+            'user_id' => $user->id,
+            'role' => $role,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**
@@ -371,5 +392,71 @@ class TeamStoreTest extends TestCase
         $response = $this->postJson("/api/v1/games/{$game->id}/teams/{$team->id}/attach");
 
         $response->assertUnprocessable();
+    }
+
+    /**
+     * Ensure the creator can create two random teams from four players.
+     *
+     * @return void Verifies endpoint creates exactly two teams with an even player split.
+     * Logic: enroll the authenticated user as creator, call the random endpoint with four names,
+     * and assert both team creation and seat assignment are persisted.
+     */
+    public function test_creator_can_create_random_teams_from_four_players(): void
+    {
+        $game = $this->makeGame();
+        $this->enrollUserInGame($game, $this->user, GameUserRole::Creator->value);
+
+        $response = $this->postJson("/api/v1/games/{$game->id}/teams/random", [
+            'players' => ['Alice', 'Bob', 'Carol', 'Dave'],
+        ]);
+
+        $response
+            ->assertStatus(201)
+            ->assertJsonPath('status', 'success');
+
+        $teams = $response->json('data.game.teams');
+        $this->assertCount(2, $teams);
+        $this->assertCount(2, $teams[0]['players']);
+        $this->assertCount(2, $teams[1]['players']);
+        $this->assertDatabaseCount('game_team', 2);
+        $this->assertDatabaseCount('game_player_seat', 4);
+    }
+
+    /**
+     * Ensure non-creator users cannot create random teams.
+     *
+     * @return void Verifies creator-only authorization is enforced with HTTP 403.
+     * Logic: enroll the authenticated user as viewer and assert the random endpoint rejects the request.
+     */
+    public function test_non_creator_cannot_create_random_teams(): void
+    {
+        $game = $this->makeGame();
+        $this->enrollUserInGame($game, $this->user, GameUserRole::Viewer->value);
+
+        $response = $this->postJson("/api/v1/games/{$game->id}/teams/random", [
+            'players' => ['Alice', 'Bob', 'Carol', 'Dave'],
+        ]);
+
+        $response->assertForbidden();
+    }
+
+    /**
+     * Ensure random team creation validates the required player count.
+     *
+     * @return void Verifies only 4 or 6 non-empty players are accepted.
+     * Logic: enroll as creator, submit three players, and assert 422 with the expected validation message.
+     */
+    public function test_random_team_creation_rejects_invalid_player_count(): void
+    {
+        $game = $this->makeGame();
+        $this->enrollUserInGame($game, $this->user, GameUserRole::Creator->value);
+
+        $response = $this->postJson("/api/v1/games/{$game->id}/teams/random", [
+            'players' => ['Alice', 'Bob', 'Carol'],
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonPath('data.errors.players.0', 'Exactly 4 or 6 players are required to create random teams.');
     }
 }

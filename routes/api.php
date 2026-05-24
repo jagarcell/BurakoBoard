@@ -40,8 +40,10 @@ Route::prefix('v1')->group(function () {
         Route::patch('/games/{gameId}/extend', [GameController::class, 'extend']);
 
         Route::put('/games/{gameId}/shuffler', [GameController::class, 'setInitialShuffler']);
+        Route::put('/games/{gameId}/shuffler/random', [GameController::class, 'setRandomInitialShuffler']);
 
         Route::post('/games/{gameId}/teams', [TeamController::class, 'store']);
+        Route::post('/games/{gameId}/teams/random', [TeamController::class, 'storeRandom']);
         Route::put('/games/{gameId}/teams/{teamId}', [TeamController::class, 'update']);
         Route::put('/games/{gameId}/teams/{teamId}/batch', [TeamController::class, 'batchUpdate']);
         Route::post('/games/{gameId}/teams/{teamId}/attach', [TeamController::class, 'attach']);
