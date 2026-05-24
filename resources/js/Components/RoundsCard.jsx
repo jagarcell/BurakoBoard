@@ -1253,6 +1253,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                     <RoundHistoryTable
                         rounds={rounds}
                         teams={teams}
+                        canAmend={selectedGame?.user_role === 'creator'}
                         roundRoles={roundRoles}
                         elements={elements}
                         roundDraftCache={roundDraftCache}

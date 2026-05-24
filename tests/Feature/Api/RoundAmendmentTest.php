@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Round;
 use App\Models\RoundDraft;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use App\Repositories\GameRepository;
 use App\Repositories\TeamRepository;
 use App\Services\RoundService;
@@ -46,6 +47,12 @@ class RoundAmendmentTest extends TestCase
             'status' => 'in_progress',
             'winning_team_id' => null,
             'current_round_number' => 0,
+        ]);
+
+        DB::table('game_user')->insert([
+            'game_id' => $game->id,
+            'user_id' => $user->id,
+            'role' => 'creator',
         ]);
 
         $teamA = $this->teamRepository->createTeam(['name' => 'Team Alpha']);
@@ -163,5 +170,38 @@ class RoundAmendmentTest extends TestCase
                 ['team_id' => $this->teamAId, 'points' => 50],
             ],
         ])->assertUnprocessable();
+    }
+
+    /**
+     * PATCH /api/v1/games/{gameId}/rounds/{roundNumber} is forbidden for non-creator users.
+     *
+     * @return void
+     * Logic: verify the amendment endpoint enforces creator-only access and rejects viewers.
+     */
+    public function test_amend_round_returns_403_for_non_creator_user(): void
+    {
+        $this->roundService->recordRound($this->gameId, [
+            'scores' => [
+                ['team_id' => $this->teamAId, 'points' => 10],
+                ['team_id' => $this->teamBId, 'points' => 20],
+            ],
+        ]);
+
+        $viewer = User::factory()->create();
+
+        DB::table('game_user')->insert([
+            'game_id' => $this->gameId,
+            'user_id' => $viewer->id,
+            'role' => 'viewer',
+        ]);
+
+        $this->actingAs($viewer)
+            ->patchJson("/api/v1/games/{$this->gameId}/rounds/1", [
+                'scores' => [
+                    ['team_id' => $this->teamAId, 'points' => 50],
+                    ['team_id' => $this->teamBId, 'points' => 60],
+                ],
+            ])
+            ->assertForbidden();
     }
 }

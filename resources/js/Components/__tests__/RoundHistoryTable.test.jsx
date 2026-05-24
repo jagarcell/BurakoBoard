@@ -38,6 +38,7 @@ const rounds = [
 const baseProps = {
     rounds,
     teams,
+    canAmend: true,
     roundRoles: [],
     elements: [{ id: 1, name: 'burako', label: 'Burako', points: 100, input_type: 'boolean' }],
     roundDraftCache: {},
@@ -181,6 +182,27 @@ describe('RoundHistoryTable', () => {
         expect(amendButton).toBeInTheDocument();
         expect(amendButton).toHaveClass('bg-orange-500');
         expect(amendButton).toHaveTextContent('Amend');
+    });
+
+    it('hides amendment controls when canAmend is false', () => {
+        const roundDraftCache = {
+            1: {
+                base_inputs: { 10: {}, 11: {} },
+                card_inputs: { 10: {}, 11: {} },
+            },
+        };
+
+        render(
+            <RoundHistoryTable
+                {...baseProps}
+                canAmend={false}
+                expandedRound={1}
+                roundDraftCache={roundDraftCache}
+            />,
+        );
+
+        expect(screen.queryByRole('button', { name: /amend round 1/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /save amendment for round 1/i })).not.toBeInTheDocument();
     });
 
     it('enables edit mode for inspected round detail after clicking Amend', () => {
