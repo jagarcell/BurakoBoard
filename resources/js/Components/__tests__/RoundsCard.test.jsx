@@ -30,7 +30,7 @@ vi.mock('@/hooks/useVoiceAliases', () => ({
     }),
 }));
 
-const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000 };
+const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000, user_role: 'creator' };
 
 const baseElements = [
     { id: 1, name: 'burako', label: 'Burako', points: 100, input_type: 'boolean' },

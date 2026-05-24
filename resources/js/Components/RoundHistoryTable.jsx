@@ -33,6 +33,7 @@ import PlayerCircle from '@/Components/PlayerCircle';
 export default function RoundHistoryTable({
     rounds,
     teams,
+    canAmend = false,
     roundRoles,
     elements,
     roundDraftCache,
@@ -160,7 +161,7 @@ export default function RoundHistoryTable({
     };
 
     const handleSaveAmend = async (round) => {
-        if (!onSaveAmend) return;
+        if (!canAmend || !onSaveAmend) return;
 
         const roundNumber = round.round_number;
         const persisted = roundDraftCache[roundNumber] ?? { base_inputs: {}, card_inputs: {} };
@@ -348,37 +349,39 @@ export default function RoundHistoryTable({
                                                         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-400">
                                                             Round {round.round_number} — Scoring Detail
                                                         </p>
-                                                        <div className="flex items-center gap-2">
-                                                            {amendModeByRound[round.round_number] && (
+                                                        {canAmend && (
+                                                            <div className="flex items-center gap-2">
+                                                                {amendModeByRound[round.round_number] && (
+                                                                    <button
+                                                                        aria-label={`Save amendment for round ${round.round_number}`}
+                                                                        className="inline-flex items-center rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                                        disabled={!!isSavingAmendByRound[round.round_number]}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleSaveAmend(round);
+                                                                        }}
+                                                                        type="button"
+                                                                    >
+                                                                        {isSavingAmendByRound[round.round_number] ? 'Saving…' : 'Save Amend'}
+                                                                    </button>
+                                                                )}
                                                                 <button
-                                                                    aria-label={`Save amendment for round ${round.round_number}`}
-                                                                    className="inline-flex items-center rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                                                    disabled={!!isSavingAmendByRound[round.round_number]}
+                                                                    aria-label={`Amend round ${round.round_number}`}
+                                                                    className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors ${
+                                                                        amendModeByRound[round.round_number]
+                                                                            ? 'bg-orange-600 hover:bg-orange-700'
+                                                                            : 'bg-orange-500 hover:bg-orange-600'
+                                                                    }`}
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        handleSaveAmend(round);
+                                                                        handleToggleAmendMode(round.round_number);
                                                                     }}
                                                                     type="button"
                                                                 >
-                                                                    {isSavingAmendByRound[round.round_number] ? 'Saving…' : 'Save Amend'}
+                                                                    Amend
                                                                 </button>
-                                                            )}
-                                                            <button
-                                                                aria-label={`Amend round ${round.round_number}`}
-                                                                className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors ${
-                                                                    amendModeByRound[round.round_number]
-                                                                        ? 'bg-orange-600 hover:bg-orange-700'
-                                                                        : 'bg-orange-500 hover:bg-orange-600'
-                                                                }`}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleToggleAmendMode(round.round_number);
-                                                                }}
-                                                                type="button"
-                                                            >
-                                                                Amend
-                                                            </button>
-                                                        </div>
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     {loadingDraftRound === round.round_number ? (
