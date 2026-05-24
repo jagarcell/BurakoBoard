@@ -1,6 +1,7 @@
 import api from '@/api/client';
 import { Fragment, startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import AddEditTeamModal from '@/Components/AddEditTeamModal';
+import RandomTeamsModal from '@/Components/RandomTeamsModal';
 import TeamActionButton from '@/Components/TeamActionButton';
 import TeamScoreBadge from '@/Components/TeamScoreBadge';
 import TeamSlotSelector from '@/Components/TeamSlotSelector';
@@ -16,6 +17,11 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
     const [editingTeam, setEditingTeam] = useState(null);
     const [creatingSlot, setCreatingSlot] = useState(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isRandomModalOpen, setIsRandomModalOpen] = useState(false);
+    const [randomPlayerNames, setRandomPlayerNames] = useState(Array(6).fill(''));
+    const [randomTeamsError, setRandomTeamsError] = useState('');
+    const [randomDuplicateIndexes, setRandomDuplicateIndexes] = useState([]);
+    const [isCreatingRandomTeams, setIsCreatingRandomTeams] = useState(false);
     const diffLabelRef = useRef(null);
     const [arrowHalfWidth, setArrowHalfWidth] = useState(null);
 
@@ -107,6 +113,89 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
         resetModal();
     };
 
+    const openRandomTeamsModal = () => {
+        setRandomTeamsError('');
+        setRandomDuplicateIndexes([]);
+        setRandomPlayerNames(Array(6).fill(''));
+        setIsRandomModalOpen(true);
+    };
+
+    const closeRandomTeamsModal = () => {
+        if (isCreatingRandomTeams) return;
+        setIsRandomModalOpen(false);
+        setRandomTeamsError('');
+        setRandomDuplicateIndexes([]);
+    };
+
+    const handleRandomPlayerNameChange = (index, value) => {
+        setRandomTeamsError('');
+        setRandomDuplicateIndexes((prev) => prev.filter((slot) => slot !== index));
+
+        setRandomPlayerNames((prev) => {
+            const next = [...prev];
+            next[index] = value;
+            return next;
+        });
+    };
+
+    const handleCreateRandomTeams = async () => {
+        setRandomTeamsError('');
+        setRandomDuplicateIndexes([]);
+
+        const normalizedNames = randomPlayerNames
+            .map((name, index) => ({
+                index,
+                value: name.trim().replace(/\s+/g, ' ').toLowerCase(),
+            }))
+            .filter((entry) => entry.value.length > 0);
+
+        const duplicateCounts = normalizedNames.reduce((acc, entry) => {
+            acc.set(entry.value, (acc.get(entry.value) ?? 0) + 1);
+            return acc;
+        }, new Map());
+
+        const duplicateValues = new Set(
+            [...duplicateCounts.entries()]
+                .filter(([, count]) => count > 1)
+                .map(([value]) => value),
+        );
+
+        const duplicateIndexes = normalizedNames
+            .filter((entry) => duplicateValues.has(entry.value))
+            .map((entry) => entry.index);
+
+        if (duplicateIndexes.length > 0) {
+            setRandomDuplicateIndexes(duplicateIndexes);
+            setRandomTeamsError('Duplicate player names are not allowed. Please use unique names.');
+            return;
+        }
+
+        setIsCreatingRandomTeams(true);
+
+        try {
+            const response = await api.post(
+                `/games/${selectedGame.id}/teams/random`,
+                { players: randomPlayerNames },
+            );
+
+            const newTeams = response.data?.data?.game?.teams ?? [];
+
+            startTransition(() => {
+                setTeams(newTeams);
+            });
+            onTeamsChange?.(newTeams);
+            onTeamCreated?.();
+            setIsRandomModalOpen(false);
+            setRandomPlayerNames(Array(6).fill(''));
+        } catch (error) {
+            const apiErrors = error.response?.data?.data?.errors ?? {};
+            const firstApiError = Object.values(apiErrors).flat()[0];
+            setRandomTeamsError(firstApiError || 'Unable to create random teams right now.');
+        } finally {
+            setIsCreatingRandomTeams(false);
+        }
+    };
+
     const handleAddExistingTeam = async (slot) => {
         const selectedTeamId = Number(slotSelections[slot]);
         const selectedTeam = allTeams.find((t) => t.id === selectedTeamId);
@@ -143,6 +232,7 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
 
     const teamSlots = [0, 1];
     const isGameEditable = selectedGame?.status === 'in_progress' && selectedGame?.user_role !== 'viewer';
+    const isCreator = selectedGame?.user_role === 'creator';
     const winnerTeamId =
         selectedGame?.status === 'finished' && teams.length === 2 && teams[0].current_score !== teams[1].current_score
             ? (teams[0].current_score > teams[1].current_score ? teams[0].id : teams[1].id)
@@ -211,6 +301,17 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                                         Each game requires exactly two teams. Add registered
                                         players or enter a custom name for each participant.
                                     </p>
+                                    {isCreator && isGameEditable && teams.length === 0 ? (
+                                        <div className="pt-2">
+                                            <button
+                                                className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 transition hover:bg-emerald-100"
+                                                onClick={openRandomTeamsModal}
+                                                type="button"
+                                            >
+                                                Create random teams (optional)
+                                            </button>
+                                        </div>
+                                    ) : null}
                                 </>
                             ) : null}
                         </div>
@@ -465,6 +566,17 @@ export default function TeamsCard({ selectedGame, initialTeams = [], gameSummary
                 }}
                 selectedGame={selectedGame}
                 users={users}
+            />
+
+            <RandomTeamsModal
+                duplicateIndexes={randomDuplicateIndexes}
+                error={randomTeamsError}
+                isCreating={isCreatingRandomTeams}
+                isOpen={isRandomModalOpen}
+                onClose={closeRandomTeamsModal}
+                onCreate={handleCreateRandomTeams}
+                onPlayerNameChange={handleRandomPlayerNameChange}
+                playerNames={randomPlayerNames}
             />
         </>
     );

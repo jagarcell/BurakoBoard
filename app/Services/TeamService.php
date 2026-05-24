@@ -76,6 +76,85 @@ class TeamService
     }
 
     /**
+     * Create exactly two random teams from a provided list of player names.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $userId  Identifier of the authenticated user performing the action.
+     * @param  array<string, mixed>  $payload  Validated payload containing players[] entries.
+     * @return array<string, mixed> Game summary payload after creating both teams.
+     * Logic:
+     *   1. Enforce that the game is in progress.
+     *   2. Enforce creator-only access and reject all other roles.
+     *   3. Enforce this as an alternative bootstrap path only when no teams are attached yet.
+     *   4. Normalize incoming names, remove blanks, and enforce a valid count of 4 or 6.
+     *   5. Randomly shuffle names, split evenly, create two teams, attach players, assign seats.
+     *   6. Broadcast and return the refreshed authoritative game summary.
+     */
+    public function createRandomTeams(int $gameId, int $userId, array $payload): array
+    {
+        $game = $this->gameRepository->findGameOrFail($gameId);
+
+        if ($game->status !== GameStatus::InProgress) {
+            throw ValidationException::withMessages([
+                'game' => 'Cannot add teams to a finished game.',
+            ]);
+        }
+
+        if (! $this->gameRepository->isGameCreator($gameId, $userId)) {
+            abort(403, 'Only the game creator can create random teams.');
+        }
+
+        if ($this->teamRepository->gameHasTwoTeams($gameId) || $this->teamRepository->getTeamsForGame($gameId)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'game' => 'Random team creation is only available before teams are created.',
+            ]);
+        }
+
+        $names = collect($payload['players'] ?? [])
+            ->map(static function (mixed $name): string {
+                return preg_replace('/\s+/', ' ', trim((string) ($name ?? '')));
+            })
+            ->filter(static fn (string $name): bool => $name !== '')
+            ->values();
+
+        if (! in_array($names->count(), [4, 6], true)) {
+            throw ValidationException::withMessages([
+                'players' => 'Exactly 4 or 6 players are required to create random teams.',
+            ]);
+        }
+
+        $shuffled = $names->shuffle()->values();
+        $perTeam = (int) ($shuffled->count() / 2);
+        $teamOnePlayers = $shuffled->slice(0, $perTeam)->values();
+        $teamTwoPlayers = $shuffled->slice($perTeam)->values();
+
+        DB::transaction(function () use ($gameId, $teamOnePlayers, $teamTwoPlayers): void {
+            $teamOneName = $this->buildUniqueTeamName($this->composeTeamName($teamOnePlayers->all()));
+            $teamTwoName = $this->buildUniqueTeamName($this->composeTeamName($teamTwoPlayers->all()));
+
+            $teamOne = $this->teamRepository->createTeam(['name' => $teamOneName]);
+            $this->teamRepository->attachTeamToGame($gameId, $teamOne->id);
+
+            foreach ($teamOnePlayers as $name) {
+                $player = $this->playerRepository->createNamedPlayer($name);
+                $this->playerRepository->attachPlayerToTeam($teamOne->id, $player->id);
+                $this->seatRepository->assignPlayerSeat($gameId, $teamOne->id, $player->id);
+            }
+
+            $teamTwo = $this->teamRepository->createTeam(['name' => $teamTwoName]);
+            $this->teamRepository->attachTeamToGame($gameId, $teamTwo->id);
+
+            foreach ($teamTwoPlayers as $name) {
+                $player = $this->playerRepository->createNamedPlayer($name);
+                $this->playerRepository->attachPlayerToTeam($teamTwo->id, $player->id);
+                $this->seatRepository->assignPlayerSeat($gameId, $teamTwo->id, $player->id);
+            }
+        });
+
+        return $this->broadcastAndReturn($gameId);
+    }
+
+    /**
      * Attach an existing global team to a game without creating a new team entity.
      *
      * @param  int  $gameId  Identifier of the game.
@@ -234,6 +313,47 @@ class TeamService
         }
 
         return $this->playerRepository->createNamedPlayer((string) $descriptor['name']);
+    }
+
+    /**
+     * Compose a readable team name from its assigned players.
+     *
+     * @param  array<int, string>  $playerNames  Team player display names.
+     * @return string Human-readable team label.
+     * Logic: use "A & B" for 2-player teams and "A, B & C" for 3-player teams.
+     */
+    private function composeTeamName(array $playerNames): string
+    {
+        $count = count($playerNames);
+
+        if ($count <= 2) {
+            return implode(' & ', $playerNames);
+        }
+
+        $last = array_pop($playerNames);
+
+        return implode(', ', $playerNames) . ' & ' . $last;
+    }
+
+    /**
+     * Build a globally unique team name based on a preferred base name.
+     *
+     * @param  string  $baseName  Preferred team name.
+     * @return string Unique team name safe for persistence.
+     * Logic: if the base name already exists globally, append an incrementing numeric suffix
+     *   in the form "(2)", "(3)", ... until an unused variant is found.
+     */
+    private function buildUniqueTeamName(string $baseName): string
+    {
+        $candidate = $baseName;
+        $suffix = 2;
+
+        while ($this->teamRepository->findTeamByNameGlobally($candidate) !== null) {
+            $candidate = sprintf('%s (%d)', $baseName, $suffix);
+            $suffix++;
+        }
+
+        return $candidate;
     }
 
     /**

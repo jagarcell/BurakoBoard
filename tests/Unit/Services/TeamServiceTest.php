@@ -379,4 +379,159 @@ class TeamServiceTest extends TestCase
         $this->assertArrayHasKey('game', $result);
         $this->assertArrayHasKey('teams', $result);
     }
+
+    public function test_create_random_teams_throws_when_user_is_not_creator(): void
+    {
+        $game         = new Game();
+        $game->status = GameStatus::InProgress;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 50)
+            ->andReturn(false);
+
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+
+        $this->service->createRandomTeams(1, 50, [
+            'players' => ['Alice', 'Bob', 'Carol', 'Dave'],
+        ]);
+    }
+
+    public function test_create_random_teams_throws_for_invalid_player_count(): void
+    {
+        $game         = new Game();
+        $game->status = GameStatus::InProgress;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 7)
+            ->andReturn(true);
+
+        $this->teamRepository->shouldReceive('gameHasTwoTeams')
+            ->once()
+            ->with(1)
+            ->andReturn(false);
+
+        $this->teamRepository->shouldReceive('getTeamsForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(collect());
+
+        $this->expectException(ValidationException::class);
+
+        $this->service->createRandomTeams(1, 7, [
+            'players' => ['Alice', 'Bob', 'Carol'],
+        ]);
+    }
+
+    public function test_create_random_teams_creates_two_teams_and_assigns_all_players(): void
+    {
+        $game         = new Game();
+        $game->status = GameStatus::InProgress;
+
+        $teamOne = new Team(['id' => 10, 'name' => 'Alice & Bob']);
+        $teamOne->id = 10;
+        $teamTwo = new Team(['id' => 11, 'name' => 'Carol & Dave']);
+        $teamTwo->id = 11;
+
+        $playerOne = new Player(['id' => 101, 'display_name' => 'Alice']);
+        $playerOne->id = 101;
+        $playerTwo = new Player(['id' => 102, 'display_name' => 'Bob']);
+        $playerTwo->id = 102;
+        $playerThree = new Player(['id' => 103, 'display_name' => 'Carol']);
+        $playerThree->id = 103;
+        $playerFour = new Player(['id' => 104, 'display_name' => 'Dave']);
+        $playerFour->id = 104;
+
+        $summaryData = $this->makeGameSummaryData(1);
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 5)
+            ->andReturn(true);
+
+        $this->teamRepository->shouldReceive('gameHasTwoTeams')
+            ->once()
+            ->with(1)
+            ->andReturn(false);
+
+        $this->teamRepository->shouldReceive('getTeamsForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(collect());
+
+        DB::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn ($cb) => $cb());
+
+        $this->teamRepository->shouldReceive('findTeamByNameGlobally')
+            ->twice()
+            ->andReturn(null);
+
+        $this->teamRepository->shouldReceive('createTeam')
+            ->twice()
+            ->andReturn($teamOne, $teamTwo);
+
+        $this->teamRepository->shouldReceive('attachTeamToGame')
+            ->once()
+            ->with(1, 10);
+
+        $this->teamRepository->shouldReceive('attachTeamToGame')
+            ->once()
+            ->with(1, 11);
+
+        $this->playerRepository->shouldReceive('createNamedPlayer')
+            ->times(4)
+            ->andReturn($playerOne, $playerTwo, $playerThree, $playerFour);
+
+        $this->playerRepository->shouldReceive('attachPlayerToTeam')
+            ->once()->with(10, 101);
+        $this->playerRepository->shouldReceive('attachPlayerToTeam')
+            ->once()->with(10, 102);
+        $this->playerRepository->shouldReceive('attachPlayerToTeam')
+            ->once()->with(11, 103);
+        $this->playerRepository->shouldReceive('attachPlayerToTeam')
+            ->once()->with(11, 104);
+
+        $this->seatRepository->shouldReceive('assignPlayerSeat')
+            ->once()->with(1, 10, 101);
+        $this->seatRepository->shouldReceive('assignPlayerSeat')
+            ->once()->with(1, 10, 102);
+        $this->seatRepository->shouldReceive('assignPlayerSeat')
+            ->once()->with(1, 11, 103);
+        $this->seatRepository->shouldReceive('assignPlayerSeat')
+            ->once()->with(1, 11, 104);
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
+        $this->gameRepository->shouldReceive('getGameSummary')
+            ->once()
+            ->with(1)
+            ->andReturn($summaryData);
+
+        $result = $this->service->createRandomTeams(1, 5, [
+            'players' => ['Alice', 'Bob', 'Carol', 'Dave'],
+        ]);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
+    }
 }

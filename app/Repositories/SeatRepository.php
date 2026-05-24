@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\Game;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class SeatRepository
@@ -33,6 +34,33 @@ class SeatRepository
                 'game_player_seat.seat_number',
             ])
             ->first();
+    }
+
+    /**
+     * Return all seated players participating in a game.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Support\Collection<int, object> Rows containing player identity and seat data.
+     * Logic: join game_team, team_player, players, and game_player_seat so only players that
+     *   belong to one of the game's teams and currently have a seat assignment in that game are returned.
+     */
+    public function getSeatedPlayersForGame(int $gameId): Collection
+    {
+        return DB::table('game_team')
+            ->join('team_player', 'team_player.team_id', '=', 'game_team.team_id')
+            ->join('players', 'players.id', '=', 'team_player.player_id')
+            ->join('game_player_seat', function ($join) use ($gameId): void {
+                $join->on('game_player_seat.player_id', '=', 'players.id')
+                    ->where('game_player_seat.game_id', '=', $gameId);
+            })
+            ->where('game_team.game_id', $gameId)
+            ->select([
+                'players.id as player_id',
+                'players.display_name',
+                'game_player_seat.seat_number',
+            ])
+            ->orderBy('game_player_seat.seat_number')
+            ->get();
     }
 
     /**

@@ -155,6 +155,131 @@ class RoundServiceTest extends TestCase
         $this->assertArrayHasKey('teams', $result);
     }
 
+    public function test_set_random_initial_shuffler_throws_when_user_is_not_creator(): void
+    {
+        $game                        = new Game();
+        $game->status                = GameStatus::InProgress;
+        $game->current_round_number  = 0;
+        $game->initial_shuffler_seat_number = null;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 77)
+            ->andReturn(false);
+
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+
+        $this->service->setRandomInitialShuffler(1, 77);
+    }
+
+    public function test_set_random_initial_shuffler_throws_when_initial_shuffler_already_set(): void
+    {
+        $game                        = new Game();
+        $game->status                = GameStatus::InProgress;
+        $game->current_round_number  = 0;
+        $game->initial_shuffler_seat_number = 2;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 5)
+            ->andReturn(true);
+
+        $this->expectException(ValidationException::class);
+
+        $this->service->setRandomInitialShuffler(1, 5);
+    }
+
+    public function test_set_random_initial_shuffler_throws_when_no_seated_players_exist(): void
+    {
+        $game                        = new Game();
+        $game->status                = GameStatus::InProgress;
+        $game->current_round_number  = 0;
+        $game->initial_shuffler_seat_number = null;
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 5)
+            ->andReturn(true);
+
+        $this->seatRepository->shouldReceive('getSeatedPlayersForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(collect());
+
+        $this->expectException(ValidationException::class);
+
+        $this->service->setRandomInitialShuffler(1, 5);
+    }
+
+    public function test_set_random_initial_shuffler_persists_random_seat_and_broadcasts(): void
+    {
+        $game                        = new Game();
+        $game->status                = GameStatus::InProgress;
+        $game->current_round_number  = 0;
+        $game->initial_shuffler_seat_number = null;
+
+        $seatedA = new \stdClass();
+        $seatedA->player_id = 11;
+        $seatedA->display_name = 'Alice';
+        $seatedA->seat_number = 1;
+
+        $seatedB = new \stdClass();
+        $seatedB->player_id = 12;
+        $seatedB->display_name = 'Bob';
+        $seatedB->seat_number = 2;
+
+        $summaryData = $this->makeGameSummaryData(1);
+
+        $this->gameRepository->shouldReceive('findGameOrFail')
+            ->once()
+            ->with(1)
+            ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, 5)
+            ->andReturn(true);
+
+        $this->seatRepository->shouldReceive('getSeatedPlayersForGame')
+            ->once()
+            ->with(1)
+            ->andReturn(collect([$seatedA, $seatedB]));
+
+        $this->gameRepository->shouldReceive('updateGameInitialShufflerSeat')
+            ->once()
+            ->with($game, Mockery::on(fn ($seat) => in_array((int) $seat, [1, 2], true)));
+
+        $this->gameRepository->shouldReceive('forgetGameSummaryCache')
+            ->once()
+            ->with(1);
+
+        $this->gameRepository->shouldReceive('getGameSummary')
+            ->once()
+            ->with(1)
+            ->andReturn($summaryData);
+
+        $result = $this->service->setRandomInitialShuffler(1, 5);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('game', $result);
+        $this->assertArrayHasKey('teams', $result);
+    }
+
     public function test_record_round_throws_when_game_is_finished(): void
     {
         $game         = new Game();

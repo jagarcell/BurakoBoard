@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\BatchUpdateTeamRequest;
+use App\Http\Requests\Api\V1\StoreRandomTeamsRequest;
 use App\Http\Requests\Api\V1\StoreTeamRequest;
 use App\Http\Resources\Api\V1\TeamListItemResource;
 use App\Services\TeamService;
@@ -48,6 +49,28 @@ class TeamController extends Controller
     public function store(StoreTeamRequest $request, int $gameId): JsonResponse
     {
         $summary = $this->service->addTeam($gameId, $request->validated());
+
+        return response()->json([
+            'game' => $summary,
+        ], 201);
+    }
+
+    /**
+     * Create two random teams from a user-provided player-name list.
+     *
+     * @param  \App\Http\Requests\Api\V1\StoreRandomTeamsRequest  $request  Validated payload with candidate player names.
+     * @param  int  $gameId  Identifier of the target game.
+     * @return \Illuminate\Http\JsonResponse Updated game summary response.
+     * Logic: delegate role checks and random split orchestration to the service layer, then return
+     *   the refreshed game summary envelope expected by dashboard consumers.
+     */
+    public function storeRandom(StoreRandomTeamsRequest $request, int $gameId): JsonResponse
+    {
+        $summary = $this->service->createRandomTeams(
+            $gameId,
+            (int) auth()->id(),
+            $request->validated(),
+        );
 
         return response()->json([
             'game' => $summary,

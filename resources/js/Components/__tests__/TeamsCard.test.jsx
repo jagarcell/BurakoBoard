@@ -24,6 +24,8 @@ const mockAllTeams = [
 ];
 
 const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress' };
+const selectedGameCreator = { ...selectedGame, user_role: 'creator' };
+const selectedGameViewer = { ...selectedGame, user_role: 'viewer' };
 const finishedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'finished' };
 
 const makeGameSummary = (teams = [], overrides = {}) => ({
@@ -93,6 +95,119 @@ describe('TeamsCard', () => {
         await waitFor(() =>
             expect(screen.getAllByRole('button', { name: 'Create team' })).toHaveLength(2),
         );
+    });
+
+    it('shows random-team button only for creators', async () => {
+        setupGetMocks();
+
+        const { rerender } = render(<TeamsCard initialTeams={[]} selectedGame={selectedGameCreator} />);
+
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Create random teams (optional)' })).toBeInTheDocument(),
+        );
+
+        rerender(<TeamsCard initialTeams={[]} selectedGame={selectedGameViewer} />);
+
+        await waitFor(() =>
+            expect(screen.queryByRole('button', { name: 'Create random teams (optional)' })).not.toBeInTheDocument(),
+        );
+    });
+
+    it('creates two random teams from the creator modal', async () => {
+        setupGetMocks();
+
+        const randomTeams = [
+            makeTeam(31, 'Alice & Bob', [
+                { id: 101, user_id: null, display_name: 'Alice', seat_number: 1 },
+                { id: 102, user_id: null, display_name: 'Bob', seat_number: 3 },
+            ]),
+            makeTeam(32, 'Carol & Dave', [
+                { id: 103, user_id: null, display_name: 'Carol', seat_number: 2 },
+                { id: 104, user_id: null, display_name: 'Dave', seat_number: 4 },
+            ]),
+        ];
+
+        api.post.mockResolvedValueOnce(makeGameSummary(randomTeams));
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGameCreator} />);
+
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Create random teams (optional)' })).toBeInTheDocument(),
+        );
+
+        await userEvent.click(screen.getByRole('button', { name: 'Create random teams (optional)' }));
+
+        expect(screen.getByRole('heading', { name: 'Create random teams (optional)' })).toBeInTheDocument();
+
+        await userEvent.type(screen.getByLabelText('Player 1'), 'Alice');
+        await userEvent.type(screen.getByLabelText('Player 2'), 'Bob');
+        await userEvent.type(screen.getByLabelText('Player 3'), 'Carol');
+        await userEvent.type(screen.getByLabelText('Player 4'), 'Dave');
+
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
+
+        await waitFor(() =>
+            expect(api.post).toHaveBeenCalledWith('/games/5/teams/random', {
+                players: ['Alice', 'Bob', 'Carol', 'Dave', '', ''],
+            }),
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Alice & Bob')).toBeInTheDocument();
+            expect(screen.getByText('Carol & Dave')).toBeInTheDocument();
+        });
+    });
+
+    it('shows random-team API validation errors in the modal', async () => {
+        setupGetMocks();
+
+        api.post.mockRejectedValueOnce({
+            response: {
+                data: {
+                    data: {
+                        errors: {
+                            players: ['Exactly 4 or 6 players are required to create random teams.'],
+                        },
+                    },
+                },
+            },
+        });
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGameCreator} />);
+
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Create random teams (optional)' })).toBeInTheDocument(),
+        );
+
+        await userEvent.click(screen.getByRole('button', { name: 'Create random teams (optional)' }));
+        await userEvent.type(screen.getByLabelText('Player 1'), 'OnlyOne');
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
+
+        await waitFor(() =>
+            expect(screen.getByText('Exactly 4 or 6 players are required to create random teams.')).toBeInTheDocument(),
+        );
+    });
+
+    it('blocks create for duplicate player names and highlights duplicated inputs', async () => {
+        setupGetMocks();
+
+        render(<TeamsCard initialTeams={[]} selectedGame={selectedGameCreator} />);
+
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Create random teams (optional)' })).toBeInTheDocument(),
+        );
+
+        await userEvent.click(screen.getByRole('button', { name: 'Create random teams (optional)' }));
+
+        await userEvent.type(screen.getByLabelText('Player 1'), 'Alice');
+        await userEvent.type(screen.getByLabelText('Player 2'), 'alice');
+
+        await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Duplicate player names are not allowed. Please use unique names.');
+        expect(screen.getByLabelText('Player 1')).toHaveClass('border-rose-500');
+        expect(screen.getByLabelText('Player 2')).toHaveClass('border-rose-500');
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     it('shows one Create team button when game has one team', async () => {

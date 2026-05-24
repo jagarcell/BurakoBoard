@@ -136,6 +136,23 @@ class GameController extends Controller
     }
 
     /**
+     * Randomly select and set the initial cutter for round 1.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @return \Illuminate\Http\JsonResponse Updated game summary response.
+     * Logic: delegates random cutter selection to the round service, which enforces creator-only
+     *   authorization and pre-round constraints before persisting the selected seat anchor.
+     */
+    public function setRandomInitialShuffler(int $gameId): JsonResponse
+    {
+        $summary = $this->roundService->setRandomInitialShuffler($gameId, (int) auth()->id());
+
+        return response()->json([
+            'game' => $summary,
+        ]);
+    }
+
+    /**
      * Permanently delete a game that has no recorded rounds.
      *
      * @param  int  $gameId  Identifier of the game to delete.
