@@ -182,6 +182,10 @@ class RoundService
     {
         $game = $this->gameRepository->findGameOrFail($gameId);
 
+        if (! $this->gameRepository->isGameCreator($gameId, (int) auth()->id())) {
+            abort(403, 'Only the game creator can amend rounds.');
+        }
+
         $scores       = collect($payload['scores']);
         $teams        = $this->teamRepository->getTeamsForGame($gameId);
         $teamIds      = $teams->pluck('id');

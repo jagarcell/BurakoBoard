@@ -473,6 +473,11 @@ class RoundServiceTest extends TestCase
             ->with(1)
             ->andReturn($game);
 
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, Mockery::type('int'))
+            ->andReturn(true);
+
         $this->teamRepository->shouldReceive('getTeamsForGame')
             ->once()
             ->with(1)
@@ -580,6 +585,11 @@ class RoundServiceTest extends TestCase
             ->once()
             ->with(1)
             ->andReturn($game);
+
+        $this->gameRepository->shouldReceive('isGameCreator')
+            ->once()
+            ->with(1, Mockery::type('int'))
+            ->andReturn(true);
 
         $this->teamRepository->shouldReceive('getTeamsForGame')
             ->once()
