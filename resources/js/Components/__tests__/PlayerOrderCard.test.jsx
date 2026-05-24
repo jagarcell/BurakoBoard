@@ -14,6 +14,8 @@ vi.mock('@/api/client', () => ({
 }));
 
 const selectedGame = { id: 5, name: 'Friday Table', target_points: 2000, status: 'in_progress' };
+const selectedGameCreator = { ...selectedGame, user_role: 'creator' };
+const selectedGameViewer = { ...selectedGame, user_role: 'viewer' };
 
 const makeGameSummary = (teams = [], overrides = {}) => ({
     game: {
@@ -163,6 +165,83 @@ describe('PlayerOrderCard', () => {
             expect(api.put).toHaveBeenCalledWith('/games/5/shuffler', {
                 player_id: 1,
             }),
+        );
+    });
+
+    it('shows random cutter button only for creator before initial cutter assignment', () => {
+        const teams = [
+            makeTeam(10, 'Team Alpha', [{ id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 }]),
+            makeTeam(11, 'Team Beta', [{ id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 }]),
+        ];
+
+        const { rerender } = render(
+            <PlayerOrderCard
+                gameSummary={makeGameSummary(teams)}
+                selectedGame={selectedGameCreator}
+                teams={teams}
+            />,
+        );
+
+        expect(screen.getByRole('button', { name: 'Pick random cutter' })).toBeInTheDocument();
+
+        rerender(
+            <PlayerOrderCard
+                gameSummary={makeGameSummary(teams, { game: { initial_shuffler_seat_number: 1 } })}
+                selectedGame={selectedGameCreator}
+                teams={teams}
+            />,
+        );
+
+        expect(screen.queryByRole('button', { name: 'Pick random cutter' })).not.toBeInTheDocument();
+
+        rerender(
+            <PlayerOrderCard
+                gameSummary={makeGameSummary(teams)}
+                selectedGame={selectedGameViewer}
+                teams={teams}
+            />,
+        );
+
+        expect(screen.queryByRole('button', { name: 'Pick random cutter' })).not.toBeInTheDocument();
+    });
+
+    it('calls random shuffler endpoint when creator clicks random cutter button', async () => {
+        const teams = [
+            makeTeam(10, 'Team Alpha', [
+                { id: 1, user_id: null, display_name: 'Carlos', seat_number: 1 },
+                { id: 3, user_id: null, display_name: 'Diana', seat_number: 3 },
+            ]),
+            makeTeam(11, 'Team Beta', [
+                { id: 2, user_id: null, display_name: 'Bruno', seat_number: 2 },
+                { id: 4, user_id: null, display_name: 'Elisa', seat_number: 4 },
+            ]),
+        ];
+
+        api.put.mockResolvedValueOnce({
+            data: {
+                data: {
+                    game: {
+                        game: { id: 5, status: 'in_progress', current_round_number: 0, initial_shuffler_seat_number: 2 },
+                        teams,
+                        rounds: [],
+                        round_roles: [],
+                    },
+                },
+            },
+        });
+
+        render(
+            <PlayerOrderCard
+                gameSummary={makeGameSummary(teams)}
+                selectedGame={selectedGameCreator}
+                teams={teams}
+            />,
+        );
+
+        await userEvent.click(screen.getByRole('button', { name: 'Pick random cutter' }));
+
+        await waitFor(() =>
+            expect(api.put).toHaveBeenCalledWith('/games/5/shuffler/random'),
         );
     });
 

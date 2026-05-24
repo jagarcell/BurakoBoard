@@ -34,6 +34,7 @@ const ROLE_CHIP_COLORS = {
  */
 export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary = null, onTeamsChange }) {
     const [cutterError, setCutterError] = useState('');
+    const [isPickingRandomCutter, setIsPickingRandomCutter] = useState(false);
     const [collapsed, setCollapsed] = useState(false);
 
     const roundRoles = gameSummary?.round_roles ?? [];
@@ -65,6 +66,8 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
 
     const isGameEditable = selectedGame?.status === 'in_progress';
     const isViewer = selectedGame?.user_role === 'viewer';
+    const isCreator = selectedGame?.user_role === 'creator';
+    const hasInitialCutter = initialCutterSeatNumber != null;
     const playerCountMismatch =
         teams.length === 2 && teams[0].players.length !== teams[1].players.length;
 
@@ -122,6 +125,33 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
         }
     };
 
+    /**
+     * Sends a PUT request to randomly select and set the initial cutter.
+     *
+     * @return {Promise<void>}
+     *
+     * Logic: Calls the random-shuffler endpoint, then forwards the updated summary to the
+     * parent via onTeamsChange so role chips and button visibility react immediately.
+     */
+    const handlePickRandomCutter = async () => {
+        setIsPickingRandomCutter(true);
+
+        try {
+            const response = await api.put(`/games/${selectedGame.id}/shuffler/random`);
+
+            const summary = response.data?.data?.game ?? {};
+            const newTeams = summary.teams ?? [];
+            onTeamsChange?.(newTeams, summary);
+            setCutterError('');
+        } catch (error) {
+            const apiErrors = error.response?.data?.data?.errors ?? {};
+            const firstApiError = Object.values(apiErrors).flat()[0];
+            setCutterError(firstApiError || 'Unable to select the initial cutter right now.');
+        } finally {
+            setIsPickingRandomCutter(false);
+        }
+    };
+
     if (! canShow) {
         return null;
     }
@@ -171,7 +201,21 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
 
             {!collapsed && (<div className="px-6 py-5">
                 {cutterCandidates.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="space-y-3">
+                        {isFirstRound && isCreator && !hasInitialCutter ? (
+                            <div>
+                                <button
+                                    className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    disabled={isPickingRandomCutter}
+                                    onClick={handlePickRandomCutter}
+                                    type="button"
+                                >
+                                    Pick random cutter
+                                </button>
+                            </div>
+                        ) : null}
+
+                        <div className="flex flex-wrap gap-2">
                         {cutterCandidates.map((player) => {
                             const currentRole = getCurrentRoundRoleForPlayer(player.id);
                             const isHighlightedPlayer = isFirstRound
@@ -199,6 +243,7 @@ export default function PlayerOrderCard({ selectedGame, teams = [], gameSummary 
                                 </button>
                             );
                         })}
+                        </div>
                     </div>
                 ) : (
                     <p className="text-sm text-indigo-700">

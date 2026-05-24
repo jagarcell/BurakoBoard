@@ -77,6 +77,57 @@ class RoundService
     }
 
     /**
+     * Randomly select and set the initial cutter before round 1 starts.
+     *
+     * @param  int  $gameId  Identifier of the game.
+     * @param  int  $userId  Identifier of the authenticated user requesting random selection.
+     * @return array<string, mixed> Updated game summary payload.
+     * Logic: enforce creator-only access and pre-round constraints, require that no initial
+     * cutter is already assigned, pick one seated player at random, persist that seat as the
+     * initial cutter anchor, then broadcast and return the refreshed summary.
+     */
+    public function setRandomInitialShuffler(int $gameId, int $userId): array
+    {
+        $game = $this->gameRepository->findGameOrFail($gameId);
+
+        if (! $this->gameRepository->isGameCreator($gameId, $userId)) {
+            abort(403, 'Only the game creator can set the initial cutter randomly.');
+        }
+
+        if ($game->status !== GameStatus::InProgress) {
+            throw ValidationException::withMessages([
+                'game' => 'Cannot set cutter for a finished game.',
+            ]);
+        }
+
+        if ((int) $game->current_round_number > 0) {
+            throw ValidationException::withMessages([
+                'game' => 'Initial cutter can only be set before recording the first round.',
+            ]);
+        }
+
+        if ($game->initial_shuffler_seat_number !== null) {
+            throw ValidationException::withMessages([
+                'game' => 'Initial cutter has already been assigned.',
+            ]);
+        }
+
+        $seatedPlayers = $this->seatRepository->getSeatedPlayersForGame($gameId);
+
+        if ($seatedPlayers->isEmpty()) {
+            throw ValidationException::withMessages([
+                'player_id' => 'At least one seated player is required to select the initial cutter.',
+            ]);
+        }
+
+        $selected = $seatedPlayers->random();
+
+        $this->gameRepository->updateGameInitialShufflerSeat($game, (int) $selected->seat_number);
+
+        return $this->broadcastAndReturn($gameId);
+    }
+
+    /**
      * Record scores for one game round and update running totals.
      *
      * @param  int  $gameId  Identifier of the game.
