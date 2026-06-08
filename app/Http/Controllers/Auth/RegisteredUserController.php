@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -20,6 +21,11 @@ class RegisteredUserController extends Controller
 
     /**
      * Display the registration view.
+     *
+     * @param Request $request
+     * @return Response
+     * Logic: Render the registration page and optionally preserve an invitation
+     * game id in session when the link contains `game` and `email` query params.
      */
     public function create(Request $request): Response
     {
@@ -36,7 +42,12 @@ class RegisteredUserController extends Controller
     /**
      * Handle an incoming registration request.
      *
+     * @param Request $request
+     * @return RedirectResponse
      * @throws \Illuminate\Validation\ValidationException
+     * Logic: Validate input and create a new user. If an account already
+     * exists with `is_guest = 1`, send a password reset link to allow the
+     * guest to claim the account instead of creating a duplicate.
      */
     public function store(Request $request): RedirectResponse
     {
@@ -50,7 +61,26 @@ class RegisteredUserController extends Controller
 
         if ($existing) {
             if ($existing->is_guest) {
-                return back()->withErrors(['email' => 'An invited guest account exists for this email. Please claim it via the password reset flow.']);
+                // Claim the guest account: update name, password and clear guest flag.
+                $existing->name = $request->name;
+                $existing->password = Hash::make($request->password);
+                $existing->is_guest = false;
+                $existing->save();
+
+                event(new Registered($existing));
+
+                Auth::login($existing);
+
+                // Regenerate session and accept any pending invitation like normal flow.
+                $request->session()->regenerate();
+
+                $invitationGameId = $request->session()->pull('invitation_game_id');
+
+                if ($invitationGameId) {
+                    $this->invitations->acceptInvitationIfPending((int) $invitationGameId, (int) auth()->id());
+                }
+
+                return redirect()->intended(route('dashboard', absolute: false));
             }
 
             return back()->withErrors(['email' => 'The email has already been taken.']);
