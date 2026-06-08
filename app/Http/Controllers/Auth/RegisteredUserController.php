@@ -46,8 +46,10 @@ class RegisteredUserController extends Controller
      * @return RedirectResponse
      * @throws \Illuminate\Validation\ValidationException
      * Logic: Validate input and create a new user. If an account already
-     * exists with `is_guest = 1`, send a password reset link to allow the
-     * guest to claim the account instead of creating a duplicate.
+     * exists with `is_guest = 1`, claim the guest account immediately.
+     * For brand-new emails, create the user, send an email verification
+     * notification and do not accept any pending invitation until the
+     * email address is verified.
      */
     public function store(Request $request): RedirectResponse
     {
@@ -92,20 +94,20 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
+        // Dispatch the Registered event and send a verification email. Keep
+        // the user logged in so they can complete verification (routes are
+        // protected by the 'verified' middleware). Do NOT accept pending
+        // invitations until the email is verified.
         event(new Registered($user));
+
+        $user->sendEmailVerificationNotification();
 
         Auth::login($user);
 
-        // Regenerate session to prevent fixation, then handle any invitation that
-        // was primed in the session (visit via email link). If present, silently
-        // accept the pending invitation so the newly-registered user becomes a viewer.
+        // Regenerate session to prevent fixation. Invitation acceptance is
+        // deferred to the email verification handler which will pull the
+        // stored `invitation_game_id` from session after verification.
         $request->session()->regenerate();
-
-        $invitationGameId = $request->session()->pull('invitation_game_id');
-
-        if ($invitationGameId) {
-            $this->invitations->acceptInvitationIfPending((int) $invitationGameId, (int) auth()->id());
-        }
 
         return redirect()->intended(route('dashboard', absolute: false));
     }
