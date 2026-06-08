@@ -28,6 +28,7 @@ class GameInvitationMail extends Mailable
         public readonly Game $game,
         public readonly User $invitee,
         public readonly User $inviter,
+        public readonly ?string $magicLink = null,
     ) {
     }
 

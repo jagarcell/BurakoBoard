@@ -129,9 +129,11 @@
             </div>
 
             <div class="cta-wrapper">
-                <a class="cta-button" href="{{ config('app.url') }}/login?email={{ rawurlencode($invitee->email) }}&game={{ $game->id }}">
-                    Open BurakoBoard
-                </a>
+                @if(! empty($magicLink))
+                    <a class="cta-button" href="{{ $magicLink }}">Open BurakoBoard</a>
+                @else
+                    <a class="cta-button" href="{{ config('app.url') }}/login?email={{ rawurlencode($invitee->email) }}&game={{ $game->id }}">Open BurakoBoard</a>
+                @endif
             </div>
 
             <p class="note">

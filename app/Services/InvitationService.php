@@ -93,46 +93,79 @@ class InvitationService
      *      notification bell updates in real time without a page reload.
      *   7. Return the count of new invitations created so the controller can include it in the response.
      */
-    public function sendInvitations(int $gameId, array $userIds, User $inviter): int
+    public function sendInvitations(int $gameId, array $userIds, array $emails, User $inviter): int
     {
         $game = $this->gameRepository->findGameOrFail($gameId);
+        $totalSent = 0;
 
+        // Handle registered user IDs as before: exclude already-linked users, attach pivot rows, and send mails + broadcasts.
         $existingIds = $this->invitationRepository->getExistingGameUserIds($gameId, $userIds);
         $newUserIds  = array_values(array_diff($userIds, $existingIds));
 
-        if (empty($newUserIds)) {
-            return 0;
-        }
+        if (! empty($newUserIds)) {
+            $this->invitationRepository->bulkAttachPendingInviteesToGame($gameId, $newUserIds);
 
-        $this->invitationRepository->bulkAttachPendingInviteesToGame($gameId, $newUserIds);
+            $invitees = $this->invitationRepository->getUsersByIds($newUserIds);
 
-        $invitees = $this->invitationRepository->getUsersByIds($newUserIds);
-
-        foreach ($invitees as $invitee) {
-            try {
-                Mail::to($invitee->email)->send(new GameInvitationMail($game, $invitee, $inviter));
-            } catch (TransportExceptionInterface $e) {
-                Log::warning('Invitation email failed', [
-                    'game_id'   => $game->id,
-                    'recipient' => $invitee->email,
-                    'reason'    => $e->getMessage(),
-                ]);
+            foreach ($invitees as $invitee) {
+                try {
+                    Mail::to($invitee->email)->send(new GameInvitationMail($game, $invitee, $inviter));
+                } catch (TransportExceptionInterface $e) {
+                    Log::warning('Invitation email failed', [
+                        'game_id'   => $game->id,
+                        'recipient' => $invitee->email,
+                        'reason'    => $e->getMessage(),
+                    ]);
+                }
+                broadcast(new GameInvitationSent(
+                    inviteeId:   $invitee->id,
+                    gameId:      $game->id,
+                    gameName:    $game->name,
+                    inviterName: $inviter->name,
+                ))->toOthers();
             }
-            broadcast(new GameInvitationSent(
-                inviteeId:   $invitee->id,
-                gameId:      $game->id,
-                gameName:    $game->name,
-                inviterName: $inviter->name,
-            ))->toOthers();
+
+            Log::info('Invitations sent', [
+                'game_id'    => $game->id,
+                'count'      => count($newUserIds),
+                'recipients' => $invitees->pluck('email')->all(),
+            ]);
+
+            $totalSent += count($newUserIds);
         }
 
-        Log::info('Invitations sent', [
-            'game_id'    => $game->id,
-            'count'      => count($newUserIds),
-            'recipients' => $invitees->pluck('email')->all(),
-        ]);
+        // Handle raw email invites for non-registered users: persist an invitation token and send a magic link.
+        $emails = array_values(array_filter(array_map('trim', $emails ?? [])));
+        if (! empty($emails)) {
+            foreach ($emails as $email) {
+                // Create a lightweight invitee model so the Blade mailer has name/email properties.
+                $invitee = new User(['name' => $email, 'email' => $email]);
 
-        return count($newUserIds);
+                try {
+                    $invitation = $this->invitationRepository->createInvitationForEmail($email, $game->id, $inviter->id, now()->addDays(7));
+
+                    $magicLink = route('invitation.accept', ['token' => $invitation->token], true);
+
+                    Mail::to($email)->send(new GameInvitationMail($game, $invitee, $inviter, $magicLink));
+                } catch (TransportExceptionInterface $e) {
+                    Log::warning('Invitation email failed', [
+                        'game_id'   => $game->id,
+                        'recipient' => $email,
+                        'reason'    => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            Log::info('Invitations sent (emails only)', [
+                'game_id'    => $game->id,
+                'count'      => count($emails),
+                'recipients' => $emails,
+            ]);
+
+            $totalSent += count($emails);
+        }
+
+        return $totalSent;
     }
 
     /**
@@ -207,6 +240,6 @@ class InvitationService
             return 0;
         }
 
-        return $this->sendInvitations($newGameId, $userIds, $inviter);
+        return $this->sendInvitations($newGameId, $userIds, [], $inviter);
     }
 }

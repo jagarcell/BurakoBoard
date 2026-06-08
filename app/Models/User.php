@@ -59,6 +59,9 @@ class User extends Authenticatable
         'google_id',
         'apple_id',
         'email_verified_at',
+        'is_guest',
+        'invited_by_id',
+        'invited_at',
     ];
 
     /**
@@ -81,6 +84,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'invited_at' => 'datetime',
         ];
     }
 
