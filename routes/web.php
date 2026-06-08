@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::redirect('/', '/dashboard');
+Route::get('invite/accept', [\App\Http\Controllers\InvitationAcceptController::class, 'accept'])->name('invitation.accept');
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
