@@ -25,6 +25,9 @@ export default function InviteUsersModal({ isOpen, onClose, gameId }) {
     const [isLoading, setIsLoading] = useState(false);
     const [loadError, setLoadError] = useState('');
     const [selectedIds, setSelectedIds] = useState(new Set());
+    const [selectedEmails, setSelectedEmails] = useState(new Set());
+    const [emailInput, setEmailInput] = useState('');
+    const [emailInvites, setEmailInvites] = useState([]);
     const [isSending, setIsSending] = useState(false);
     const [sendError, setSendError] = useState('');
     const [sendSuccess, setSendSuccess] = useState('');
@@ -103,8 +106,37 @@ export default function InviteUsersModal({ isOpen, onClose, gameId }) {
      * On success, shows the server-reported invite count, clears selected IDs, and
      * refreshes page 1 to remove newly-invited users from the list.
      */
+    const toggleEmail = (email) => {
+        setSelectedEmails((current) => {
+            const next = new Set(current);
+            if (next.has(email)) next.delete(email);
+            else next.add(email);
+            return next;
+        });
+    };
+
+    const isValidEmail = (value) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    };
+
+    const addEmailInvite = () => {
+        const email = emailInput.trim();
+        if (!isValidEmail(email)) return;
+
+        if (!emailInvites.includes(email)) {
+            setEmailInvites((cur) => [email, ...cur]);
+            setSelectedEmails((cur) => {
+                const next = new Set(cur);
+                next.add(email);
+                return next;
+            });
+        }
+
+        setEmailInput('');
+    };
+
     const handleSend = async () => {
-        if (!gameId || selectedIds.size === 0 || isSending) return;
+        if (!gameId || (selectedIds.size === 0 && selectedEmails.size === 0) || isSending) return;
 
         setIsSending(true);
         setSendError('');
@@ -113,7 +145,7 @@ export default function InviteUsersModal({ isOpen, onClose, gameId }) {
         try {
             const response = await api.post(
                 `/games/${gameId}/invitations`,
-                { user_ids: Array.from(selectedIds) },
+                { user_ids: Array.from(selectedIds), emails: Array.from(selectedEmails) },
             );
             const count = response.data?.data?.invited_count ?? 0;
 
@@ -123,6 +155,8 @@ export default function InviteUsersModal({ isOpen, onClose, gameId }) {
                     : `${count} invitation${count === 1 ? '' : 's'} sent successfully.`,
             );
             setSelectedIds(new Set());
+            setSelectedEmails(new Set());
+            setEmailInvites([]);
             fetchUsers(1);
         } catch {
             setSendError('Unable to send invitations right now. Please try again.');
@@ -175,27 +209,62 @@ export default function InviteUsersModal({ isOpen, onClose, gameId }) {
                     <p className="py-4 text-center text-sm font-medium text-red-600">
                         {loadError}
                     </p>
-                ) : inviteUsers.length === 0 ? (
-                    <p className="py-4 text-center text-sm text-slate-500">
-                        No users available to invite.
-                    </p>
                 ) : (
-                    <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200" role="list">
-                        {inviteUsers.map((user) => (
-                            <li key={user.id}>
-                                <label className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-slate-50">
-                                    <Checkbox
-                                        checked={selectedIds.has(user.id)}
-                                        id={`invite-user-${user.id}`}
-                                        onChange={() => toggleUser(user.id)}
-                                    />
-                                    <span className="text-sm text-slate-800">
-                                        {user.name}
-                                    </span>
-                                </label>
-                            </li>
-                        ))}
-                    </ul>
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                            <input
+                                aria-label="Invite by email"
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                placeholder="enter an email address"
+                                type="email"
+                                value={emailInput}
+                                onChange={(e) => setEmailInput(e.target.value)}
+                            />
+                            <button
+                                className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                                onClick={addEmailInvite}
+                                disabled={!isValidEmail(emailInput)}
+                                type="button"
+                                aria-label="Add email invite"
+                            >
+                                +
+                            </button>
+                        </div>
+
+                        {inviteUsers.length === 0 && emailInvites.length === 0 ? (
+                            <p className="py-4 text-center text-sm text-slate-500">No users available to invite.</p>
+                        ) : (
+                            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200" role="list">
+                                {emailInvites.map((email) => (
+                                    <li key={`email-${email}`}>
+                                        <label className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-slate-50">
+                                            <Checkbox
+                                                checked={selectedEmails.has(email)}
+                                                id={`invite-email-${email}`}
+                                                onChange={() => toggleEmail(email)}
+                                            />
+                                            <span className="text-sm text-slate-800">{email}</span>
+                                        </label>
+                                    </li>
+                                ))}
+
+                                {inviteUsers.map((user) => (
+                                    <li key={user.id}>
+                                        <label className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-slate-50">
+                                            <Checkbox
+                                                checked={selectedIds.has(user.id)}
+                                                id={`invite-user-${user.id}`}
+                                                onChange={() => toggleUser(user.id)}
+                                            />
+                                            <span className="text-sm text-slate-800">
+                                                {user.name}
+                                            </span>
+                                        </label>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
                 )}
 
                 {!isLoading && inviteUsers.length > 0 && inviteMeta.last_page > 1 && (
@@ -235,7 +304,7 @@ export default function InviteUsersModal({ isOpen, onClose, gameId }) {
                         Close
                     </SecondaryButton>
                     <PrimaryButton
-                        disabled={selectedIds.size === 0 || isSending}
+                        disabled={(selectedIds.size === 0 && selectedEmails.size === 0) || isSending}
                         onClick={handleSend}
                         type="button"
                     >
