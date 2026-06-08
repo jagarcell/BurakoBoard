@@ -1311,7 +1311,7 @@ describe('GameCard', () => {
         await waitFor(() =>
             expect(api.post).toHaveBeenCalledWith(
                 '/games/10/invitations',
-                { user_ids: [101] },
+                { user_ids: [101], emails: [] },
             ),
         );
 

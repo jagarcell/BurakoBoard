@@ -18,6 +18,11 @@ class NewPasswordController extends Controller
 {
     /**
      * Display the password reset view.
+     *
+     * @param Request $request
+     * @return Response
+     * Logic: Render the password reset page with the provided token and email so
+     * the user can set a new password. This supports guest account claiming.
      */
     public function create(Request $request): Response
     {
@@ -30,7 +35,12 @@ class NewPasswordController extends Controller
     /**
      * Handle an incoming new password request.
      *
+     * @param Request $request
+     * @return RedirectResponse
      * @throws \Illuminate\Validation\ValidationException
+     * Logic: Validate the reset token and new password, update the user's
+     * password, clear the guest flag (`is_guest`) so the account is claimed,
+     * and trigger the PasswordReset event.
      */
     public function store(Request $request): RedirectResponse
     {
@@ -49,6 +59,7 @@ class NewPasswordController extends Controller
                 $user->forceFill([
                     'password' => Hash::make($request->password),
                     'remember_token' => Str::random(60),
+                    'is_guest' => false,
                 ])->save();
 
                 event(new PasswordReset($user));

@@ -97,7 +97,7 @@ class GameInvitationStoreTest extends TestCase
             ->postJson("/api/v1/games/{$game->id}/invitations", [])
             ->assertUnprocessable()
             ->assertJsonPath('status', 'error')
-            ->assertJsonStructure(['data' => ['errors' => ['user_ids']]]);
+            ->assertJsonStructure(['data' => ['errors' => ['invitations']]]);
     }
 
     /**
@@ -116,7 +116,7 @@ class GameInvitationStoreTest extends TestCase
             ->postJson("/api/v1/games/{$game->id}/invitations", ['user_ids' => []])
             ->assertUnprocessable()
             ->assertJsonPath('status', 'error')
-            ->assertJsonStructure(['data' => ['errors' => ['user_ids']]]);
+            ->assertJsonStructure(['data' => ['errors' => ['invitations']]]);
     }
 
     /**

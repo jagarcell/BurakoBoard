@@ -784,140 +784,146 @@ export default function GameCard({ onGameSelect = () => {}, preselectedGameId = 
                             </label>
 
                             <div className="flex w-full flex-col gap-3 sm:flex-row lg:items-center">
-                                <label className="sr-only" htmlFor="game-selector">
-                                    Select or create a game
-                                </label>
-                                <div className="relative w-full" ref={dropdownAnchorRef}>
-                                {isDropdownOpen && (
-                                    <div
-                                        className="fixed inset-0 z-40"
-                                        onClick={() => setIsDropdownOpen(false)}
-                                    />
-                                )}
-
-                                <button
-                                    id="game-selector"
-                                    type="button"
-                                    role="combobox"
-                                    aria-haspopup="listbox"
-                                    aria-expanded={isDropdownOpen}
-                                    aria-controls="game-listbox"
-                                    className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-left text-sm shadow-sm transition hover:border-slate-400 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-                                    disabled={isLoading || games.length === 0}
-                                    onClick={() => {
-                                        const rect = dropdownAnchorRef.current?.getBoundingClientRect();
-                                        setDropdownRect(rect ?? null);
-                                        setIsDropdownOpen((o) => !o);
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Escape') {
-                                            setIsDropdownOpen(false);
-                                        }
-                                    }}
-                                >
-                                    <span className="flex min-w-0 items-center gap-2.5">
-                                        {selectedGame === null ? (
-                                            <span className="text-slate-400">
-                                                {isLoading
-                                                    ? 'Loading games\u2026'
-                                                    : games.length === 0
-                                                      ? 'No games available'
-                                                      : 'Select or create a game'}
-                                            </span>
-                                        ) : (
-                                            <>
-                                                {gameRoleIcon(selectedGame.user_role)}
-                                                <span className="min-w-0 truncate text-slate-900">
-                                                    {selectedGame.name}{' '}
-                                                    <span className="text-slate-400">
-                                                        ({selectedGame.target_points} pts)
-                                                    </span>
-                                                </span>
-                                            </>
+                                {!user?.is_guest ? (
+                                    <>
+                                        <label className="sr-only" htmlFor="game-selector">
+                                            Select or create a game
+                                        </label>
+                                        <div className="relative w-full" ref={dropdownAnchorRef}>
+                                        {isDropdownOpen && (
+                                            <div
+                                                className="fixed inset-0 z-40"
+                                                onClick={() => setIsDropdownOpen(false)}
+                                            />
                                         )}
-                                    </span>
-                                    <svg
-                                        aria-hidden="true"
-                                        className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-150 ${isDropdownOpen ? 'rotate-180' : ''}`}
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                </button>
 
-                                {isDropdownOpen && visibleGames.length > 0 && dropdownRect && createPortal(
-                                    <ul
-                                        id="game-listbox"
-                                        role="listbox"
-                                        style={{
-                                            position: 'fixed',
-                                            top: dropdownRect.bottom + 6,
-                                            left: dropdownRect.left,
-                                            width: dropdownRect.width,
-                                        }}
-                                        className="z-50 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1.5 shadow-xl"
-                                    >
-                                        <li
-                                            role="option"
-                                            aria-label="Select or create a game"
-                                            aria-selected={selectedGameId === ''}
-                                            className={`cursor-pointer px-4 py-2.5 text-sm italic text-slate-400 hover:bg-slate-50 ${selectedGameId === '' ? 'bg-slate-50' : ''}`}
+                                        <button
+                                            id="game-selector"
+                                            type="button"
+                                            role="combobox"
+                                            aria-haspopup="listbox"
+                                            aria-expanded={isDropdownOpen}
+                                            aria-controls="game-listbox"
+                                            className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-left text-sm shadow-sm transition hover:border-slate-400 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                            disabled={isLoading || games.length === 0}
                                             onClick={() => {
-                                                setSelectedGameId('');
-                                                setIsDropdownOpen(false);
+                                                const rect = dropdownAnchorRef.current?.getBoundingClientRect();
+                                                setDropdownRect(rect ?? null);
+                                                setIsDropdownOpen((o) => !o);
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Escape') {
+                                                    setIsDropdownOpen(false);
+                                                }
                                             }}
                                         >
-                                            Select or create a game
-                                        </li>
-
-                                        {visibleGames.map((game) => (
-                                            <li
-                                                key={game.id}
-                                                role="option"
-                                                aria-label={`${game.name} (${game.target_points} pts)`}
-                                                aria-selected={String(game.id) === selectedGameId}
-                                                className={`flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 ${String(game.id) === selectedGameId ? 'bg-indigo-50' : ''}`}
-                                                onClick={() => {
-                                                    setSelectedGameId(String(game.id));
-                                                    setIsDropdownOpen(false);
-                                                }}
-                                            >
-                                                <div className="flex min-w-0 items-center gap-2.5">
-                                                    {gameRoleIcon(game.user_role)}
-                                                    <span className="truncate font-medium text-slate-800">
-                                                        {game.name}
+                                            <span className="flex min-w-0 items-center gap-2.5">
+                                                {selectedGame === null ? (
+                                                    <span className="text-slate-400">
+                                                        {isLoading
+                                                            ? 'Loading games\u2026'
+                                                            : games.length === 0
+                                                              ? 'No games available'
+                                                              : 'Select or create a game'}
                                                     </span>
-                                                </div>
-                                                <span className="shrink-0 text-xs text-slate-400">
-                                                    {game.target_points} pts
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>,
-                                    document.body,
-                                )}
-                            </div>
+                                                ) : (
+                                                    <>
+                                                        {gameRoleIcon(selectedGame.user_role)}
+                                                        <span className="min-w-0 truncate text-slate-900">
+                                                            {selectedGame.name}{' '}
+                                                            <span className="text-slate-400">
+                                                                ({selectedGame.target_points} pts)
+                                                            </span>
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </span>
+                                            <svg
+                                                aria-hidden="true"
+                                                className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-150 ${isDropdownOpen ? 'rotate-180' : ''}`}
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </button>
 
-                            {selectedGameId === '' ? (
-                                <PrimaryButton
-                                    className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
-                                    onClick={openCreateModal}
-                                    type="button"
-                                >
-                                    New
-                                </PrimaryButton>
-                            ) : selectedGame?.user_role !== 'viewer' ? (
-                                <PrimaryButton
-                                    className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
-                                    onClick={openEditModal}
-                                    type="button"
-                                >
-                                    Edit
-                                </PrimaryButton>
-                            ) : null}
+                                        {isDropdownOpen && visibleGames.length > 0 && dropdownRect && createPortal(
+                                            <ul
+                                                id="game-listbox"
+                                                role="listbox"
+                                                style={{
+                                                    position: 'fixed',
+                                                    top: dropdownRect.bottom + 6,
+                                                    left: dropdownRect.left,
+                                                    width: dropdownRect.width,
+                                                }}
+                                                className="z-50 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1.5 shadow-xl"
+                                            >
+                                                <li
+                                                    role="option"
+                                                    aria-label="Select or create a game"
+                                                    aria-selected={selectedGameId === ''}
+                                                    className={`cursor-pointer px-4 py-2.5 text-sm italic text-slate-400 hover:bg-slate-50 ${selectedGameId === '' ? 'bg-slate-50' : ''}`}
+                                                    onClick={() => {
+                                                        setSelectedGameId('');
+                                                        setIsDropdownOpen(false);
+                                                    }}
+                                                >
+                                                    Select or create a game
+                                                </li>
+
+                                                {visibleGames.map((game) => (
+                                                    <li
+                                                        key={game.id}
+                                                        role="option"
+                                                        aria-label={`${game.name} (${game.target_points} pts)`}
+                                                        aria-selected={String(game.id) === selectedGameId}
+                                                        className={`flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 ${String(game.id) === selectedGameId ? 'bg-indigo-50' : ''}`}
+                                                        onClick={() => {
+                                                            setSelectedGameId(String(game.id));
+                                                            setIsDropdownOpen(false);
+                                                        }}
+                                                    >
+                                                        <div className="flex min-w-0 items-center gap-2.5">
+                                                            {gameRoleIcon(game.user_role)}
+                                                            <span className="truncate font-medium text-slate-800">
+                                                                {game.name}
+                                                            </span>
+                                                        </div>
+                                                        <span className="shrink-0 text-xs text-slate-400">
+                                                            {game.target_points} pts
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>,
+                                            document.body,
+                                        )}
+                                    </div>
+
+                                    {selectedGameId === '' ? (
+                                        <PrimaryButton
+                                            className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
+                                            onClick={openCreateModal}
+                                            type="button"
+                                        >
+                                            New
+                                        </PrimaryButton>
+                                    ) : selectedGame?.user_role !== 'viewer' ? (
+                                        <PrimaryButton
+                                            className="min-h-12 justify-center rounded-2xl px-6 text-[11px]"
+                                            onClick={openEditModal}
+                                            type="button"
+                                        >
+                                            Edit
+                                        </PrimaryButton>
+                                    ) : null}
+                                    </>
+                                ) : (
+                                    <p className="text-sm text-slate-600">Guest accounts cannot select or create games. Please claim your account to continue.</p>
+                                )}
                             </div>
                         </div>
                     </div>

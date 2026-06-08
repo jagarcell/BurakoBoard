@@ -8,6 +8,8 @@ use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Models\Invitation;
+use Illuminate\Support\Str;
 
 class InvitationRepository
 {
@@ -72,6 +74,7 @@ class InvitationRepository
         return User::query()
             ->select(['users.id', 'users.name'])
             ->where('users.id', '!=', $excludeUserId)
+            ->where('users.is_guest', false)
             ->whereNotIn('users.id', function ($subquery) use ($gameId): void {
                 $subquery->select('user_id')
                     ->from('game_user')
@@ -180,5 +183,88 @@ class InvitationRepository
             ->pluck('user_id')
             ->map(fn ($id) => (int) $id)
             ->all();
+    }
+
+    /**
+     * Ensure a user is enrolled on a game with the viewer role.
+     *
+     * @param  int  $gameId
+     * @param  int  $userId
+     * @return void
+     * Logic: if a pivot row exists, update its role to viewer; otherwise insert a new
+     * viewer pivot row. This is used when an email-based invitation is accepted and
+     * no pending_invitee pivot was created previously.
+     */
+    public function attachViewerToGameIfMissing(int $gameId, int $userId): void
+    {
+        $exists = DB::table('game_user')
+            ->where('game_id', $gameId)
+            ->where('user_id', $userId)
+            ->exists();
+
+        $now = now();
+
+        if ($exists) {
+            DB::table('game_user')
+                ->where('game_id', $gameId)
+                ->where('user_id', $userId)
+                ->update(['role' => GameUserRole::Viewer->value, 'updated_at' => $now]);
+        } else {
+            DB::table('game_user')->insert([
+                'game_id'    => $gameId,
+                'user_id'    => $userId,
+                'role'       => GameUserRole::Viewer->value,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+    }
+
+    /**
+     * Create a server-side invitation record for an external email.
+     *
+     * @param  string  $email  Recipient email address.
+     * @param  int|null  $gameId  Optional game id the invitation targets.
+     * @param  int|null  $inviterId  User id who sent the invite.
+     * @param  \DateTimeInterface|null  $expiresAt  Optional expiry timestamp.
+     * @return \App\Models\Invitation Created invitation model.
+     * Logic: generate a secure random token, persist the invitation row, and return the model.
+     */
+    public function createInvitationForEmail(string $email, ?int $gameId = null, ?int $inviterId = null, $expiresAt = null): Invitation
+    {
+        $token = Str::random(48);
+
+        return Invitation::create([
+            'email' => $email,
+            'game_id' => $gameId,
+            'inviter_id' => $inviterId,
+            'token' => $token,
+            'expires_at' => $expiresAt,
+        ]);
+    }
+
+    /**
+     * Find an invitation by its token.
+     *
+     * @param  string  $token
+     * @return \App\Models\Invitation|null
+     * Logic: return the invitation model or null if not found.
+     */
+    public function findByToken(string $token): ?Invitation
+    {
+        return Invitation::where('token', $token)->first();
+    }
+
+    /**
+     * Mark an invitation as used.
+     *
+     * @param  \App\Models\Invitation  $invitation
+     * @return void
+     * Logic: set the used_at timestamp and persist the change.
+     */
+    public function markInvitationUsed(Invitation $invitation): void
+    {
+        $invitation->used_at = now();
+        $invitation->save();
     }
 }

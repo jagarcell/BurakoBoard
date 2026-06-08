@@ -28,8 +28,11 @@ class StoreGameInviteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_ids'   => ['required', 'array', 'min:1'],
-            'user_ids.*' => ['required', 'integer', 'exists:users,id'],
+            'user_ids'   => ['sometimes', 'array'],
+            'user_ids.*' => ['required_with:user_ids', 'integer', 'exists:users,id'],
+
+            'emails'     => ['sometimes', 'array'],
+            'emails.*'   => ['required_with:emails', 'email', 'distinct'],
         ];
     }
 
@@ -44,6 +47,32 @@ class StoreGameInviteRequest extends FormRequest
         return [
             'user_ids'   => 'user list',
             'user_ids.*' => 'user',
+            'emails'     => 'email list',
+            'emails.*'   => 'email',
         ];
+    }
+
+    /**
+     * Add an after-validation hook to require at least one of `user_ids` or `emails`.
+     *
+     * @param \Illuminate\Contracts\Validation\Validator $validator The validator instance to attach the hook to.
+     * @return void
+     * Logic: after the base rules run, ensure the payload contains at least one
+     *  invitation target (either a non-empty `user_ids` array or a non-empty
+     *  `emails` array). If neither is present, add a validation error under the
+     *  `invitations` key so callers receive a single, clear message.
+     */
+    protected function withValidator(\Illuminate\Contracts\Validation\Validator $validator)
+    {
+        $validator->after(function ($validator) {
+            $data = $this->validated() ?: $this->all();
+
+            $hasUserIds = isset($data['user_ids']) && is_array($data['user_ids']) && count($data['user_ids']) > 0;
+            $hasEmails  = isset($data['emails']) && is_array($data['emails']) && count($data['emails']) > 0;
+
+            if (! $hasUserIds && ! $hasEmails) {
+                $validator->errors()->add('invitations', 'You must provide at least one user or email to invite.');
+            }
+        });
     }
 }

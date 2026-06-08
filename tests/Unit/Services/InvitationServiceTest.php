@@ -98,7 +98,7 @@ class InvitationServiceTest extends TestCase
             ->with(1, [2, 3])
             ->andReturn([2, 3]);
 
-        $result = $this->service->sendInvitations(1, [2, 3], $inviter);
+        $result = $this->service->sendInvitations(1, [2, 3], [], $inviter);
 
         $this->assertSame(0, $result);
     }
@@ -139,7 +139,7 @@ class InvitationServiceTest extends TestCase
             ->with([3])
             ->andReturn(collect([$invitee]));
 
-        $result = $this->service->sendInvitations(1, [2, 3], $inviter);
+        $result = $this->service->sendInvitations(1, [2, 3], [], $inviter);
 
         $this->assertSame(1, $result);
         Mail::assertSent(GameInvitationMail::class);

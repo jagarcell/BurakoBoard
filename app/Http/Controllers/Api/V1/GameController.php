@@ -183,9 +183,13 @@ class GameController extends Controller
      */
     public function storeInvitations(StoreGameInviteRequest $request, int $gameId): JsonResponse
     {
+        $userIds = $request->validated('user_ids') ?? [];
+        $emails  = $request->validated('emails') ?? [];
+
         $count = $this->invitationService->sendInvitations(
             $gameId,
-            $request->validated('user_ids'),
+            $userIds,
+            $emails,
             $request->user(),
         );
 
