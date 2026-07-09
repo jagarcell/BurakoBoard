@@ -21,6 +21,8 @@ const PLAYER_ROLE_LABEL_MAP = {
 import InputError from '@/Components/InputError';
 import PlayerCircle from '@/Components/PlayerCircle';
 import PrimaryButton from '@/Components/PrimaryButton';
+import Modal from '@/Components/Modal';
+import SecondaryButton from '@/Components/SecondaryButton';
 import useWinnerSound from '@/hooks/useWinnerSound';
 
 export default function RoundsCard({ selectedGame, initialTeams = [], initialRounds = [], initialHasMoreRounds = false, initialTotalRounds = 0, onRoundRecorded, isFetching = false, hasTwoTeams = false, hasCutter = true, roundRoles = [] }) {
@@ -35,6 +37,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [inputErrors, setInputErrors] = useState({});
     const [saveError, setSaveError] = useState('');
     const [gameStatus, setGameStatus] = useState(selectedGame?.status ?? 'in_progress');
+    const [showRoundClosureModal, setShowRoundClosureModal] = useState(false);
 
     const { unlock: unlockWinnerSound, play: playWinnerSound } = useWinnerSound();
 
@@ -571,6 +574,16 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             setInputErrors(newErrors);
 
             return;
+        }
+
+        // Verify a Round Closure checkbox is set for exactly one team.
+        const closureEl = elements.find((el) => el.label === 'Round Closure' || el.name === 'round_closure');
+        if (closureEl) {
+            const checkedCount = teams.filter((t) => !!baseInputs[t.id]?.[closureEl.id]).length;
+            if (checkedCount !== 1) {
+                setShowRoundClosureModal(true);
+                return;
+            }
         }
 
         // flushSync forces React to commit these state updates to the real DOM
@@ -1277,6 +1290,25 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                     />
                 </>
             )}
+            <Modal
+                show={showRoundClosureModal}
+                onClose={() => setShowRoundClosureModal(false)}
+                maxWidth="md"
+            >
+                <div className="p-6">
+                    <div className="rounded-lg border border-amber-100 bg-amber-50 p-4">
+                        <h3 className="text-lg font-medium text-amber-900">Round Closure required</h3>
+                        <div className="mt-2">
+                            <p className="text-sm text-amber-700">One team must have the Round Closure checked before recording the round.</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end space-x-2">
+                        <SecondaryButton onClick={() => setShowRoundClosureModal(false)}>Cancel</SecondaryButton>
+                        <PrimaryButton onClick={() => setShowRoundClosureModal(false)}>OK</PrimaryButton>
+                    </div>
+                </div>
+            </Modal>
         </section>
     );
 }
