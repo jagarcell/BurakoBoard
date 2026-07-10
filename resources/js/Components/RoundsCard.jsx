@@ -38,6 +38,8 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     const [saveError, setSaveError] = useState('');
     const [gameStatus, setGameStatus] = useState(selectedGame?.status ?? 'in_progress');
     const [showRoundClosureModal, setShowRoundClosureModal] = useState(false);
+    const [showRoundClosureConditionsModal, setShowRoundClosureConditionsModal] = useState(false);
+    const [roundClosureMissingConditions, setRoundClosureMissingConditions] = useState([]);
 
     const { unlock: unlockWinnerSound, play: playWinnerSound } = useWinnerSound();
 
@@ -446,6 +448,34 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     }, [selectedGame?.id]);
 
     const handleElementChange = (teamId, elementId, value) => {
+        const el = elements.find((e) => e.id === elementId);
+
+        // If the user is trying to check the Round Closure box, validate that
+        // both Burako and at least one canastra are present for this team.
+        if (el && (el.label === 'Round Closure' || el.name === 'round_closure') && value === true) {
+            const burakoEl = elements.find((e) => e.name === 'burako');
+            const canastraEls = elements.filter((e) => e.name.includes('canastra'));
+
+            const teamVals = baseInputs[teamId] ?? {};
+
+            const hasBurako = burakoEl ? !!teamVals[burakoEl.id] : false;
+            const hasCanastra = canastraEls.some((ce) => {
+                const val = teamVals[ce.id];
+                if (ce.input_type === 'boolean') return !!val;
+                return (parseInt(val, 10) || 0) > 0;
+            });
+
+            const missing = [];
+            if (!hasBurako) missing.push('Burako');
+            if (!hasCanastra) missing.push('Canastra');
+
+            if (missing.length > 0) {
+                setRoundClosureMissingConditions(missing);
+                setShowRoundClosureConditionsModal(true);
+                return;
+            }
+        }
+
         // User is entering values for the new round — unblock draft loading so
         // future fetchRoundDraft calls can restore work-in-progress normally.
         draftBlockedRef.current = false;
@@ -453,7 +483,6 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         // response is held off until the 800 ms debounce PUT fires.
         hasPendingDraftSave.current = true;
         setBaseInputs((prev) => {
-            const el = elements.find((e) => e.id === elementId);
             const next = {
                 ...prev,
                 [teamId]: { ...prev[teamId], [elementId]: value },
@@ -1306,6 +1335,31 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                     <div className="mt-4 flex justify-end space-x-2">
                         <SecondaryButton onClick={() => setShowRoundClosureModal(false)}>Cancel</SecondaryButton>
                         <PrimaryButton onClick={() => setShowRoundClosureModal(false)}>OK</PrimaryButton>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                show={showRoundClosureConditionsModal}
+                onClose={() => setShowRoundClosureConditionsModal(false)}
+                maxWidth="md"
+            >
+                <div className="p-6">
+                    <div className="rounded-lg border border-amber-100 bg-amber-50 p-4">
+                        <h3 className="text-lg font-medium text-amber-900">Round Closure requirements</h3>
+                        <div className="mt-2">
+                            <p className="text-sm text-amber-700">You cannot mark Round Closure until the following conditions are met:</p>
+                            <ul className="mt-2 list-disc list-inside text-sm text-amber-700">
+                                {roundClosureMissingConditions.map((m) => (
+                                    <li key={m}>{m}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end space-x-2">
+                        <SecondaryButton onClick={() => setShowRoundClosureConditionsModal(false)}>Cancel</SecondaryButton>
+                        <PrimaryButton onClick={() => setShowRoundClosureConditionsModal(false)}>OK</PrimaryButton>
                     </div>
                 </div>
             </Modal>
