@@ -367,6 +367,15 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedGameRef, skipNextDraftSave, and draftSaveTimerRef are stable refs kept current by their own effects; intentionally excluded to prevent the debounce timer from resetting on every ref update
     }, [baseInputs, cardInputs]);
 
+        // Called when a nested numeric input enters inline touch-edit mode so
+        // we can mark the draft as having pending changes immediately. This
+        // prevents a concurrent fetch from applying a server-side draft that
+        // would overwrite the user's in-progress edits.
+        const handleEditingStart = useCallback(() => {
+            draftBlockedRef.current = false;
+            hasPendingDraftSave.current = true;
+        }, []);
+
     // Subscribe to real-time draft updates broadcast by other users in this game.
     // Viewers receive a live read-only preview; editors are excluded via toOthers()
     // on the server side so their own keystrokes are not echoed back.
@@ -389,6 +398,13 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         const channel = echo.private(`game.${selectedGame.id}`);
 
         channel.listen('.round.draft.updated', ({ base_inputs, card_inputs }) => {
+            // If we're currently blocking draft load (immediately after a
+            // round commit) or the user has pending local edits, ignore the
+            // incoming broadcast to avoid overwriting the user's in-progress
+            // inputs. Otherwise apply the live preview.
+            if (draftBlockedRef.current) return;
+            if (hasPendingDraftSave.current) return;
+
             // Skip the next debounced auto-save so receiving an update never
             // triggers a redundant PUT back to the server.
             skipNextDraftSave.current = true;
@@ -1268,6 +1284,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                                                     onCardsChange={(field, val) =>
                                                         handleCardChange(team.id, field, val)
                                                     }
+                                                    onEditingStart={handleEditingStart}
                                                     showBaseElements
                                                     teamId={team.id}
                                                     values={baseInputs[team.id] ?? {}}

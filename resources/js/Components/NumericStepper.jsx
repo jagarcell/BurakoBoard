@@ -34,6 +34,10 @@ export default function NumericStepper({
     id,
     value,
     onChange,
+    // Called when the user begins an inline touch edit (focus initiated by touch).
+    // Used by parents to mark inputs as "editing" so concurrent draft GETs
+    // do not overwrite in-progress edits.
+    onEditingStart,
     disabled = false,
     readOnly = false,
     min = 0,
@@ -99,6 +103,14 @@ export default function NumericStepper({
     const handleFocus = () => {
         if (!touchRef.current) return;
         touchRef.current = false;
+        // Notify parent that the user has started an inline touch edit so
+        // draft synchronization logic can avoid applying server responses
+        // that would overwrite the user's in-progress input.
+        try {
+            onEditingStart?.();
+        } catch (_) {
+            // ignore
+        }
         if (current === 0) {
             setLocalValue('');
         } else {
