@@ -31,7 +31,7 @@ const CardPointsScanner = lazy(() => import('@/Components/CardPointsScanner'));
  * quantity = 0), the points slot displays the penalty as a negative score (e.g. −100 pts) in
  * rose/red text, giving the user a visual cue that a deduction will be applied.
  */
-export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false, showBaseElements = true, amendedElementIds = [], amendedCardFields = {}, showCardScanner = true }) {
+export default function BaseElementsInput({ elements, teamId, values = {}, onChange, errors = {}, cardsInHand = 0, cardsOnTable = 0, onCardsChange, cardErrors = {}, readOnly = false, showBaseElements = true, amendedElementIds = [], amendedCardFields = {}, showCardScanner = true, onEditingStart }) {
     const [scannerTarget, setScannerTarget] = useState(null);
     // When a score_override boolean element is checked both cardsInHand and
     // cardsOnTable are subtracted from the base score (penalty mode).
@@ -101,6 +101,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             disabled={readOnly}
                             id={inputId}
                             onChange={(val) => onChange(el.id, val)}
+                            onEditingStart={onEditingStart}
                             readOnly={readOnly}
                             value={values[el.id] ?? 0}
                             variant={isAmended ? 'amber' : 'default'}
@@ -154,6 +155,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             disabled={readOnly}
                             id={`team-${teamId}-cards-in-hand`}
                             onChange={(val) => onCardsChange?.('cardsInHand', val)}
+                            onEditingStart={onEditingStart}
                             readOnly={readOnly}
                             value={cardsInHand}
                             variant={amendedCardFields.cardsInHand ? 'amber' : 'rose'}
@@ -186,6 +188,7 @@ export default function BaseElementsInput({ elements, teamId, values = {}, onCha
                             disabled={readOnly}
                             id={`team-${teamId}-cards-on-table`}
                             onChange={(val) => onCardsChange?.('cardsOnTable', val)}
+                            onEditingStart={onEditingStart}
                             readOnly={readOnly}
                             value={cardsOnTable}
                             variant={amendedCardFields.cardsOnTable ? 'amber' : (cardsOnTableNegative ? 'rose' : 'emerald')}
