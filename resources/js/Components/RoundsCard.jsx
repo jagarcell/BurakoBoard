@@ -1332,8 +1332,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                         </div>
                     </div>
 
-                    <div className="mt-4 flex justify-end space-x-2">
-                        <SecondaryButton onClick={() => setShowRoundClosureModal(false)}>Cancel</SecondaryButton>
+                    <div className="mt-4 flex justify-end">
                         <PrimaryButton onClick={() => setShowRoundClosureModal(false)}>OK</PrimaryButton>
                     </div>
                 </div>
@@ -1357,8 +1356,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                         </div>
                     </div>
 
-                    <div className="mt-4 flex justify-end space-x-2">
-                        <SecondaryButton onClick={() => setShowRoundClosureConditionsModal(false)}>Cancel</SecondaryButton>
+                    <div className="mt-4 flex justify-end">
                         <PrimaryButton onClick={() => setShowRoundClosureConditionsModal(false)}>OK</PrimaryButton>
                     </div>
                 </div>
