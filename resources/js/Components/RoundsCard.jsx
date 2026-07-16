@@ -638,7 +638,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             : baseScore - inHand + onTable;
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e, skipClosureCheck = false) => {
         e.preventDefault();
         setInputErrors({});
         setSaveError('');
@@ -680,7 +680,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         const closureEl = elements.find((el) => el.label === 'Round Closure' || el.name === 'round_closure');
         if (closureEl) {
             const checkedCount = teams.filter((t) => !!baseInputs[t.id]?.[closureEl.id]).length;
-            if (checkedCount !== 1) {
+            if (checkedCount !== 1 && !skipClosureCheck) {
                 setShowRoundClosureModal(true);
                 return;
             }
@@ -1403,13 +1403,21 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                     <div className="rounded-lg border border-amber-100 bg-amber-50 p-4">
                         <h3 className="text-lg font-medium text-amber-900">Round Closure required</h3>
                         <div className="mt-2">
-                            <p className="text-sm text-amber-700">One team must have the Round Closure checked before recording the round.</p>
+                            <p className="text-sm text-amber-700">One team must have the Round Closure checked before recording the round. If the cards deck was left out of cards you may click OK to record the round without marking Round Closure.</p>
                         </div>
                     </div>
 
-                    <div className="mt-4 flex justify-end">
-                        <PrimaryButton onClick={() => setShowRoundClosureModal(false)}>OK</PrimaryButton>
-                    </div>
+                            <div className="mt-4 flex justify-end gap-2">
+                                <SecondaryButton onClick={() => setShowRoundClosureModal(false)}>Cancel</SecondaryButton>
+                                <PrimaryButton onClick={async () => {
+                                    // Close the modal synchronously so it disappears immediately
+                                    flushSync(() => { setShowRoundClosureModal(false); });
+                                    // Yield to the macrotask queue so the browser can repaint
+                                    await new Promise((resolve) => setTimeout(resolve, 0));
+                                    // Proceed with submission skipping the closure check
+                                    handleSubmit({ preventDefault: () => {} }, true);
+                                }}>OK</PrimaryButton>
+                            </div>
                 </div>
             </Modal>
 
