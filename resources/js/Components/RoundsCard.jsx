@@ -184,6 +184,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     }, []);
 
     // Build the default per-element values for a set of teams
+    // DEFAULT HYDRATION: build the default `baseInputs` structure used to
+    // initialise or reset per-round element values for each team. Each
+    // element is set to `false` for boolean inputs or `0` for quantity inputs.
+    // This function is the canonical source for the default shape that the
+    // UI uses whenever inputs are seeded from scratch (new game, cleared
+    // after a round is recorded, or when elements first load).
     const buildDefaultBaseInputs = (teamList, elementList) =>
         Object.fromEntries(
             teamList.map((t) => [
@@ -197,6 +203,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             ]),
         );
 
+    // DEFAULT HYDRATION: build the default `cardInputs` structure used to
+    // initialise or reset the `cardsInHand` / `cardsOnTable` values for each
+    // team. This pairs with `buildDefaultBaseInputs` when seeding the form.
     const buildDefaultCardInputs = (teamList) =>
         Object.fromEntries(teamList.map((t) => [t.id, { cardsInHand: 0, cardsOnTable: 0 }]));
 
@@ -215,6 +224,48 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         if (roundsGrew) {
             if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
             skipNextDraftSave.current = true;
+
+            // When a new round has been recorded elsewhere prefer any existing
+            // server-side round draft for the upcoming round. If a draft is
+            // present apply its values; otherwise fall back to canonical
+            // defaults. Use the stable selectedGameRef to avoid adding deps.
+            const gameId = selectedGameRef.current?.id;
+            if (gameId) {
+                let cancelled = false;
+
+                api
+                    .get(`/games/${gameId}/round-draft`)
+                    .then((response) => {
+                        if (cancelled) return;
+                        const draft = response.data?.data?.round_draft ?? null;
+
+                        // Prevent the auto-save effect from immediately
+                        // re-persisting defaults when we applied a server draft.
+                        if (draft?.base_inputs || draft?.card_inputs) {
+                            skipNextDraftSave.current = true;
+                        }
+
+                        if (draft?.base_inputs) setBaseInputs(draft.base_inputs);
+                        else setBaseInputs(buildDefaultBaseInputs(initialTeams, elements));
+
+                        if (draft?.card_inputs) setCardInputs(draft.card_inputs);
+                        else setCardInputs(buildDefaultCardInputs(initialTeams));
+
+                        setInputErrors({});
+                        setSaveError('');
+                    })
+                    .catch(() => {
+                        // On error, fall back to canonical defaults.
+                        setBaseInputs(buildDefaultBaseInputs(initialTeams, elements));
+                        setCardInputs(buildDefaultCardInputs(initialTeams));
+                        setInputErrors({});
+                        setSaveError('');
+                    });
+
+                return () => { cancelled = true; };
+            }
+
+            // If no game id is available, fall back to defaults immediately.
             setBaseInputs(buildDefaultBaseInputs(initialTeams, elements));
             setCardInputs(buildDefaultCardInputs(initialTeams));
             setInputErrors({});
@@ -229,6 +280,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 newIds.size === prevIds.size &&
                 [...newIds].every((id) => prevIds.has(id));
 
+            // DEFAULT HYDRATION: when the teams set changes (first load) and the
+            // previous inputs do not already match the loaded elements, replace
+            // the saved structure with newly-built defaults for the current
+            // teams/elements.
             return same ? prev : buildDefaultBaseInputs(initialTeams, elements);
         });
         setCardInputs((prev) => {
@@ -498,23 +553,64 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         // Signal that there are unsaved changes so any concurrent fetchRoundDraft
         // response is held off until the 800 ms debounce PUT fires.
         hasPendingDraftSave.current = true;
-        setBaseInputs((prev) => {
-            const next = {
-                ...prev,
-                [teamId]: { ...prev[teamId], [elementId]: value },
-            };
+        // Compute the next base inputs synchronously so we can validate
+        // Round Closure conditions immediately and reliably show the modal.
+        const prevBase = baseInputs || {};
+        const nextBase = {
+            ...prevBase,
+            [teamId]: { ...prevBase[teamId], [elementId]: value },
+        };
 
-            // When a mutually-exclusive boolean is checked, uncheck it for all other teams.
-            if (el?.input_type === 'boolean' && el?.mutually_exclusive && value === true) {
-                for (const t of Object.keys(next)) {
-                    if (Number(t) !== teamId) {
-                        next[t] = { ...next[t], [elementId]: false };
-                    }
+        // When a mutually-exclusive boolean is checked, uncheck it for all other teams.
+        if (el?.input_type === 'boolean' && el?.mutually_exclusive && value === true) {
+            for (const t of Object.keys(nextBase)) {
+                if (Number(t) !== teamId) {
+                    nextBase[t] = { ...nextBase[t], [elementId]: false };
                 }
             }
+        }
 
-            return next;
-        });
+        // Validate existing Round Closure flags: if any team has
+        // round_closure checked but now lacks Burako or any Canastra,
+        // uncheck the closure and prepare the missing-conditions modal.
+        const roundClosureEl = elements.find((e) => e.name === 'round_closure');
+        const burakoEl = elements.find((e) => e.name === 'burako');
+        const canastraEls = elements.filter((e) => e.name.includes('canastra') && !e.score_override);
+
+        let anyMissing = null;
+        if (roundClosureEl) {
+            for (const t of Object.keys(nextBase)) {
+                const teamVals = nextBase[t] ?? {};
+                if (!teamVals[roundClosureEl.id]) continue;
+
+                const hasBurako = burakoEl ? !!teamVals[burakoEl.id] : false;
+                const hasCanastra = canastraEls.some((ce) => {
+                    const val = teamVals[ce.id];
+                    if (ce.input_type === 'boolean') return !!val;
+                    return (parseInt(val, 10) || 0) > 0;
+                });
+
+                if (!hasBurako || !hasCanastra) {
+                    const missing = [];
+                    if (!hasBurako) missing.push('Burako');
+                    if (!hasCanastra) missing.push('Canastra');
+
+                    // Uncheck the round closure for this team in the next state
+                    nextBase[t] = { ...teamVals, [roundClosureEl.id]: false };
+
+                    anyMissing = missing;
+                    // keep scanning to fix all teams
+                }
+            }
+        }
+
+        // Commit the computed next state
+        setBaseInputs(nextBase);
+
+        if (anyMissing) {
+            setRoundClosureMissingConditions(anyMissing);
+            setShowRoundClosureConditionsModal(true);
+        }
         setInputErrors((prev) => {
             const key = `${teamId}_${elementId}`;
             if (!prev[key]) return prev;
@@ -583,7 +679,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             : baseScore - inHand + onTable;
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e, skipClosureCheck = false) => {
         e.preventDefault();
         setInputErrors({});
         setSaveError('');
@@ -625,7 +721,7 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         const closureEl = elements.find((el) => el.label === 'Round Closure' || el.name === 'round_closure');
         if (closureEl) {
             const checkedCount = teams.filter((t) => !!baseInputs[t.id]?.[closureEl.id]).length;
-            if (checkedCount !== 1) {
+            if (checkedCount !== 1 && !skipClosureCheck) {
                 setShowRoundClosureModal(true);
                 return;
             }
@@ -696,6 +792,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 Promise.resolve(
                     api.delete(`/games/${selectedGame.id}/round-draft`),
                 ).catch(() => { /* fire-and-forget */ });
+                // DEFAULT HYDRATION: after a round is successfully recorded the
+                // UI must clear and re-seed the inputs for the next round; call
+                // the canonical builders with the updated team list here.
                 setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
                 setCardInputs(buildDefaultCardInputs(updatedTeams));
                 onRoundRecorded?.(updatedTeams, newGameStatus, gameSummary);
@@ -1345,13 +1444,21 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                     <div className="rounded-lg border border-amber-100 bg-amber-50 p-4">
                         <h3 className="text-lg font-medium text-amber-900">Round Closure required</h3>
                         <div className="mt-2">
-                            <p className="text-sm text-amber-700">One team must have the Round Closure checked before recording the round.</p>
+                            <p className="text-sm text-amber-700">One team must have the Round Closure checked before recording the round. If the cards deck was left out of cards you may click OK to record the round without marking Round Closure.</p>
                         </div>
                     </div>
 
-                    <div className="mt-4 flex justify-end">
-                        <PrimaryButton onClick={() => setShowRoundClosureModal(false)}>OK</PrimaryButton>
-                    </div>
+                            <div className="mt-4 flex justify-end gap-2">
+                                <SecondaryButton onClick={() => setShowRoundClosureModal(false)}>Cancel</SecondaryButton>
+                                <PrimaryButton onClick={async () => {
+                                    // Close the modal synchronously so it disappears immediately
+                                    flushSync(() => { setShowRoundClosureModal(false); });
+                                    // Yield to the macrotask queue so the browser can repaint
+                                    await new Promise((resolve) => setTimeout(resolve, 0));
+                                    // Proceed with submission skipping the closure check
+                                    handleSubmit({ preventDefault: () => {} }, true);
+                                }}>OK</PrimaryButton>
+                            </div>
                 </div>
             </Modal>
 
