@@ -553,23 +553,64 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         // Signal that there are unsaved changes so any concurrent fetchRoundDraft
         // response is held off until the 800 ms debounce PUT fires.
         hasPendingDraftSave.current = true;
-        setBaseInputs((prev) => {
-            const next = {
-                ...prev,
-                [teamId]: { ...prev[teamId], [elementId]: value },
-            };
+        // Compute the next base inputs synchronously so we can validate
+        // Round Closure conditions immediately and reliably show the modal.
+        const prevBase = baseInputs || {};
+        const nextBase = {
+            ...prevBase,
+            [teamId]: { ...prevBase[teamId], [elementId]: value },
+        };
 
-            // When a mutually-exclusive boolean is checked, uncheck it for all other teams.
-            if (el?.input_type === 'boolean' && el?.mutually_exclusive && value === true) {
-                for (const t of Object.keys(next)) {
-                    if (Number(t) !== teamId) {
-                        next[t] = { ...next[t], [elementId]: false };
-                    }
+        // When a mutually-exclusive boolean is checked, uncheck it for all other teams.
+        if (el?.input_type === 'boolean' && el?.mutually_exclusive && value === true) {
+            for (const t of Object.keys(nextBase)) {
+                if (Number(t) !== teamId) {
+                    nextBase[t] = { ...nextBase[t], [elementId]: false };
                 }
             }
+        }
 
-            return next;
-        });
+        // Validate existing Round Closure flags: if any team has
+        // round_closure checked but now lacks Burako or any Canastra,
+        // uncheck the closure and prepare the missing-conditions modal.
+        const roundClosureEl = elements.find((e) => e.name === 'round_closure');
+        const burakoEl = elements.find((e) => e.name === 'burako');
+        const canastraEls = elements.filter((e) => e.name.includes('canastra') && !e.score_override);
+
+        let anyMissing = null;
+        if (roundClosureEl) {
+            for (const t of Object.keys(nextBase)) {
+                const teamVals = nextBase[t] ?? {};
+                if (!teamVals[roundClosureEl.id]) continue;
+
+                const hasBurako = burakoEl ? !!teamVals[burakoEl.id] : false;
+                const hasCanastra = canastraEls.some((ce) => {
+                    const val = teamVals[ce.id];
+                    if (ce.input_type === 'boolean') return !!val;
+                    return (parseInt(val, 10) || 0) > 0;
+                });
+
+                if (!hasBurako || !hasCanastra) {
+                    const missing = [];
+                    if (!hasBurako) missing.push('Burako');
+                    if (!hasCanastra) missing.push('Canastra');
+
+                    // Uncheck the round closure for this team in the next state
+                    nextBase[t] = { ...teamVals, [roundClosureEl.id]: false };
+
+                    anyMissing = missing;
+                    // keep scanning to fix all teams
+                }
+            }
+        }
+
+        // Commit the computed next state
+        setBaseInputs(nextBase);
+
+        if (anyMissing) {
+            setRoundClosureMissingConditions(anyMissing);
+            setShowRoundClosureConditionsModal(true);
+        }
         setInputErrors((prev) => {
             const key = `${teamId}_${elementId}`;
             if (!prev[key]) return prev;
