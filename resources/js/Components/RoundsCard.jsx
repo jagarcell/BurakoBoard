@@ -184,6 +184,12 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
     }, []);
 
     // Build the default per-element values for a set of teams
+    // DEFAULT HYDRATION: build the default `baseInputs` structure used to
+    // initialise or reset per-round element values for each team. Each
+    // element is set to `false` for boolean inputs or `0` for quantity inputs.
+    // This function is the canonical source for the default shape that the
+    // UI uses whenever inputs are seeded from scratch (new game, cleared
+    // after a round is recorded, or when elements first load).
     const buildDefaultBaseInputs = (teamList, elementList) =>
         Object.fromEntries(
             teamList.map((t) => [
@@ -197,6 +203,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
             ]),
         );
 
+    // DEFAULT HYDRATION: build the default `cardInputs` structure used to
+    // initialise or reset the `cardsInHand` / `cardsOnTable` values for each
+    // team. This pairs with `buildDefaultBaseInputs` when seeding the form.
     const buildDefaultCardInputs = (teamList) =>
         Object.fromEntries(teamList.map((t) => [t.id, { cardsInHand: 0, cardsOnTable: 0 }]));
 
@@ -215,6 +224,48 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
         if (roundsGrew) {
             if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
             skipNextDraftSave.current = true;
+
+            // When a new round has been recorded elsewhere prefer any existing
+            // server-side round draft for the upcoming round. If a draft is
+            // present apply its values; otherwise fall back to canonical
+            // defaults. Use the stable selectedGameRef to avoid adding deps.
+            const gameId = selectedGameRef.current?.id;
+            if (gameId) {
+                let cancelled = false;
+
+                api
+                    .get(`/games/${gameId}/round-draft`)
+                    .then((response) => {
+                        if (cancelled) return;
+                        const draft = response.data?.data?.round_draft ?? null;
+
+                        // Prevent the auto-save effect from immediately
+                        // re-persisting defaults when we applied a server draft.
+                        if (draft?.base_inputs || draft?.card_inputs) {
+                            skipNextDraftSave.current = true;
+                        }
+
+                        if (draft?.base_inputs) setBaseInputs(draft.base_inputs);
+                        else setBaseInputs(buildDefaultBaseInputs(initialTeams, elements));
+
+                        if (draft?.card_inputs) setCardInputs(draft.card_inputs);
+                        else setCardInputs(buildDefaultCardInputs(initialTeams));
+
+                        setInputErrors({});
+                        setSaveError('');
+                    })
+                    .catch(() => {
+                        // On error, fall back to canonical defaults.
+                        setBaseInputs(buildDefaultBaseInputs(initialTeams, elements));
+                        setCardInputs(buildDefaultCardInputs(initialTeams));
+                        setInputErrors({});
+                        setSaveError('');
+                    });
+
+                return () => { cancelled = true; };
+            }
+
+            // If no game id is available, fall back to defaults immediately.
             setBaseInputs(buildDefaultBaseInputs(initialTeams, elements));
             setCardInputs(buildDefaultCardInputs(initialTeams));
             setInputErrors({});
@@ -229,6 +280,10 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 newIds.size === prevIds.size &&
                 [...newIds].every((id) => prevIds.has(id));
 
+            // DEFAULT HYDRATION: when the teams set changes (first load) and the
+            // previous inputs do not already match the loaded elements, replace
+            // the saved structure with newly-built defaults for the current
+            // teams/elements.
             return same ? prev : buildDefaultBaseInputs(initialTeams, elements);
         });
         setCardInputs((prev) => {
@@ -696,6 +751,9 @@ export default function RoundsCard({ selectedGame, initialTeams = [], initialRou
                 Promise.resolve(
                     api.delete(`/games/${selectedGame.id}/round-draft`),
                 ).catch(() => { /* fire-and-forget */ });
+                // DEFAULT HYDRATION: after a round is successfully recorded the
+                // UI must clear and re-seed the inputs for the next round; call
+                // the canonical builders with the updated team list here.
                 setBaseInputs(buildDefaultBaseInputs(updatedTeams, elements));
                 setCardInputs(buildDefaultCardInputs(updatedTeams));
                 onRoundRecorded?.(updatedTeams, newGameStatus, gameSummary);
